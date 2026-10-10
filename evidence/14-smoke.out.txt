@@ -1,0 +1,25 @@
+case: diagnostic-delay seed 7, imaging queue 2 at T+65
+PASS  imaging reserve is feasible and owned by the Radiology manager  -- Radiology manager
+PASS  lab reserve is owned by the Lab manager
+PASS  setup 15 min, review 5, active 60
+PASS  paired comparison shows diagnostic wait and total ED time  -- diag wait saving {"n":50,"mean":111.231,"sd":86.219,"lower_90":91.173,"upper_90":131.289}; total {"n":50,"mean":108.169,"sd":85.972,"lower_90":88.169,"upper_90":128.17}
+PASS  diagnostic wait saving is positive for an imaging queue (extra slot serves the queue)
+PASS  lab reserve with no lab queue is not feasible (422)  -- No patient is waiting for lab: an extra slot has no queue to serve.
+PASS  imaging request routed to the Radiology manager
+PASS  Lab manager refused for imaging (403)
+PASS  refusal reserves nothing
+PASS  Radiology manager approves
+PASS  setup at +5, no capacity yet
+PASS  still setup at +15 after approval minus 5 (+15 total = active)
+PASS  active at +20 with imaging capacity 2  -- servers 2; lab servers 2
+PASS  lab capacity untouched
+PASS  forecast during the active window answers  -- status ok
+PASS  comparison while an action is in flight offers no second action
+PASS  after the 60-minute window the slot closes: capacity back to 1  -- servers 1
+PASS  lifecycle recorded through completed  -- action_requested action_decision action_approved action_review action_setup action_active action_draining action_completed
+PASS  reserve unit I2 did real work
+PASS  every test common to both runs has the identical duration  -- 10 identical, 0 different
+PASS  save then load reproduces the run with the decision
+PASS  no-action seed 7 normal: 705 events, 59 patients
+
+ALL PASS

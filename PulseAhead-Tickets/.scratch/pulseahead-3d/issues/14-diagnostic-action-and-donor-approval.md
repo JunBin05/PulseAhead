@@ -4,16 +4,16 @@
 
 **Blocked by:** 11 — Compare ward coordination and route supervisor approval.
 
-**Status:** ready-for-agent, reduced (scope amendment 2026-10-11)
+**Status:** built and smoke-verified (UI covered by the ticket 20 journey), see `evidence/14-diagnostic-reserve-slot.md`
 
 **Rubric focus:** Decision loop; urgent-aware actionability.
 
 ### Criteria (scope amendment, final build)
 
-- [ ] Declare one reserve lab slot and one reserve imaging slot in the profile, owned by "Lab manager" and "Radiology manager". A request names lab or imaging; the receiving service determines the owner.
-- [ ] Review 5 min, setup 15 min, then the shared 60-minute active / draining lifecycle from ticket 11. Tests are never shortened, results never manufactured; occupied tasks finish before the slot returns.
-- [ ] The same paired comparison as ticket 11 (no action vs this action), showing diagnostic waits and total ED time.
-- [ ] API smoke: on diagnostic-delay seed 7 the Radiology manager approves an imaging reserve slot and imaging capacity is 2 during the active window and back to 1 after draining; the Lab manager is refused for imaging.
+- [x] Declare one reserve lab slot and one reserve imaging slot in the profile, owned by "Lab manager" and "Radiology manager". A request names lab or imaging; the receiving service determines the owner.
+- [x] Review 5 min, setup 15 min, then the shared 60-minute active / draining lifecycle from ticket 11. Tests are never shortened, results never manufactured; occupied tasks finish before the slot returns.
+- [x] The same paired comparison as ticket 11 (no action vs this action), showing diagnostic waits and total ED time.
+- [x] API smoke: on diagnostic-delay seed 7 the Radiology manager approves an imaging reserve slot and imaging capacity is 2 during the active window and back to 1 after draining; the Lab manager is refused for imaging.
 
 Descoped: diagnostic donor reallocation, donor consent and donor urgent checks.
 

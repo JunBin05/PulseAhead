@@ -165,3 +165,8 @@ Spec §Actions and the scope amendment: one lifecycle, approvers from resource o
 - **Saved runs.** `choices` holds each request and decision with the simulated time it was made; Load replays them through the same commands and then checks the event digest.
 
 **Alternative not taken:** forecasts and comparisons that ignore an action in flight; an approval that is valid at any later time; modelling partial grants with several owners (every preset here has one owner, the machinery supports more).
+## Q14. What does the diagnostic reserve slot change? (ticket 14, reduced)
+
+**Working decision:** one declared reserve lab slot (`L3`) or reserve imaging slot (`I2`) adds one unit of that service for the 60-minute active window after review (5 min) and setup (15 min), through the Q11 lifecycle. Turnaround per test is a supplied per-patient value and is never changed; a task on the slot when the window ends finishes first, then the slot closes (draining). The request is feasible only while a patient is waiting for that service. Diagnostic reallocation from a donor service and donor consent are not modeled. The comparison reports the diagnostic wait (sum of waiting for a unit) beside total ED time.
+
+**Alternative not taken:** shortening turnaround while the slot is active; reallocating a unit from another service.

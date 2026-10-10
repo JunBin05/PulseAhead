@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Ticket 11 is built and smoke-verified (see "Ticket 11 summary"); next: ticket 14 (reduced).** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
+Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Ticket 11 is built and smoke-verified (see "Ticket 11 summary"); Ticket 14 (reduced) is built and smoke-verified; next: ticket 17 (lite ranking).** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
 
 ## Goal and rules
 
@@ -31,7 +31,7 @@ Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and 
 | 10 Predict bottlenecks and explain the time remaining | **done**: 9/9 pass (criteria 7 and 9 with caveats); review gate closed (10 findings: 8 fixed, 1 partly, 1 not actionable) | `evidence/10-forecast-and-alert-panel.md` (incl. "Review-gate fixes"), `evidence/10-*.playwright-mcp.js` |
 | 11 Ward coordination + shared action machinery | **done (smoke-verified)**; UI box open until the ticket 20 journey | `evidence/11-ward-action-and-owner-approval.md`, `evidence/11-smoke.mjs` |
 | 12, 13, 15, 16 | **descoped** (scope amendment) | n/a |
-| 14 Diagnostic reserve slot (reduced) | not started | n/a |
+| 14 Diagnostic reserve slot (reduced) | **done (smoke-verified)**; UI covered by ticket 20 | `evidence/14-diagnostic-reserve-slot.md`, `evidence/14-smoke.mjs` |
 | 17 Ranking (lite), 18 Evidence (merged with 19), 20 UX (lite) | not started | n/a |
 | 19 | **merged into 18** | n/a |
 | 21 Deployment, 22 Rehearsal | stop and ask the user (21); 22 stays with the user | n/a |
