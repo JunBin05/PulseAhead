@@ -16,7 +16,7 @@ The system models ED operations as three connected stages:
 2. **Throughput:** triage, clinical assessment, diagnostics, and treatment capacity.
 3. **Outflow:** discharge, transfer, and admission capacity, including delays caused by unavailable ward beds.
 
-When arrivals (λ) are expected to remain above the ED's effective processing rate (μ), the queue grows. PulseAhead aims to warn staff before that imbalance becomes critical, explain the likely bottleneck, and support operational decisions.
+The approved demo predicts sustained congestion: no usable treatment spaces and at least six patients awaiting a space for 20 minutes. It looks 90 minutes ahead, explains likely bottlenecks, and compares four interventions that staff can approve, reject, or defer. Actions must respect resource limits and urgent-patient delay checks.
 
 ## Intended users
 
@@ -32,4 +32,12 @@ The concept uses time-stamped patient-flow and resource signals, such as arrival
 
 ## Project status
 
-This repository contains the project concept and planning materials. The README describes the intended system; it does not imply that a predictive model or live hospital integration is already implemented.
+The user approved the brief and closed the design interview. The [16-hour build plan](docs/BUILD_PLAN.md) is ready; implementation and measured results have not started.
+
+- [Approved brief](docs/PROJECT_BRIEF.md)
+- [Build plan](docs/BUILD_PLAN.md)
+- [Evidence checklist](docs/TRACK_1_CHECKLIST.md)
+- [Design decisions](docs/DESIGN_DISCOVERY.md)
+- [Glossary](GLOSSARY.md)
+
+The hackathon uses one fictional 24-space ED and synthetic data only. Organizer acceptance of synthetic-only evidence remains an open external check.

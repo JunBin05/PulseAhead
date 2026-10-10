@@ -1,35 +1,33 @@
-# Track 1 checklist — Hospital Failure Point
+# Track 1 checklist — PulseAhead
 
-Reviewed: 10 October 2026, Asia/Kuala_Lumpur.
+Updated: 10 October 2026, Asia/Kuala_Lumpur.
 
-Scope completed: research, adversarial assessment, dataset suitability review, and a proposed 16-hour implementation/evaluation plan. The user confirmed **no existing hospital access**. The workspace initially contained only `SKILL.md`; no implementation, dataset, results, or rehearsal evidence was available.
+The user approved the [project brief](PROJECT_BRIEF.md) and closed the interview. The [16-hour build plan](BUILD_PLAN.md) is complete. No implementation, dataset, measured results, or rehearsal evidence exists yet.
 
-Evidence report: [HOSPITAL_FAILURE_POINT_RESEARCH.md](HOSPITAL_FAILURE_POINT_RESEARCH.md).
+**Product status: Not ready — 1 of 13 items verified.** Planning is complete; the remaining items require running evidence. The [supplied checklist](Requirement_skill.md) is requirements context, not proof of organizer acceptance of synthetic data.
 
-**Current project status: Not ready — 1 of 13 mandatory items verified.** A design, example screen, external paper, or proposed test does not establish that our own system works. Research completion and project readiness are separate.
+## Priority 1 — Make the prediction useful
 
-**Priority 1 — Make the prediction useful**
+- [x] **Problem and user:** The approved brief names sustained ED congestion and the ED shift coordinator working with the bed manager. Their decision is which feasible intervention to start and whether it can take effect before congestion. Hospital demand for this particular product remains unverified.
+- [ ] **Detect:** Run a previously unseen synthetic shift using only received information. Record warnings before the agreed sustained-congestion onset.
+- [ ] **Categorize:** Produce boarding, diagnostic, arrival, and capacity explanations in separate and mixed cases; tie them to the actual modeled state.
+- [ ] **Prioritize:** Demonstrate ranking by feasibility, urgent-patient delay checks, total ED time saved, and resource cost. Show that a better average cannot hide material harm to urgent waits.
+- [ ] **Explain:** Show the relevant queues, occupied spaces, delays, and data freshness beside each output. Explain uncertainty and distinguish model effects from proven hospital causes.
+- [ ] **Recommend action:** Run the four constrained action families with approval, rejection, and deferral. Include an ineffective action and a case where nothing feasible passes the checks.
 
-- [x] **Problem and user:** ED patients wait while admitted patients occupy treatment spaces awaiting ward transfer. The ED shift coordinator and bed manager need to decide which feasible flow intervention to begin before capacity is exhausted. Evidence: Malaysia MOH's 2025 KPI dictionary identifies prolonged bed waiting as a contributor to ED crowding; the report names the beneficiary, operator, and decision. Demand for our particular product is still unverified.
-- [ ] **Detect:** No working forecast has been implemented or run. Next evidence: replay a previously unseen scenario using only information available at each forecast time; record useful warning time before a defined congestion event.
-- [ ] **Categorize:** Boarding, diagnostics, and treatment-capacity categories are specified, but no system has produced them from data. Next evidence: run separate bottleneck cases and a mixed case, recording the actual output.
-- [ ] **Prioritize:** Action deadline, feasibility, and expected operational benefit are proposed, but no ranked findings have been produced. Next evidence: show the order changing when action lead time or resource availability changes.
-- [ ] **Explain:** Input-linked explanations and uncertainty are designed, but no explanation has been verified against an actual prediction. Next evidence: show recorded bed-state, queue, turnaround, and freshness inputs beside the output; distinguish model sensitivity from proven causation.
-- [ ] **Recommend action:** A bounded, human-approved action menu is proposed. No model-driven recommendation has been executed in a demonstration. Next evidence: show a feasible recommendation, an ineffective alternative, and a case where no feasible intervention exists.
+## Priority 2 — Prove it is dependable and worthwhile
 
-**Priority 2 — Prove it is dependable and worthwhile**
+- [ ] **Prediction evidence:** Save separate tuning/test shifts and results against the reactive and simple flow baselines. Report detection, false warnings, lead time, probability error, and onset-range coverage. Label all data and outputs synthetic.
+- [ ] **Robustness:** Run missing/stale, delayed, duplicate, and impossible events, changed workloads, and an unannounced shock. Record validation errors, limitations, or Cannot assess as appropriate.
+- [ ] **False alarms:** Include normal shifts; merge repeated warnings; choose thresholds on tuning shifts and report actual false warnings per eight-hour test shift against the proposed one-warning budget.
+- [ ] **Measurable impact:** Compare matched patient demand and care requirements under no action, simple baselines, and PulseAhead. Report total ED patient-minutes, time breakdowns, urgent delays, boarding, resource use, uncertainty, and unfinished stays. Do not compare only completed departures.
+- [ ] **Better-decision proof:** Show why action timing or selection changes the outcome relative to the strongest simple baseline, and show a no-help case. Claim improvement only where measured results support it.
 
-- [ ] **Prediction evidence:** Sources were researched; no team model, held-apart result, or baseline comparison exists. Next evidence: report event recall, precision, warning time, uncertainty coverage, and comparison with persistence/net-flow/static-threshold baselines on locked evaluation scenarios. Label all simulated data and results. Do not reconstruct real hospital census from independently shifted MIMIC patient dates.
-- [ ] **Robustness:** No noisy/unfamiliar-input checks have been run. Next evidence: delayed/duplicate events, missing lab data, stale bed updates, unfamiliar arrival bursts, changed service-time distributions, and impossible counts; record fallback or abstention behavior.
-- [ ] **False alarms:** No normal-case evaluation or alert threshold validation exists. Next evidence: normal shifts as well as incident shifts, merged alert episodes, false alerts per shift, and a threshold selected on validation data under an explicit alert budget.
-- [ ] **Measurable impact:** Arithmetic examples and an evaluation design are provided, not measured benefits. Next evidence: paired scenario replay with identical demand and service requirements under the reactive baseline and proposed policy; report patient-minutes of waiting and blocked bed-minutes with uncertainty and action-resource costs. Simulation impact is not demonstrated hospital impact.
-- [ ] **Better-decision proof:** A fictional POV story illustrates the proposed decision, but no evaluated intervention comparison exists. Next evidence: demonstrate why acting earlier changes the outcome, compare against the best simple actionable baseline, and show a case where the recommendation cannot help.
+## Priority 3 — Be ready to show it
 
-**Priority 3 — Be ready to show it**
+- [ ] **Working demo:** Run stable, developing-congestion, approved-action, and degraded-data cases from input through forecast, explanation, comparison, and staff choice. Numerical outputs must come from the model.
+- [ ] **Pitch and Q&A:** Time a three-minute presentation plus two-minute Q&A using the supplied format, subject to newer organizer instructions. If shortlisted, also prepare the supplied four-minute demo plus three-minute Q&A. Keep saved replays/results as a fallback.
 
-- [ ] **Working demo:** No demo exists. Next evidence: run normal, developing-congestion, and degraded-data cases end to end through input, prediction, category, priority, explanation, and recommendation. A numerical output must come from the running model.
-- [ ] **Pitch and Q&A:** A pitch outline and likely judge questions are prepared in the report; no rehearsal has been observed. Next evidence: time a **3-minute live presentation plus 2-minute Q&A**. If shortlisted, also rehearse **4-minute demo plus 3-minute Q&A**; that additional format is conditional, the local rehearsal is mandatory.
+**Next implementation step:** follow the first simulator checkpoint in the build plan, including resource accounting and a reproducible ward-blockage case. A learned model is optional after the required simulation, comparisons, and evidence work passes.
 
-**Next useful action:** Confirm whether the organizer accepts a fully disclosed simulation-based predictive demonstration. The supplied checklist requires transparent synthetic labeling, but does not establish the organizer's acceptance policy. If accepted, implement the smallest queue forecast and a strong baseline before building the interface. If real operational validation is required, do not commit to this hospital project for the 16-hour event without a data partner.
-
-**Recommendation under the user's strict requirements:** Do not proceed with the original broad hospital-collapse pitch. A narrower intervention-timing simulation is technically plausible, but its novelty, daily-life fit, hospital validity, and customer demand remain insufficiently established. No mandatory unchecked item has been waived because data or access is missing.
+**Open external check:** organizer acceptance of synthetic-only evidence is unverified. Keep this visible and resolve it with organizers; it does not cancel the user's approved plan. Real hospital validation and integrations are future work.
