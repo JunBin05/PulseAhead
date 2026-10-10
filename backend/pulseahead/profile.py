@@ -33,9 +33,35 @@ PROFILE: dict[str, Any] = {
         "active": False,
         "note": "Declared reserve; activating it is a staff-approved action in a later ticket.",
     },
+    # Fictional named staff (OPEN_QUESTIONS Q3). Doctors D1-D4 each hold one clinician-work slot;
+    # nurses each cover a fixed block of spaces, and an empty space is staffed only while its
+    # covering nurse is on duty. Shared staff are listed once, never as extra capacity per zone.
+    "doctors": [
+        {"id": "D1", "name": "Dr. Okafor"},
+        {"id": "D2", "name": "Dr. Lindqvist"},
+        {"id": "D3", "name": "Dr. Moreau"},
+        {"id": "D4", "name": "Dr. Tanaka"},
+    ],
+    "reserve_physician": {
+        "id": "D5",
+        "name": "Dr. Ibarra",
+        "active": False,
+        "note": "Declared reserve; activating it is a staff-approved action in a later ticket.",
+    },
+    "nurses": [
+        {"id": "N1", "name": "Nurse Adeyemi", "covers": ["S01", "S02", "S03", "S04"]},
+        {"id": "N2", "name": "Nurse Brandt", "covers": ["S05", "S06", "S07", "S08"]},
+        {"id": "N3", "name": "Nurse Chen", "covers": ["S09", "S10", "S11", "S12"]},
+        {"id": "N4", "name": "Nurse Dube", "covers": ["S13", "S14", "S15", "S16"]},
+        {"id": "N5", "name": "Nurse Eriksen", "covers": ["S17", "S18", "S19", "S20"]},
+        {"id": "N6", "name": "Nurse Fontaine", "covers": ["S21", "S22", "R1", "R2"]},
+    ],
     "owners": {
         "ed_spaces": "ED attending lead",
         "clinician_slots": "ED attending lead",
+        "doctors": "ED attending lead",
+        "reserve_physician": "ED attending lead",
+        "nurse_coverage": "ED nurse in charge",
         "triage_desk": "Triage charge nurse",
         "reserve_triage_team": "Triage charge nurse",
     },
@@ -52,6 +78,9 @@ PROFILE: dict[str, Any] = {
         "triage_dwell_minutes": {"min": 3, "mode": 5, "max": 8},
         "active_assessment_minutes": {"min": 5, "mode": 10, "max": 20},
         "disposition_processing_minutes": {"min": 6, "mode": 10, "max": 16},
+        # Supplied care task for the urgent group and critical bypass: starts at first assessment and
+        # runs alongside the doctor's work. Discharge or transfer needs it complete.
+        "stabilization_task_minutes": {"min": 5, "mode": 15, "max": 30},
         "walk_in_urgency_mix": {"urgent": 0.08, "medium": 0.40, "lower": 0.52},
         "ambulance_urgency_mix": {"urgent": 0.30, "medium": 0.50, "lower": 0.20},
         "ambulance_critical_given_urgent": 0.35,

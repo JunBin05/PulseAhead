@@ -424,6 +424,7 @@ p {
   pointer-events: none;
   white-space: nowrap;
   font-size: 11px;
+  line-height: 1.1;
   color: var(--ink-muted);
 }
 

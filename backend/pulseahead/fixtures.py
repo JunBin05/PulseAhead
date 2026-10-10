@@ -13,12 +13,13 @@ from .profile import PROFILE
 from .scenario import AmbulanceRun, SuppliedInputs
 
 
-def _walk_in(urgency: str, score: int) -> SuppliedInputs:
-    return SuppliedInputs(urgency, PROFILE["acuity_system"], score, False, "walk-in")
+def _walk_in(urgency: str, score: int, care: float | None = None) -> SuppliedInputs:
+    return SuppliedInputs(urgency, PROFILE["acuity_system"], score, False, "walk-in", None, care)
 
 
-def _amb(run_id: str, urgency: str, score: int, critical: bool = False) -> SuppliedInputs:
-    return SuppliedInputs(urgency, PROFILE["acuity_system"], score, critical, "ambulance", run_id)
+def _amb(run_id: str, urgency: str, score: int, critical: bool = False,
+         care: float | None = None) -> SuppliedInputs:
+    return SuppliedInputs(urgency, PROFILE["acuity_system"], score, critical, "ambulance", run_id, care)
 
 
 def _intake_script() -> dict[str, Any]:
@@ -49,6 +50,39 @@ def _intake_script() -> dict[str, Any]:
     }
 
 
+def _staffing_script() -> dict[str, Any]:
+    walk_ins = [
+        (2.0, "W01", _walk_in("lower", 4)),
+        (2.0, "W02", _walk_in("medium", 3)),
+        (2.0, "W03", _walk_in("lower", 5)),
+        (2.0, "W04", _walk_in("urgent", 2, 12.0)),
+        (2.0, "W05", _walk_in("medium", 3)),
+        (2.0, "W06", _walk_in("lower", 4)),
+        (2.0, "W07", _walk_in("medium", 3)),
+        (2.0, "W08", _walk_in("lower", 5)),
+        (2.0, "W09", _walk_in("urgent", 2, 14.0)),
+        (2.0, "W10", _walk_in("medium", 3)),
+        (2.0, "W11", _walk_in("lower", 4)),
+        (2.0, "W12", _walk_in("medium", 3)),
+        (2.0, "W13", _walk_in("lower", 5)),
+        (2.0, "W14", _walk_in("lower", 4)),
+        # Arrives after the lower-urgency patients have already queued for a space.
+        (40.0, "W15", _walk_in("urgent", 2, 8.0)),
+    ]
+    return {
+        "walk_ins": walk_ins,
+        "ambulances": [
+            # Three critical patients against two resuscitation spaces. A 30-minute stabilization
+            # task is longer than any assessment (5-20 min), so the decision arrives first.
+            AmbulanceRun("A01", 1.0, 20.0, 5.0,
+                         [_amb("A01", "urgent", 1, True, 30.0), _amb("A01", "urgent", 1, True, 30.0),
+                          _amb("A01", "urgent", 1, True, 6.0)], True, arrive_min=20.0),
+            AmbulanceRun("A02", 40.0, 60.0, 5.0, [_amb("A02", "urgent", 1, True, 10.0)], True,
+                         arrive_min=60.0),
+        ],
+    }
+
+
 FIXTURES: dict[str, dict[str, Any]] = {
     "fixture-intake": {
         "id": "fixture-intake",
@@ -56,5 +90,19 @@ FIXTURES: dict[str, dict[str, Any]] = {
         "fixture": True,
         "background_arrivals": False,
         "script": _intake_script,
+    },
+    "fixture-staffing": {
+        "id": "fixture-staffing",
+        "name": "Fixture: shared staffing, unstaffed spaces and care prerequisites",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _staffing_script,
+        # Supplied staffing roster: nurses N1-N5 start the shift off duty (only N6 covers S21, S22,
+        # R1, R2); N1 and N2 come on duty at 60 and stay for the rest of the run.
+        "staffing": [
+            (0.0, "N1", False), (0.0, "N2", False), (0.0, "N3", False),
+            (0.0, "N4", False), (0.0, "N5", False),
+            (60.0, "N1", True), (60.0, "N2", True),
+        ],
     },
 }

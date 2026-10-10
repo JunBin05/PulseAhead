@@ -28,6 +28,7 @@ const PHASE_LABEL: Record<Phase, string> = {
   awaiting_space: 'Waiting for an ED space',
   awaiting_clinician: 'In a space, waiting for a clinician',
   assessment_active: 'With a clinician',
+  awaiting_care_completion: 'Decision received, required care not complete (space held)',
   disposition_processing: 'Cleared, processing departure',
 };
 
@@ -394,6 +395,10 @@ export function App() {
                 <dd data-testid="available-spaces">
                   {snap.resources.ed_spaces.available_staffed} of {snap.resources.ed_spaces.total}
                 </dd>
+                <dt>Staffed spaces</dt>
+                <dd data-testid="staffed-spaces">
+                  {snap.resources.ed_spaces.staffed_total} of {snap.resources.ed_spaces.total}
+                </dd>
                 <dt>Occupied spaces</dt>
                 <dd data-testid="occupied-spaces">{snap.resources.ed_spaces.occupied}</dd>
                 <dt>Awaiting a space</dt>
@@ -406,7 +411,7 @@ export function App() {
                 <dd data-testid="triage-busy">
                   {snap.resources.triage_desk.busy} of {snap.resources.triage_desk.total}
                 </dd>
-                <dt>Clinician slots busy</dt>
+                <dt>Doctors busy</dt>
                 <dd>
                   {snap.resources.clinician_slots.busy} of {snap.resources.clinician_slots.total}
                 </dd>
@@ -523,6 +528,8 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
             <dd>{zone.awaiting_clinician ?? 0}</dd>
             <dt>With a clinician</dt>
             <dd>{zone.active}</dd>
+            <dt>Decision received, care not complete</dt>
+            <dd data-testid="drawer-care-wait">{zone.awaiting_care_completion ?? 0}</dd>
           </>
         )}
         {zone.id === 1 && (
@@ -554,6 +561,7 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
       {zone.id === 3 && (
         <p className="muted">Diagnostic work is not modeled yet, so this zone is empty.</p>
       )}
+      {(zone.id === 2 || zone.id === 3) && <StaffingSummary snap={snap} />}
       {patients.length > 0 && (
         <>
           <h3 style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--s-2)' }}>Patients</h3>
@@ -567,7 +575,9 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
                     : PHASE_LABEL[p.phase]}
                   {p.space_id && ` · Space ${p.space_id}`}
                   {p.triage_id && ` · Desk ${p.triage_id}`}
-                  {p.clinician_id && ` · Clinician slot ${p.clinician_id}`}
+                  {p.nurse_id && ` · Nurse ${p.nurse_id}`}
+                  {p.clinician_id && ` · Doctor ${p.clinician_id}`}
+                  {p.care_status === 'in_progress' && ' · Stabilization in progress'}
                   {` · ${p.acuity_system} ${p.acuity_score} (supplied)`}
                   {p.ambulance_id && ` · Ambulance ${p.ambulance_id}`}
                 </span>
@@ -580,6 +590,56 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
         </>
       )}
     </div>
+  );
+}
+
+function StaffingSummary({ snap }: { snap: Snapshot }) {
+  const staff = snap.resources.staff;
+  const un = staff.unstaffed_empty_spaces;
+  return (
+    <section data-testid="staffing" aria-labelledby="staff-h" style={{ marginBottom: 'var(--s-4)' }}>
+      <h3 id="staff-h" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--s-2)' }}>
+        Staffing (shared by zones 2 and 3)
+      </h3>
+      <ul className="roster" data-testid="doctor-list">
+        {staff.doctors.map((d) => (
+          <li key={d.id} data-testid={`doctor-${d.id}`}>
+            <strong>{d.id}</strong>
+            <span>
+              {d.name} · {d.patient_id ? `with ${d.patient_id}` : 'free'}
+            </span>
+            <span className="tag">Doctor, on duty</span>
+          </li>
+        ))}
+        <li data-testid="doctor-reserve">
+          <strong>{staff.reserve_physician.id}</strong>
+          <span>
+            {staff.reserve_physician.name} · reserve physician ·{' '}
+            {staff.reserve_physician.active ? 'Active' : 'Declared, not active'} · owner{' '}
+            {staff.reserve_physician.owner}
+          </span>
+          <span className="tag">Reserve</span>
+        </li>
+      </ul>
+      <ul className="roster" data-testid="nurse-list" style={{ marginTop: 'var(--s-3)' }}>
+        {staff.nurses.map((n) => (
+          <li key={n.id} data-testid={`nurse-${n.id}`}>
+            <strong>{n.id}</strong>
+            <span>
+              {n.name} · covers {n.covers[0]}–{n.covers[n.covers.length - 1]} · {n.occupied} occupied,{' '}
+              {n.empty} empty
+            </span>
+            <span className="tag">{n.on_duty ? 'On duty' : 'Off duty'}</span>
+          </li>
+        ))}
+      </ul>
+      <p data-testid="unstaffed-note" style={{ marginTop: 'var(--s-3)' }}>
+        {un.count > 0
+          ? `${un.count} empty space${un.count === 1 ? ' is' : 's are'} not usable because no nurse is covering ${un.count === 1 ? 'it' : 'them'}: ${staff.off_duty_nurses.map((id) => staff.nurses.find((n) => n.id === id)?.name ?? id).join(', ')} off duty. Staffed spaces: ${snap.resources.ed_spaces.staffed_total} of ${snap.resources.ed_spaces.total}.`
+          : `Every empty space has a covering nurse on duty. Staffed spaces: ${snap.resources.ed_spaces.staffed_total} of ${snap.resources.ed_spaces.total}.`}
+      </p>
+      <p className="muted">{staff.note}</p>
+    </section>
   );
 }
 

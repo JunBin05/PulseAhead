@@ -4,6 +4,8 @@ import type { PatientDot, Phase, Snapshot, Urgency } from './types';
 export const RENDER_BUDGET = 200;
 
 export const PLATFORM_SIZE = 6;
+/** Front-to-back depth: zone 2 needs four evenly spaced waiting and work rows. */
+export const PLATFORM_DEPTH = 8;
 export const ZONE_CENTERS: Record<number, [number, number]> = {
   1: [-10.2, 0],
   2: [-3.4, 0],
@@ -26,9 +28,10 @@ interface Area {
 const AREAS: Record<Phase, Area> = {
   in_triage: { zone: 1, origin: [-2.1, -1.9], cols: 1, step: 0.7 },
   awaiting_triage: { zone: 1, origin: [-2.1, 0.4], cols: 5, step: 0.7 },
-  awaiting_space: { zone: 2, origin: [-2.1, -1.9], cols: 5, step: 0.7 },
-  awaiting_clinician: { zone: 2, origin: [-2.1, 0.4], cols: 5, step: 0.7 },
-  assessment_active: { zone: 2, origin: [-1.8, 2.6], cols: 4, step: 1.2 },
+  awaiting_space: { zone: 2, origin: [-2.1, -2.8], cols: 5, step: 0.7 },
+  awaiting_clinician: { zone: 2, origin: [-2.1, -0.9], cols: 5, step: 0.7 },
+  awaiting_care_completion: { zone: 2, origin: [-2.1, 1.0], cols: 5, step: 0.7 },
+  assessment_active: { zone: 2, origin: [-1.8, 2.9], cols: 4, step: 1.2 },
   disposition_processing: { zone: 4, origin: [-2.1, -1.0], cols: 5, step: 0.85 },
 };
 
@@ -38,6 +41,7 @@ const AREA_TEXT: Record<Phase, string> = {
   awaiting_space: 'Awaiting space',
   awaiting_clinician: 'Awaiting clinician',
   assessment_active: 'With clinician',
+  awaiting_care_completion: 'Awaiting care completion',
   disposition_processing: 'Processing departure',
 };
 

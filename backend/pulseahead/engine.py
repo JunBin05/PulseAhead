@@ -1,9 +1,12 @@
 """SimPy patient-flow engine for the fictional ED.
 
 Routes so far: walk-ins and non-critical ambulance patients queue for the finite triage desk
-(zone 1), then wait for a general ED space, a clinician, assessment and cleared departure. Supplied
-critical-bypass patients skip registration and wait for one of the resuscitation spaces inside the
-24-space pool (zone 2). A patient keeps the same ED space until physical departure.
+(zone 1), then wait for a staffed general ED space, a named doctor, assessment and cleared
+departure. Supplied critical-bypass patients skip registration and wait for a staffed
+resuscitation space inside the 24-space pool (zone 2). A patient keeps the same ED space until
+physical departure. A space is staffed only while its covering nurse is on duty; urgent-group and
+critical patients also carry a supplied stabilization task that must complete before discharge or
+transfer eligibility, even if the clinical decision is received earlier.
 
 Every state change is emitted as an event. The API exposes only events whose time has been
 reached; the engine never generates anything beyond the simulated time it was asked to reach.
@@ -35,6 +38,7 @@ PHASE_ZONE = {
     "awaiting_space": 2,
     "awaiting_clinician": 2,
     "assessment_active": 2,
+    "awaiting_care_completion": 2,
     "disposition_processing": 4,
     "departed": None,
 }
@@ -63,12 +67,18 @@ class Patient:
     phase: str = "awaiting_triage"
     phase_since_min: float = 0.0
     space_id: str | None = None
+    nurse_id: str | None = None
     clinician_id: str | None = None
     triage_id: str | None = None
     triage_start_min: float | None = None
     first_assessment_min: float | None = None
+    # Clinical decision as received. Eligibility needs this and the care prerequisites.
     decision_min: float | None = None
+    care_started: bool = False
+    care_complete_min: float | None = None
+    effective_disposition_min: float | None = None
     departure_min: float | None = None
+    care_done: Any = None
 
     @property
     def has_space(self) -> bool:
@@ -79,7 +89,19 @@ class Patient:
             "triage_desk": self.triage_id,
             "ed_space": self.space_id,
             "clinician_slot": self.clinician_id,
+            "nurse": self.nurse_id,
         }
+
+    def care_status(self) -> str:
+        """none (no supplied task) | not_started | in_progress | complete.
+
+        The task's length is never exposed before it completes.
+        """
+        if self.supplied.care_task_min is None:
+            return "none"
+        if self.care_complete_min is not None:
+            return "complete"
+        return "in_progress" if self.care_started else "not_started"
 
     def public(self, now: float) -> dict[str, Any]:
         s = self.supplied
@@ -96,7 +118,10 @@ class Patient:
             "has_space": self.has_space,
             "space_id": self.space_id,
             "clinician_id": self.clinician_id,
+            "nurse_id": self.nurse_id,
             "triage_id": self.triage_id,
+            "care_status": self.care_status(),
+            "decision_received": self.decision_min is not None,
             "phase_since_min": round(self.phase_since_min, 2),
             "minutes_in_phase": round(now - self.phase_since_min, 2),
             "arrival_min": round(self.arrival_min, 2),
@@ -116,6 +141,11 @@ class Patient:
             "triage_start_min": r(self.triage_start_min),
             "first_assessment_min": r(self.first_assessment_min),
             "decision_min": r(self.decision_min),
+            "care_task_required": (
+                None if self.first_assessment_min is None else self.supplied.care_task_min is not None
+            ),
+            "care_complete_min": r(self.care_complete_min),
+            "effective_disposition_min": r(self.effective_disposition_min),
             "departure_min": r(self.departure_min),
         }
 
@@ -198,6 +228,61 @@ class CongestionMonitor:
                 self.below_since_min = None
 
 
+class SpacePool:
+    """Finite named spaces. A free space can be granted only while its covering nurse is on duty.
+
+    Waiters are served by (urgency rank, request order) and re-evaluated on every release and every
+    staffing change. Occupied spaces are never taken back.
+    """
+
+    def __init__(self, env: simpy.Environment, ids: list[str], coverage: dict[str, str], on_duty: set[str]):
+        self.env = env
+        self.ids = sorted(ids)
+        self.coverage = coverage
+        self.on_duty = on_duty
+        self.held: set[str] = set()
+        self.waiting: list[tuple[int, int, simpy.Event]] = []
+        self._seq = 0
+
+    @property
+    def capacity(self) -> int:
+        return len(self.ids)
+
+    @property
+    def count(self) -> int:
+        return len(self.held)
+
+    def is_staffed(self, space_id: str) -> bool:
+        return self.coverage[space_id] in self.on_duty
+
+    def free_staffed(self) -> list[str]:
+        return [s for s in self.ids if s not in self.held and self.is_staffed(s)]
+
+    def free_unstaffed(self) -> list[str]:
+        return [s for s in self.ids if s not in self.held and not self.is_staffed(s)]
+
+    def request(self, rank: int) -> simpy.Event:
+        event = self.env.event()
+        self._seq += 1
+        self.waiting.append((rank, self._seq, event))
+        self.waiting.sort(key=lambda w: (w[0], w[1]))
+        self.dispatch()
+        return event
+
+    def release(self, space_id: str) -> None:
+        self.held.discard(space_id)
+        self.dispatch()
+
+    def dispatch(self) -> None:
+        while self.waiting:
+            free = self.free_staffed()
+            if not free:
+                return
+            _, _, event = self.waiting.pop(0)
+            self.held.add(free[0])
+            event.succeed(free[0])
+
+
 class EDEngine:
     def __init__(self, seed: int, scenario: str = "normal") -> None:
         self.definition = scenario_definition(scenario)
@@ -207,15 +292,22 @@ class EDEngine:
         n_resus = PROFILE["resus_spaces"]
         n_general = PROFILE["regular_spaces"] - n_resus
         self.triage = simpy.PriorityResource(self.env, capacity=PROFILE["triage_slots"])
-        self.general_spaces = simpy.PriorityResource(self.env, capacity=n_general)
-        self.resus_spaces = simpy.PriorityResource(self.env, capacity=n_resus)
         self.clinicians = simpy.PriorityResource(self.env, capacity=PROFILE["clinician_slots"])
+        # Nurse coverage: every space has one covering nurse; a nurse is on duty unless a supplied
+        # staffing roster says otherwise.
+        self.nurses = {n["id"]: n for n in PROFILE["nurses"]}
+        self.on_duty: set[str] = set(self.nurses)
+        coverage = {sp: n["id"] for n in PROFILE["nurses"] for sp in n["covers"]}
+        self.general_pool = SpacePool(
+            self.env, [f"S{i:02d}" for i in range(1, n_general + 1)], coverage, self.on_duty
+        )
+        self.resus_pool = SpacePool(
+            self.env, [f"R{i}" for i in range(1, n_resus + 1)], coverage, self.on_duty
+        )
         # Named units so events and state say which unit a patient holds. Always the lowest free
         # id, so allocation is deterministic for a seed.
         self.free_triage = [f"T{i}" for i in range(1, PROFILE["triage_slots"] + 1)]
-        self.free_general = [f"S{i:02d}" for i in range(1, n_general + 1)]
-        self.free_resus = [f"R{i}" for i in range(1, n_resus + 1)]
-        self.free_clinicians = [f"C{i}" for i in range(1, PROFILE["clinician_slots"] + 1)]
+        self.free_clinicians = [d["id"] for d in PROFILE["doctors"]]
         self.patients: dict[str, Patient] = {}
         self.announcements: dict[str, Announcement] = {}
         self.events: list[dict[str, Any]] = []
@@ -234,6 +326,8 @@ class EDEngine:
                 self.env.process(self._scripted_walk_in(at, pid, supplied))
             for run in script["ambulances"]:
                 self.env.process(self._ambulance(run))
+        for at, nurse_id, on in self.definition.get("staffing", []):
+            self.env.process(self._staffing_change(at, nurse_id, on))
         self.env.process(self._monitor_loop())
 
     # -- time ----------------------------------------------------------------------------
@@ -254,13 +348,14 @@ class EDEngine:
 
     # -- derived resource state ----------------------------------------------------------
     def occupied_spaces(self) -> int:
-        return self.general_spaces.count + self.resus_spaces.count
+        return self.general_pool.count + self.resus_pool.count
 
     def available_general_spaces(self) -> int:
-        return self.general_spaces.capacity - self.general_spaces.count
+        """Empty general spaces with a covering nurse on duty (what a waiting patient can take)."""
+        return len(self.general_pool.free_staffed())
 
     def awaiting_space(self) -> int:
-        return len(self.general_spaces.queue) + len(self.resus_spaces.queue)
+        return len(self.general_pool.waiting) + len(self.resus_pool.waiting)
 
     # -- events --------------------------------------------------------------------------
     def _emit(
@@ -299,6 +394,30 @@ class EDEngine:
             {"from": previous, "to": phase, "zone": PHASE_ZONE[phase], "has_space": p.has_space},
             p.resources(),
         )
+
+    # -- staffing ------------------------------------------------------------------------
+    def _staffing_change(self, at: float, nurse_id: str, on: bool):
+        if at > self.now:
+            yield self.env.timeout(at - self.now)
+        nurse = self.nurses[nurse_id]
+        if on:
+            self.on_duty.add(nurse_id)
+        else:
+            self.on_duty.discard(nurse_id)
+        self._emit(
+            "staff_on_duty" if on else "staff_off_duty",
+            None,
+            {
+                "staff_id": nurse_id,
+                "role": "nurse",
+                "name": nurse["name"],
+                "covers": nurse["covers"],
+                "source": "supplied staffing roster",
+            },
+            {"nurse": nurse_id},
+        )
+        self.general_pool.dispatch()
+        self.resus_pool.dispatch()
 
     # -- arrivals ------------------------------------------------------------------------
     def _base_walk_in_rate_per_min(self) -> float:
@@ -413,12 +532,23 @@ class EDEngine:
         self.env.process(self._patient(p))
 
     # -- patient flow --------------------------------------------------------------------
+    def _care_task(self, p: Patient, minutes: float):
+        yield self.env.timeout(minutes)
+        p.care_complete_min = self.now
+        self._emit(
+            "care_completed",
+            p.id,
+            {"task": "stabilization", "elapsed_min": round(self.now - (p.first_assessment_min or 0), 3)},
+            p.resources(),
+        )
+        p.care_done.succeed()
+
     def _patient(self, p: Patient):
         critical = p.supplied.critical_bypass
         rank = CRITICAL_RANK if critical else URGENCY_RANK[p.supplied.urgency]
         if critical:
-            # Bypass registration: wait for a resuscitation space inside the 24-space pool.
-            pool, free = self.resus_spaces, self.free_resus
+            # Bypass registration: wait for a staffed resuscitation space inside the 24-space pool.
+            pool = self.resus_pool
         else:
             triage_req = self.triage.request(priority=rank)
             yield triage_req
@@ -430,38 +560,56 @@ class EDEngine:
             self.free_triage.append(p.triage_id)
             p.triage_id = None
             self._set_phase(p, "awaiting_space")
-            pool, free = self.general_spaces, self.free_general
-        space_req = pool.request(priority=rank)
-        yield space_req
-        p.space_id = self._take(free)
+            pool = self.general_pool
+        p.space_id = yield pool.request(rank)
+        p.nurse_id = pool.coverage[p.space_id]
         self._set_phase(p, "awaiting_clinician")
         clin_req = self.clinicians.request(priority=rank)
         yield clin_req
         p.clinician_id = self._take(self.free_clinicians)
         p.first_assessment_min = self.now
+        if p.supplied.care_task_min is None:
+            p.care_complete_min = self.now  # no required care task: prerequisites hold at once
+        else:
+            p.care_started = True
+            p.care_done = self.env.event()
+            self._emit("care_started", p.id, {"task": "stabilization"}, p.resources())
+            self.env.process(self._care_task(p, p.supplied.care_task_min))
         self._set_phase(p, "assessment_active")
         yield self.env.timeout(p.work_min)
+        # Doctor work ends: the clinician slot is released, the ED space is not.
         self.clinicians.release(clin_req)
         self.free_clinicians.append(p.clinician_id)
         p.clinician_id = None
         p.decision_min = self.now
+        self._emit(
+            "decision_received",
+            p.id,
+            {"care_complete": p.care_complete_min is not None, "eligible": p.care_complete_min is not None},
+            p.resources(),
+        )
+        if p.care_complete_min is None:
+            # Premature decision: stays ineligible, holds the space, holds no clinician slot.
+            self._set_phase(p, "awaiting_care_completion")
+            yield p.care_done
+        p.effective_disposition_min = self.now
         self._set_phase(p, "disposition_processing")
         yield self.env.timeout(p.disposition_min)
         # Physical departure: the only point where the ED space is released.
-        pool.release(space_req)
-        free.append(p.space_id)
+        pool.release(p.space_id)
         p.departure_min = self.now
         self.departed_count += 1
         # The departure event names the space it released.
-        released = p.space_id
+        released, nurse = p.space_id, p.nurse_id
         p.space_id = None
+        p.nurse_id = None
         p.phase, previous = "departed", p.phase
         p.phase_since_min = self.now
         self._emit(
             "phase_change",
             p.id,
             {"from": previous, "to": "departed", "zone": None, "has_space": False},
-            {"triage_desk": None, "ed_space": released, "clinician_slot": None},
+            {"triage_desk": None, "ed_space": released, "clinician_slot": None, "nurse": nurse},
         )
 
     def _monitor_loop(self):

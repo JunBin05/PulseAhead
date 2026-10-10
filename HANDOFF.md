@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-10 (after ticket 03). Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -21,9 +21,10 @@ Updated 2026-10-10. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documen
 |---|---|---|
 | 01 Start a real four-zone 3D ED replay | **done**: 8/8 pass, review gate passed, findings fixed | `evidence/01-working-3d-replay.md`, `evidence/01-regression-results.json`, `evidence/01-regression.playwright-mcp.js` |
 | 02 Walk-ins, critical entries, inbound ambulances | **done**: 8/8 pass (no review gate due) | `evidence/02-triage-and-ambulance-feed.md`, `evidence/02-intake.playwright-mcp.js`, `evidence/shots/02-fixture-t20.png` |
-| 03–22 | not started | — |
+| 03 Assessment and shared staffing | **done**: 7/7 pass (no review gate due) | `evidence/03-assessment-and-staffing.md`, `evidence/03-staffing.playwright-mcp.js`, `evidence/shots/03-staffing-t40.png` |
+| 04–22 | not started | n/a |
 
-No ticket is in progress. Ticket 02 was finished, verified and committed before this handoff.
+No ticket is in progress. Ticket 03 was finished, verified and committed before this handoff.
 
 ## Verified through Playwright MCP (all pass, production build on :8000)
 
@@ -50,6 +51,12 @@ No ticket is in progress. Ticket 02 was finished, verified and committed before 
 - No hidden arrival times in observation or export.
 - Known vs background demand.
 
+**Ticket 03** (fixture `fixture-staffing` through the UI, plus 12 h seed 7 through the API):
+- Space and doctor grants in urgency order, FIFO within a group, no interruption (0 violations on both runs).
+- Nurse coverage: no grant to a space whose nurse was off duty; critical patients limited to 2 resus spaces; space kept until departure.
+- Premature decisions stay ineligible: `effective_disposition_min` = max(decision, care complete) for every patient.
+- Drawer, sidebar and zone buttons equal `/state` at the same version over 28 steps.
+
 **Not verified yet (not-run), owned by later tickets:**
 - 200-dot / 30 fps performance (ticket 20)
 - reduced-motion and 2D fallback (ticket 20)
@@ -66,7 +73,13 @@ No ticket is in progress. Ticket 02 was finished, verified and committed before 
 - **Kept by judgement:** `@react-three/drei` is pinned but unused; `ZONE_NAMES` duplicates the profile.
 - **Open questions** (`OPEN_QUESTIONS.md`) and their working decisions:
   - **Q1:** 2 of the 24 spaces (`R1`, `R2`) are resuscitation spaces held for critical bypass. General spaces are `S01`–`S22`.
-  - **Q2:** "available staffed spaces" counts general spaces only; "awaiting a space" counts both queues.
+  - **Q2:** "available staffed spaces" counts free general spaces whose covering nurse is on duty; "awaiting a space" counts both queues.
+  - **Both confirmed by the user on 2026-10-10 ("keep as is").**
+  - **Q3 (new, ticket 03):** fictional staffing units: doctors `D1`-`D4` (reserve `D5` inactive), nurses `N1`-`N6` each covering 4 spaces, a supplied stabilization task for urgent/critical patients.
+- **Ticket 03 limits** (details in `evidence/03-assessment-and-staffing.md`):
+  - Only nurse coverage changes during a run, via the scenario's supplied `staffing` roster (fixtures only). Doctors are always on duty; `D5` is inactive until ticket 16.
+  - The stabilization task (5-30 min) often outlasts the assessment, so 8 of 10 task patients in seed 7 wait for care after the decision. Disclosed assumption.
+  - Zone 2 scene rows are dense when all four are populated; area labels can sit under dots. Counts are exact in the buttons and drawer. Ticket 06 owns row overflow, ticket 20 the full visual pass.
 - **Unexplained, observed once:** the zone selection changed with no scripted click, and one backend `reset` arrived that the session did not send. Most likely manual clicks in the visible Playwright Chrome window. It was not reproduced in three reruns.
 - **Console warning:** `THREE.Clock` deprecated. It comes from @react-three/fiber 9.8.1 internals, not our code.
 - **Arrival rate:** seed 7 normal gave 4.9 arrivals/h against about 6.4/h expected from the assumptions. This is one sample, not a calibration.
@@ -74,16 +87,16 @@ No ticket is in progress. Ticket 02 was finished, verified and committed before 
 ## Code map
 
 - **Backend** (`backend/pulseahead/`):
-  - `profile.py`: fictional ED with 24 spaces (2 resus), 4 clinician slots, 1 triage desk, a declared reserve triage team, owners and assumptions.
-  - `scenario.py`: supplied inputs (acuity, urgency group, critical bypass) and ambulance run scripts. The hidden arrival time stays here.
-  - `fixtures.py`: test-only scripted scenarios.
-  - `engine.py`: the SimPy flow. Triage desk → general space, or critical bypass → resus space; then clinician, assessment, disposition and departure. Also the ambulance lifecycle and the congestion monitor.
+  - `profile.py`: fictional ED with 24 spaces (2 resus), 4 named doctors plus a reserve physician, 6 named nurses with coverage blocks, 1 triage desk, a declared reserve triage team, owners and assumptions.
+  - `scenario.py`: supplied inputs (acuity, urgency group, critical bypass, stabilization task) and ambulance run scripts. The hidden arrival time and task length stay here.
+  - `fixtures.py`: test-only scripted scenarios (`fixture-intake`, `fixture-staffing`; a fixture may carry a supplied `staffing` roster).
+  - `engine.py`: the SimPy flow. Triage desk → staffed general space (`SpacePool`), or critical bypass → staffed resus space; then a named doctor, assessment, decision received, required care complete (`awaiting_care_completion` if premature), disposition and departure. Also the ambulance lifecycle and the congestion monitor.
   - `replay.py`: sessions, versions and the snapshot read model.
   - `api.py`: endpoints (`/api/health`, `/api/v1/profile`, `/api/v1/fixtures`, `/api/v1/replays` create/state/advance with `expected_version` (409 on mismatch)/reset/events/export). It also serves `frontend/dist`.
 - **Frontend** (`frontend/src/`):
-  - `App.tsx`: controls, ambulance panel, resources and zone drawer. The test-only `?fixture=` parameter is read here.
+  - `App.tsx`: controls, ambulance panel, resources, zone drawer and the shared staffing summary (zones 2 and 3). The test-only `?fixture=` parameter is read here.
   - `Scene.tsx`: R3F isometric scene, DOM labels, compact labels below a 560 px canvas, and the `data-patient-meshes` counter.
-  - `layout.ts`: dot areas.
+  - `layout.ts`: dot areas and platform size (6 wide, 8 deep).
   - `api.ts`, `types.ts`, `tokens.css`, `app.css`, `icons.tsx`.
 - **Design:** `DESIGN.md` ("The Charge Desk") and `.impeccable/design.json`.
 
@@ -113,11 +126,10 @@ Start commands, from `Real/`:
 ## Exact next steps
 
 1. Start the backend and build the frontend (see Servers). Confirm Playwright MCP works with `browser_navigate` to `http://127.0.0.1:8000/`.
-2. **Ticket 03:** assessment and staffing (blocked only by 02, which is done).
-   - Read `issues/03-assessment-and-staffing.md` and spec §Events/patients/resources (staff identities, the reserve physician, coverage pools, owner roles).
-   - Extend `profile.py` and `engine.py` with named doctor and nurse identities and one declared reserve physician.
-   - Expose assigned staff identities in `/state` and the zone drawer.
-   - Add a fixture for it in `fixtures.py`.
-   - Verify through Playwright MCP, write `evidence/03-*.md`, tick only passed boxes, and commit `ticket 03: <title>`.
-3. Continue: 04 → 05 → 06 → **code-review gate** (base `b3d1498`, or the ticket 02 commit) → 07 …
-4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` as a regression.
+2. **Ticket 04:** diagnostic queues and return flow (blocked only by 03, which is done).
+   - Read `issues/04-diagnostics-and-return-flow.md` and spec §Four phases (zone 3), §Editable demo defaults (2 lab, 1 imaging, lab median 30 min, imaging median 45 min) and the zone 3 rules.
+   - Add lab and imaging resources, supplied per-patient test needs, phases for waiting and running tests and `awaiting_result_review`, and make required tests part of the care prerequisites that `effective_disposition_min` already waits for.
+   - Zone 3 holds logical diagnostic waiting; the patient keeps the same ED space and holds no doctor while waiting for results.
+   - Add a fixture (`fixture-diagnostics`) in `fixtures.py`; extend `/state` zone 3 and the drawer; verify through Playwright MCP, write `evidence/04-*.md`, tick only passed boxes, commit `ticket 04: <title>`.
+3. Continue: 05 → 06 → **code-review gate** (base `e69ceb6`, or the ticket 03 commit) → 07 …
+4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow changed, `evidence/02-intake.playwright-mcp.js` and `evidence/03-staffing.playwright-mcp.js`.

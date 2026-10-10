@@ -25,6 +25,8 @@ class SuppliedInputs:
     critical_bypass: bool
     arrival_mode: str  # walk-in | ambulance
     ambulance_id: str | None = None
+    # Supplied stabilization task length. It stays hidden until the task completes.
+    care_task_min: float | None = None
 
 
 @dataclass
@@ -60,6 +62,15 @@ def _acuity(rng: random.Random, urgency: str, critical: bool) -> int:
     return {"urgent": 2, "medium": 3}.get(urgency) or (4 if rng.random() < 0.5 else 5)
 
 
+def _care_task_min(seed: int, key: str, urgency: str) -> float | None:
+    """Supplied stabilization task for the urgent group and critical bypass (a demo assumption)."""
+    if urgency != "urgent":
+        return None
+    spec = PROFILE["assumptions"]["stabilization_task_minutes"]
+    rng = random.Random(f"{seed}:{key}:care")
+    return round(rng.triangular(spec["min"], spec["max"], spec["mode"]), 3)
+
+
 def walk_in_inputs(seed: int, patient_id: str) -> SuppliedInputs:
     rng = random.Random(f"{seed}:{patient_id}:supplied")
     a = PROFILE["assumptions"]
@@ -70,6 +81,7 @@ def walk_in_inputs(seed: int, patient_id: str) -> SuppliedInputs:
         acuity_score=_acuity(rng, urgency, False),
         critical_bypass=False,
         arrival_mode="walk-in",
+        care_task_min=_care_task_min(seed, patient_id, urgency),
     )
 
 
@@ -85,6 +97,7 @@ def ambulance_patient_inputs(seed: int, run_id: str, index: int) -> SuppliedInpu
         critical_bypass=critical,
         arrival_mode="ambulance",
         ambulance_id=run_id,
+        care_task_min=_care_task_min(seed, f"{run_id}:{index}", urgency),
     )
 
 

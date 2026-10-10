@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import {
   AREA_LABELS,
   EXITS,
+  PLATFORM_DEPTH,
   PLATFORM_SIZE,
   ZONE_CENTERS,
   type DotTarget,
@@ -171,11 +172,11 @@ function Platform({
         onPointerOver={() => (document.body.style.cursor = 'pointer')}
         onPointerOut={() => (document.body.style.cursor = '')}
       >
-        <boxGeometry args={[PLATFORM_SIZE, 0.5, PLATFORM_SIZE]} />
+        <boxGeometry args={[PLATFORM_SIZE, 0.5, PLATFORM_DEPTH]} />
         <meshStandardMaterial color={selected ? '#dcecf1' : '#f8fafb'} />
       </mesh>
       <lineSegments position={[0, 0.251, 0]}>
-        <edgesGeometry args={[new THREE.BoxGeometry(PLATFORM_SIZE, 0.001, PLATFORM_SIZE)]} />
+        <edgesGeometry args={[new THREE.BoxGeometry(PLATFORM_SIZE, 0.001, PLATFORM_DEPTH)]} />
         <lineBasicMaterial color={selected ? '#0a6680' : '#b3bec8'} />
       </lineSegments>
     </group>

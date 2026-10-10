@@ -6,6 +6,7 @@ export type Phase =
   | 'awaiting_space'
   | 'awaiting_clinician'
   | 'assessment_active'
+  | 'awaiting_care_completion'
   | 'disposition_processing';
 
 export interface PatientDot {
@@ -22,6 +23,9 @@ export interface PatientDot {
   has_space: boolean;
   space_id: string | null;
   clinician_id: string | null;
+  nurse_id: string | null;
+  care_status: 'none' | 'not_started' | 'in_progress' | 'complete';
+  decision_received: boolean;
   triage_id: string | null;
   phase_since_min: number;
   minutes_in_phase: number;
@@ -38,6 +42,7 @@ export interface Zone {
   active: number;
   awaiting_space?: number;
   awaiting_clinician?: number;
+  awaiting_care_completion?: number;
   capacity: { kind: string; shared_with_zone?: number } | null;
 }
 
@@ -85,9 +90,36 @@ export interface Snapshot {
       awaiting_space: number;
       general_total: number;
       general_occupied: number;
+      staffed_total: number;
+      unstaffed_total: number;
+      unstaffed_empty: number;
       owner: string;
     };
-    resus_spaces: { total: number; occupied: number; available: number; awaiting: number; owner: string };
+    resus_spaces: {
+      total: number;
+      occupied: number;
+      available: number;
+      unstaffed_empty: number;
+      awaiting: number;
+      owner: string;
+    };
+    staff: {
+      doctors: { id: string; name: string; on_duty: boolean; patient_id: string | null; owner: string }[];
+      reserve_physician: { id: string; name: string; active: boolean; owner: string; note: string };
+      nurses: {
+        id: string;
+        name: string;
+        on_duty: boolean;
+        covers: string[];
+        occupied: number;
+        empty: number;
+        owner: string;
+      }[];
+      on_duty_nurses: string[];
+      off_duty_nurses: string[];
+      unstaffed_empty_spaces: { count: number; space_ids: string[]; reason: string | null };
+      note: string;
+    };
     clinician_slots: { total: number; busy: number; waiting: number; owner: string };
     triage_desk: {
       total: number;

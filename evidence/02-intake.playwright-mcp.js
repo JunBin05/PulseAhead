@@ -22,6 +22,8 @@ async (page) => {
   for (let k = 1; k <= 12; k++) {
     await page.getByTestId('step').click(); await waitV(k + 1); await page.waitForTimeout(150);
     const st = await api(`/api/v1/replays/${replayId}/state`);
+    // The mesh counter updates on the next rendered frame; wait for it (up to 3 s) so a throttled window is not a false failure.
+    await page.waitForFunction((n) => Number(document.querySelector('canvas').dataset.patientMeshes) === n, st.patients.length, { timeout: 3000 }).catch(() => {});
     const ui = await page.evaluate(() => ({
       time: document.querySelector('[data-testid=sim-time]').textContent,
       ambCount: document.querySelector('[data-testid=amb-count]').textContent,

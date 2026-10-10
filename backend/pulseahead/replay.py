@@ -66,12 +66,16 @@ class ReplaySession:
                 # No treatment-bed pool in zone 1.
                 capacity = {"kind": "triage_desk", "treatment_beds": None}
             elif zid == 2:
-                ids = in_phase("awaiting_space", "awaiting_clinician", "assessment_active")
+                ids = in_phase(
+                    "awaiting_space", "awaiting_clinician", "assessment_active", "awaiting_care_completion"
+                )
                 detail = {
                     "queue": len(in_phase("awaiting_space", "awaiting_clinician")),
                     "active": len(in_phase("assessment_active")),
                     "awaiting_space": len(in_phase("awaiting_space")),
                     "awaiting_clinician": len(in_phase("awaiting_clinician")),
+                    # Decision received, required care not finished: holds the space, no doctor.
+                    "awaiting_care_completion": len(in_phase("awaiting_care_completion")),
                 }
                 capacity = {"kind": "ed_spaces", "shared_with_zone": 3}
             elif zid == 3:
@@ -100,6 +104,60 @@ class ReplaySession:
             "building": "Building congestion",
             "confirmed": "Congested",
         }[mon.state]
+
+        gp, rp = e.general_pool, e.resus_pool
+        all_ids = gp.ids + rp.ids
+        unstaffed_total = [s for pool in (gp, rp) for s in pool.ids if not pool.is_staffed(s)]
+        unstaffed_empty = gp.free_unstaffed() + rp.free_unstaffed()
+        on_duty = sorted(e.on_duty)
+        off_duty = [n for n in sorted(e.nurses) if n not in e.on_duty]
+        holder = {p["clinician_id"]: p["id"] for p in patients if p["clinician_id"]}
+        space_patient = {p["space_id"]: p["id"] for p in patients if p["space_id"]}
+        staff = {
+            "doctors": [
+                {
+                    "id": d["id"],
+                    "name": d["name"],
+                    "role": "doctor",
+                    "on_duty": True,
+                    "patient_id": holder.get(d["id"]),
+                    "owner": PROFILE["owners"]["doctors"],
+                }
+                for d in PROFILE["doctors"]
+            ],
+            "reserve_physician": {
+                **PROFILE["reserve_physician"],
+                "role": "doctor",
+                "owner": PROFILE["owners"]["reserve_physician"],
+            },
+            "nurses": [
+                {
+                    "id": n["id"],
+                    "name": n["name"],
+                    "role": "nurse",
+                    "on_duty": n["id"] in e.on_duty,
+                    "covers": n["covers"],
+                    "occupied": sum(1 for sp in n["covers"] if sp in space_patient),
+                    "empty": sum(1 for sp in n["covers"] if sp not in space_patient),
+                    "owner": PROFILE["owners"]["nurse_coverage"],
+                }
+                for n in PROFILE["nurses"]
+            ],
+            "on_duty_nurses": on_duty,
+            "off_duty_nurses": off_duty,
+            "unstaffed_empty_spaces": {
+                "count": len(unstaffed_empty),
+                "space_ids": unstaffed_empty,
+                "reason": (
+                    None
+                    if not unstaffed_empty
+                    else "Empty but not usable: no covering nurse on duty ("
+                    + ", ".join(off_duty)
+                    + ")."
+                ),
+            },
+            "note": "Shared staff are listed once. Doctors serve zone 2 work; nurses cover spaces for zones 2 and 3.",
+        }
 
         announcements = [a.public(now) for a in sorted(e.announcements.values(), key=lambda a: a.id)]
         inbound = [a for a in announcements if a["status"] in ("en_route", "delayed")]
@@ -140,18 +198,23 @@ class ReplaySession:
                     # held for critical bypass and reported separately.
                     "available_staffed": e.available_general_spaces(),
                     "awaiting_space": e.awaiting_space(),
-                    "general_total": e.general_spaces.capacity,
-                    "general_occupied": e.general_spaces.count,
+                    "general_total": gp.capacity,
+                    "general_occupied": gp.count,
+                    "staffed_total": len(all_ids) - len(unstaffed_total),
+                    "unstaffed_total": len(unstaffed_total),
+                    "unstaffed_empty": len(unstaffed_empty),
                     "owner": PROFILE["owners"]["ed_spaces"],
                 },
                 "resus_spaces": {
-                    "total": e.resus_spaces.capacity,
-                    "occupied": e.resus_spaces.count,
-                    "available": e.resus_spaces.capacity - e.resus_spaces.count,
-                    "awaiting": len(e.resus_spaces.queue),
+                    "total": rp.capacity,
+                    "occupied": rp.count,
+                    "available": len(rp.free_staffed()),
+                    "unstaffed_empty": len(rp.free_unstaffed()),
+                    "awaiting": len(rp.waiting),
                     "within_ed_spaces": True,
                     "owner": PROFILE["owners"]["ed_spaces"],
                 },
+                "staff": staff,
                 "clinician_slots": {
                     "total": e.clinicians.capacity,
                     "busy": e.clinicians.count,
