@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api';
 import { IconClock, IconOctagon, IconTriangle, IconUnknown } from './icons';
-import type { Forecast, ForecastAlert, ForecastExplanation, ForecastOnset, Snapshot } from './types';
+import type { ComparisonResult, Forecast, ForecastAlert, ForecastExplanation, ForecastOnset, Snapshot } from './types';
 
 export const FORECAST_REFRESH_MIN = 5;
 export type ForecastSamples = 50 | 100;
@@ -299,19 +299,44 @@ function deadlineText(a: ForecastAlert, now: number): string {
   return `Latest start about ${clock(d.latest_start_min)} (in ${inMin} simulated min)`;
 }
 
+function impactText(service: string, cmp: ComparisonResult | null): string {
+  if (!cmp) return 'Impact: unavailable (no action comparison yet)';
+  const rows = cmp.actions.filter((r) => r.service === service && r.comparison);
+  if (!rows.length) return 'Impact: no feasible action serves this service now';
+  const r = rows[0];
+  const sv = r.comparison!.total_saving_patient_min;
+  const lb = sv.lower_90 === null ? 'n/a' : sv.lower_90.toFixed(1);
+  const when =
+    r.deadline?.status === 'open' && r.deadline.latest_start_min !== null
+      ? `; latest start ${clock(r.deadline.latest_start_min)}`
+      : '';
+  return `Impact: ${r.name}${r.preset === 'diagnostic_reserve' ? ` (${r.target})` : ''} saves ${sv.mean?.toFixed(1)} patient-min (90% lower bound ${lb}), ${r.rank?.label.replace(/_/g, ' ')}${when}`;
+}
+
 export function AlertList({
   snap,
   view,
   onSelect,
   selectedZone,
   onCompare,
+  comparison,
 }: {
   snap: Snapshot;
   view: ForecastView;
   onSelect: (zone: number) => void;
   selectedZone: number | null;
   onCompare?: (zone: number) => void;
+  comparison?: ComparisonResult | null;
 }) {
+  // An action comparison made for exactly this state's time fills the alert's impact and deadline.
+  const cmp =
+    comparison &&
+    comparison.status === 'ok' &&
+    comparison.source.replay_id === snap.replay_id &&
+    comparison.source.run_number === snap.run_number &&
+    comparison.source.sim_time_min === snap.sim_time_min
+      ? comparison
+      : null;
   const f = view.data;
   if (!f || f.status !== 'ok') return null;
   const { actionable, recovery, unknown } = f.alerts;
@@ -350,9 +375,9 @@ export function AlertList({
           {a.deadline.basis}: {a.deadline.action} ({a.deadline.setup_min} min setup, {a.deadline.review_min} min review,{' '}
           {a.deadline.margin_min} min margin)
         </span>
-        <span className="muted">
-          Affected patients: {a.affected_patients ?? 'unknown'} · urgent group waiting: {a.urgent_group_waiting} ·
-          Impact: unavailable (no action comparison yet)
+        <span className="muted" data-testid={`fc-alert-${a.service}-impact`}>
+          Affected patients: {a.affected_patients ?? 'unknown'} · urgent group waiting: {a.urgent_group_waiting} ·{' '}
+          {impactText(a.service, cmp)}
         </span>
       </button>
       {onCompare && (

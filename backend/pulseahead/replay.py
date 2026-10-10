@@ -827,7 +827,7 @@ class ReplaySession:
             if not elig["feasible"]:
                 raise ActionError(422, " ".join(elig["reasons"]))
             rid = f"R{len(self.requests) + 1:04d}"
-            cached = self._cmp.get((self.version, fcast.DEFAULT_SAMPLES))
+            cached = next((v for (ver, _n), v in self._cmp.items() if ver == self.version), None)
             summary = None
             if cached:
                 row = next((a for a in cached["actions"] if a["id"] == f"{preset}:{s['target']}"), None)
@@ -836,6 +836,7 @@ class ReplaySession:
                     "urgent_initial_wait_change_min": row["comparison"]["urgent_initial_wait_change_min"],
                     "overdue_urgent_change": row["comparison"]["overdue_urgent_change"],
                     "samples": row["comparison"]["samples"],
+                    "rank_label": (row.get("rank") or {}).get("label"),
                 }
             req = {
                 "id": rid, "preset": preset, "target": s["target"], "name": s["name"], "service": s["service"],
@@ -943,6 +944,13 @@ class ReplaySession:
                 comp = None
             else:
                 comp = fcast.compare_actions(inp, specs, samples, fcast.FORECAST_SEED)
+            # The forecast of the same state version places each action's own latest-start deadline.
+            fc = None
+            if inp["assessable"]:
+                try:
+                    fc, _ = self.forecast(samples, snap["version"])
+                except Exception:  # noqa: BLE001 - a missing forecast only leaves deadlines unavailable
+                    fc = None
             rows = []
             for c in catalog:
                 row = {**c, "comparison": None}
@@ -956,12 +964,40 @@ class ReplaySession:
                                 "staff time before it. Work already on the slot finishes after the window.",
                     }
                     row["comparison"] = full
+                s_ = act.spec(c["preset"], c["target"])
+                hours = act.resource_hours(s_)
+                row["resource_hours"] = hours
+                row["rank"] = act.rank_row(c["feasible"], inp["assessable"], row["comparison"])
+                row["deadline"] = act.deadline(fc, c["service"], inp["t0"], c["review_min"], c["setup_min"])
+                if row["comparison"]:
+                    sv = row["comparison"]["total_saving_patient_min"]
+                    row["impact_per_resource_hour"] = {
+                        "mean": None if sv["mean"] is None else round(sv["mean"] / hours, 3),
+                        "lower_90": None if sv["lower_90"] is None else round(sv["lower_90"] / hours, 3),
+                        "unit": "patient-minutes saved per reserve unit-hour",
+                    }
                 rows.append(row)
+            act.order_rows(rows)
+            what_if = None
+            compared = [r for r in rows if r["comparison"] is not None]
+            if comp is not None and len(compared) >= 2:
+                a_, b_ = compared[0], compared[1]
+                d = comp["pair_diff"][a_["id"]][b_["id"]]
+                lb = "n/a" if d["lower_90"] is None else f"{d['lower_90']:.1f}"
+                what_if = {
+                    "a": a_["id"], "b": b_["id"], "difference_patient_min": d,
+                    "text": (
+                        f"Doing {a_['name']} ({a_['target']}) first instead of {b_['name']} ({b_['target']}) "
+                        f"changes the total ED time saved by {d['mean']:+.1f} patient-min "
+                        f"(90% lower bound {lb}) on the same {d['n']} futures. Only one action can run at a time."
+                    ),
+                }
             out = {
                 "api_version": API_VERSION, "kind": "comparison", "synthetic": True, "source": inp["source"],
                 "status": "ok" if inp["assessable"] else "cannot_assess", "reasons": inp["reasons"],
                 "samples": samples, "actions": rows, "not_modeled": act.NOT_MODELED,
                 "no_action": comp["no_action"] if comp else None,
+                "what_if": what_if, "pair_diff": comp["pair_diff"] if comp else {},
                 "cohort_rule": (
                     "Cohort: patients present at the decision plus 90 simulated minutes of arrivals; background "
                     "arrivals continue; follow-up is capped at 12 hours. Unfinished stays carry accrued minutes "

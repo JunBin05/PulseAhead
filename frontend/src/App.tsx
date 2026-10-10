@@ -30,6 +30,7 @@ import {
 import {
   ZONE_NAMES,
   type CongestionState,
+  type ComparisonResult,
   type Feed,
   type Phase,
   type PressureService,
@@ -215,6 +216,7 @@ export function App() {
   // Demo role (who the screen acts as) and the action comparison panel; opening it pauses the replay.
   const [role, setRole] = useState('ED shift coordinator');
   const [compareOpen, setCompareOpen] = useState(false);
+  const [lastCmp, setLastCmp] = useState<ComparisonResult | null>(null);
   const compareReturnRef = useRef<HTMLElement | null>(null);
 
   const idRef = useRef<string | null>(null);
@@ -852,6 +854,7 @@ export function App() {
               view={fcView}
               onSelect={selectAlert}
               selectedZone={selectedZone}
+              comparison={lastCmp}
               onCompare={(z) => {
                 selectAlert(z);
                 openCompare();
@@ -868,7 +871,7 @@ export function App() {
             </button>
           )}
           {snap && compareOpen && (
-            <ComparePanel snap={snap} role={role} samples={fcSamples} onClose={closeCompare} onChanged={retry} />
+            <ComparePanel snap={snap} role={role} samples={fcSamples} onClose={closeCompare} onChanged={retry} onResult={setLastCmp} />
           )}
           <section className="panel" aria-labelledby="drawer-h">
             {!zone ? (

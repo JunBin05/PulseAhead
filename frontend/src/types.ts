@@ -721,6 +721,7 @@ export interface ActionComparison {
 
 export type RankLabel =
   | 'best_action'
+  | 'supported_not_top'
   | 'no_action_shown_to_help'
   | 'needs_review'
   | 'urgent_delay_check_failed'
@@ -730,14 +731,17 @@ export type RankLabel =
 export interface ActionRank {
   label: RankLabel;
   text: string;
-  order: number;
   rule: Record<string, number | boolean | string | null>;
-  deadline: {
-    latest_start_min: number | null;
-    status: 'open' | 'too_late' | 'recovery' | 'unavailable';
-    basis: string;
-    in_min?: number;
-  } | null;
+}
+
+export interface ActionDeadline {
+  status: 'open' | 'too_late' | 'recovery' | 'unavailable';
+  latest_start_min: number | null;
+  in_min?: number;
+  review_min: number;
+  setup_min: number;
+  margin_min: number;
+  basis: string;
 }
 
 export interface ActionCatalogItem {
@@ -760,6 +764,10 @@ export interface ActionCatalogItem {
 export interface ComparisonRow extends ActionCatalogItem {
   comparison: ActionComparison | null;
   rank?: ActionRank;
+  order?: number;
+  resource_hours?: number;
+  impact_per_resource_hour?: { mean: number | null; lower_90: number | null; unit: string };
+  deadline?: ActionDeadline;
 }
 
 export interface ComparisonResult {
@@ -773,6 +781,8 @@ export interface ComparisonResult {
   actions: ComparisonRow[];
   not_modeled: { id: string; name: string; reason: string }[];
   no_action: BranchSummary | null;
+  what_if: { a: string; b: string; difference_patient_min: Stat; text: string } | null;
+  pair_diff: Record<string, Record<string, Stat>>;
   cohort_rule: string;
   compute_ms: number;
   cached?: boolean;

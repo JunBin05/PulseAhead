@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Ticket 11 is built and smoke-verified (see "Ticket 11 summary"); Ticket 14 (reduced) is built and smoke-verified; next: ticket 17 (lite ranking).** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
+Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Ticket 11 is built and smoke-verified (see "Ticket 11 summary"); Tickets 14 and 17 (lite) are built and smoke-verified; next: the guided demo run, then 18 and 20 only if time allows (both paused).** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
 
 ## Goal and rules
 
@@ -32,7 +32,8 @@ Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and 
 | 11 Ward coordination + shared action machinery | **done (smoke-verified)**; UI box open until the ticket 20 journey | `evidence/11-ward-action-and-owner-approval.md`, `evidence/11-smoke.mjs` |
 | 12, 13, 15, 16 | **descoped** (scope amendment) | n/a |
 | 14 Diagnostic reserve slot (reduced) | **done (smoke-verified)**; UI covered by ticket 20 | `evidence/14-diagnostic-reserve-slot.md`, `evidence/14-smoke.mjs` |
-| 17 Ranking (lite), 18 Evidence (merged with 19), 20 UX (lite) | not started | n/a |
+| 17 Ranking (lite) | **backend done (smoke-verified)**; panel/alert UI not browser-checked | `evidence/17-rank-actions-lite.md`, `evidence/17-smoke.mjs` |
+| 18 Evidence (merged with 19), 20 UX (lite) | **paused** (time) | n/a |
 | 19 | **merged into 18** | n/a |
 | 21 Deployment, 22 Rehearsal | stop and ask the user (21); 22 stays with the user | n/a |
 

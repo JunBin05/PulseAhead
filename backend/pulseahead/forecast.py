@@ -912,7 +912,16 @@ def compare_actions(inp: dict[str, Any], specs: list[dict[str, Any]], samples: i
             "futures_with_complete_urgent_outcome": complete_urgent[sid],
             "futures_with_unfinished_stays": incomplete_futures[sid],
         }
+    # What if A instead of B: the per-future difference of their savings on the same keyed futures.
+    pair_diff: dict[str, dict[str, Any]] = {}
+    if not blocked:
+        for a_ in specs:
+            pair_diff[a_["id"]] = {
+                b_["id"]: _stats([x - y for x, y in zip(deltas[a_["id"]]["saving"], deltas[b_["id"]]["saving"])])
+                for b_ in specs if b_["id"] != a_["id"]
+            }
     return {
+        "pair_diff": pair_diff,
         "samples": samples, "seed": base, "follow_up_cap_min": FOLLOW_UP_MIN, "cohort_window_min": HORIZON_MIN,
         "overdue_urgent_wait_min": OVERDUE_URGENT_WAIT_MIN,
         "no_action": branch(rows_base), "actions": out_actions, "blocked_by_in_flight": blocked,

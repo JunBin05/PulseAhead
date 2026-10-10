@@ -184,6 +184,101 @@ function CompareTable({ row, c }: { row: ComparisonRow; c: ActionComparison }) {
   );
 }
 
+/** "What if I do A instead of B": the paired difference on the same futures, with each action's parts. */
+function WhatIf({
+  cmp,
+  a,
+  b,
+  onA,
+  onB,
+}: {
+  cmp: ComparisonResult;
+  a: string | null;
+  b: string | null;
+  onA: (id: string) => void;
+  onB: (id: string) => void;
+}) {
+  const rows = cmp.actions.filter((r) => r.comparison !== null);
+  if (rows.length < 2) {
+    return (
+      <p className="muted" data-testid="what-if-none">
+        What if: fewer than two actions are feasible now, so there is nothing to compare against each other.
+      </p>
+    );
+  }
+  const idA = a && rows.some((r) => r.id === a) ? a : (cmp.what_if?.a ?? rows[0].id);
+  const idB = b && rows.some((r) => r.id === b) && b !== idA ? b : (rows.find((r) => r.id !== idA)?.id ?? rows[1].id);
+  const ra = rows.find((r) => r.id === idA)!;
+  const rb = rows.find((r) => r.id === idB)!;
+  const ca = ra.comparison!;
+  const cb = rb.comparison!;
+  const diff = cmp.pair_diff[idA]?.[idB];
+  const label = (r: ComparisonRow) => `${r.name}${r.preset === 'diagnostic_reserve' ? ` (${r.target})` : ''}`;
+  const line = (name: string, x: Stat, y: Stat, tid: string) => (
+    <tr data-testid={`whatif-${tid}`}>
+      <th scope="row">{name}</th>
+      <td>{statCell(x)}</td>
+      <td>{statCell(y)}</td>
+    </tr>
+  );
+  return (
+    <section className="what-if" data-testid="what-if" aria-labelledby="whatif-h">
+      <h3 id="whatif-h">What if I do one instead of the other?</h3>
+      <div className="whatif-pick">
+        <label>
+          Do{' '}
+          <select value={idA} onChange={(e) => onA(e.target.value)} data-testid="whatif-a">
+            {rows.map((r) => (
+              <option key={r.id} value={r.id}>
+                {label(r)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          instead of{' '}
+          <select value={idB} onChange={(e) => onB(e.target.value)} data-testid="whatif-b">
+            {rows.filter((r) => r.id !== idA).map((r) => (
+              <option key={r.id} value={r.id}>
+                {label(r)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {diff && (
+        <p data-testid="whatif-text">
+          Doing <strong>{label(ra)}</strong> instead of <strong>{label(rb)}</strong> changes the total ED time saved by{' '}
+          <strong>{statCell(diff)}</strong> patient-min, on the same {diff.n} paired futures. Only one action can run at a
+          time, so this is the choice for the first slot.
+        </p>
+      )}
+      <table className="cmp-table">
+        <thead>
+          <tr>
+            <th scope="col">Saved vs no action (patient-min)</th>
+            <th scope="col">{label(ra)}</th>
+            <th scope="col">{label(rb)}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {line('Total ED time', ca.total_saving_patient_min, cb.total_saving_patient_min, 'total')}
+          {line('Initial wait', ca.part_saving_patient_min.initial_wait, cb.part_saving_patient_min.initial_wait, 'initial')}
+          {line('Care and tests', ca.part_saving_patient_min.care_and_tests, cb.part_saving_patient_min.care_and_tests, 'care')}
+          {line('Awaiting departure', ca.part_saving_patient_min.awaiting_departure, cb.part_saving_patient_min.awaiting_departure, 'await')}
+          {line('Diagnostic wait', ca.part_saving_patient_min.diagnostic_wait, cb.part_saving_patient_min.diagnostic_wait, 'diag')}
+          {line('Urgent initial wait change (min, positive is worse)', ca.urgent_initial_wait_change_min, cb.urgent_initial_wait_change_min, 'urgent')}
+          <tr data-testid="whatif-impact">
+            <th scope="row">Impact per reserve unit-hour</th>
+            <td>{fmt(ra.impact_per_resource_hour?.mean)}</td>
+            <td>{fmt(rb.impact_per_resource_hour?.mean)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function RequestCard({
   snap,
   req,
@@ -268,18 +363,22 @@ export function ComparePanel({
   samples,
   onClose,
   onChanged,
+  onResult,
 }: {
   snap: Snapshot;
   role: string;
   samples: number;
   onClose: () => void;
   onChanged: () => void;
+  onResult?: (r: ComparisonResult) => void;
 }) {
   const [cmp, setCmp] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [whatA, setWhatA] = useState<string | null>(null);
+  const [whatB, setWhatB] = useState<string | null>(null);
   const ref = useRef<HTMLElement>(null);
   const snapRef = useRef(snap);
   snapRef.current = snap;
@@ -293,6 +392,7 @@ export function ComparePanel({
       .then((r) => {
         if (snapRef.current.replay_id === r.source.replay_id && snapRef.current.run_number === r.source.run_number) {
           setCmp(r);
+          onResult?.(r);
         }
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : 'The comparison could not be computed.'))
@@ -377,6 +477,7 @@ export function ComparePanel({
         cmp.actions.map((row) => (
           <article key={row.id} className="cmp-action" data-testid={`compare-action-${row.id}`} data-feasible={row.feasible}>
             <h3>
+              {row.order ? `#${row.order} ` : ''}
               {row.name}
               {row.preset === 'diagnostic_reserve' ? ` · ${row.target}` : ''}
             </h3>
@@ -386,10 +487,37 @@ export function ComparePanel({
               {row.setup_min} min, active {row.active_min} min.
             </p>
             {row.rank && (
-              <p className="status" data-tone={row.rank.label === 'best_action' ? 'normal' : row.rank.label === 'urgent_delay_check_failed' ? 'overload' : 'pressure'}
-                data-testid={`rank-${row.id}`} data-label={row.rank.label}>
-                {row.rank.label === 'best_action' ? <IconCheck /> : <IconTriangle />}
+              <p
+                className="status"
+                data-tone={
+                  row.rank.label === 'best_action' || row.rank.label === 'supported_not_top'
+                    ? 'normal'
+                    : row.rank.label === 'urgent_delay_check_failed'
+                      ? 'overload'
+                      : 'pressure'
+                }
+                data-testid={`rank-${row.id}`}
+                data-label={row.rank.label}
+              >
+                {row.rank.label === 'best_action' || row.rank.label === 'supported_not_top' ? <IconCheck /> : <IconTriangle />}
                 <span>{row.rank.text}</span>
+              </p>
+            )}
+            {row.comparison && row.impact_per_resource_hour && row.impact_per_resource_hour.mean !== null && (
+              <p data-testid={`impact-${row.id}`}>
+                Impact: <strong>{fmt(row.impact_per_resource_hour.mean)}</strong> patient-min saved per reserve unit-hour
+                (90% lower bound {fmt(row.impact_per_resource_hour.lower_90)}), over {row.resource_hours} unit-hours committed.
+              </p>
+            )}
+            {row.feasible && row.deadline && (
+              <p data-testid={`deadline-${row.id}`}>
+                {row.deadline.status === 'open' && row.deadline.latest_start_min !== null
+                  ? `Latest start ${clock(row.deadline.latest_start_min)} (in ${row.deadline.in_min} min): onset low bound minus ${row.deadline.review_min} min review, ${row.deadline.setup_min} min setup and ${row.deadline.margin_min} min margin.`
+                  : row.deadline.status === 'too_late'
+                    ? 'Too late to act before the earliest forecast onset: act now to limit the effect.'
+                    : row.deadline.status === 'recovery'
+                      ? 'This service is already overloaded: the action aims at recovery, so there is no start deadline.'
+                      : 'No start deadline: there is no forecast onset for this service right now.'}
               </p>
             )}
             {!row.feasible && (
@@ -417,6 +545,7 @@ export function ComparePanel({
             )}
           </article>
         ))}
+      {cmp?.status === 'ok' && <WhatIf cmp={cmp} a={whatA} b={whatB} onA={setWhatA} onB={setWhatB} />}
       {note && (
         <p className="request-message" role="alert" data-testid="request-note">
           <IconTriangle /> {note}

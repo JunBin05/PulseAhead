@@ -1080,3 +1080,32 @@ p {
   min-height: 0;
   padding: 0 var(--s-2);
 }
+
+.what-if {
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.what-if h3 {
+  margin: 0 0 var(--s-2);
+  font-size: var(--text-md);
+}
+
+.whatif-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-bottom: var(--s-2);
+}
+
+.whatif-pick select {
+  min-height: var(--target);
+  max-width: 100%;
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 0 var(--s-2);
+}
