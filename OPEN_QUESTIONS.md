@@ -48,3 +48,16 @@ Spec: "1→2→3→2→4 ... diagnostics/result review can loop without adding d
 - Lab turnaround is triangular 15/28/50 min (median 30.4) and imaging 25/42/70 min (median 44.9), matching the spec's lab 30 and imaging 45 medians. Test need by urgency group and result review (3/5/8 min) are demo assumptions.
 
 **Alternative not taken:** a second test round after review.
+
+## Q5. What are the "three mutually exclusive parts" of total ED time, and what is boarding? (ticket 05)
+
+Spec: "Save patient stage timestamps for the three mutually exclusive parts of total ED time" and "Show initial wait, care/tests time, time awaiting departure, boarding, occupied ED-space minutes ... separately". The spec names five quantities and calls three of them mutually exclusive.
+
+**Working decision:**
+- The three exclusive parts partition arrival to physical departure: **initial wait** (arrival to first assessment), **care and tests** (first assessment to effective disposition, including result review and any required care task), and **awaiting departure** (effective disposition to physical departure).
+- **Boarding** is not a fourth part: it is the awaiting-departure part for patients going to the Ward/ICU (bed, allocation work and transport), and is null for home patients. **Occupied ED-space minutes** is a separate resource record (space grant to departure) and overlaps the parts.
+- Unfinished stays report accrued minutes and are counted apart; they are never averaged as complete.
+
+**Ward/ICU bed pool (demo assumptions):** 6 ward beds (WD1-WD6) and 2 ICU beds (IC1, IC2); WD1, WD2 and IC1 are free at the start, the others are occupied by inpatients and released at 90, 150, 240, 420 min (ward) and 200 min (ICU). Ward and ICU beds are not interchangeable. A bed given to an ED patient stays occupied for the rest of the run.
+
+**Alternative not taken:** splitting awaiting departure into discharge processing and boarding as two exclusive parts.

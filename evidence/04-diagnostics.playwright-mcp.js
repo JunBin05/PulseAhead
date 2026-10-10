@@ -53,7 +53,7 @@ async (page) => {
         const iA = names.indexOf('assessment_active');
         const iFirst = names.findIndex(n => ZONE3.includes(n));
         const iRev = names.indexOf('result_review_active');
-        const iDisp = names.indexOf('disposition_processing');
+        const iDisp = s.findIndex(x => x.z === 4);
         // A patient still mid-route at the end of the export only has a prefix to check.
         if (!(iA >= 0 && iA < iFirst)) bad(`${pid} zone 3 before assessment: ${names.join('>')}`);
         if (iRev >= 0 && !(iFirst < iRev)) bad(`${pid} review before tests: ${names.join('>')}`);
@@ -126,7 +126,7 @@ async (page) => {
         if (p.effective_disposition_min !== null) {
           const need = Math.max(p.decision_min, p.results_received_min, p.review_end_min, p.care_complete_min ?? 0);
           if (Math.abs(p.effective_disposition_min - need) > 1e-6) bad(`${pid} effective ${p.effective_disposition_min} != max prerequisites ${need}`);
-          const disp = seq[pid].find(x => x.to === 'disposition_processing');
+          const disp = seq[pid].find(x => x.z === 4);
           if (disp && disp.t !== p.effective_disposition_min) bad(`${pid} disposition phase time`);
         }
         const d = dec[pid];

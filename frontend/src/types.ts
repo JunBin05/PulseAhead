@@ -13,6 +13,12 @@ export type Phase =
   | 'in_imaging'
   | 'awaiting_result_review'
   | 'result_review_active'
+  | 'awaiting_discharge'
+  | 'awaiting_ward_bed'
+  | 'awaiting_ward_allocation'
+  | 'ward_allocation_active'
+  | 'awaiting_transport'
+  | 'in_transport'
   | 'disposition_processing';
 
 export interface PatientDot {
@@ -33,6 +39,10 @@ export interface PatientDot {
   diagnostic_unit: string | null;
   tests_status: 'not_ordered' | 'none' | 'pending' | 'complete';
   tests_done: ('lab' | 'imaging')[];
+  /** Supplied with the clinical decision; null until that decision is received. */
+  disposition: 'home' | 'ward' | 'icu' | null;
+  ward_bed_id: string | null;
+  waiting_reason: string | null;
   care_status: 'none' | 'not_started' | 'in_progress' | 'complete';
   decision_received: boolean;
   triage_id: string | null;
@@ -56,9 +66,35 @@ export interface Zone {
   result_review_active?: number;
   lab_queue?: number;
   lab_active?: number;
+  awaiting_discharge?: number;
+  discharge_active?: number;
+  awaiting_ward_bed?: number;
+  awaiting_ward_allocation?: number;
+  allocation_active?: number;
+  awaiting_transport?: number;
+  in_transport?: number;
+  home_patients?: number;
+  transfer_patients?: number;
   imaging_queue?: number;
   imaging_active?: number;
   capacity: { kind: string; shared_with_zone?: number } | null;
+}
+
+export interface DispService {
+  servers: number;
+  busy: number;
+  waiting: number;
+  owner: string;
+  median_min: number;
+  capacity_tasks_per_hour: number;
+}
+
+export interface BedCounts {
+  total: number;
+  free: number;
+  reserved: number;
+  occupied: number;
+  waiting: number;
 }
 
 export interface DiagService {
@@ -130,6 +166,20 @@ export interface Snapshot {
       awaiting: number;
       owner: string;
     };
+    disposition: {
+      unit: string;
+      discharge: DispService;
+      allocation: DispService;
+      transport: DispService;
+      beds: {
+        owner: string;
+        ward: BedCounts;
+        icu: BedCounts;
+        list: { id: string; type: 'ward' | 'icu'; state: 'free' | 'reserved' | 'occupied' }[];
+      };
+      boarding: number;
+      note: string;
+    };
     diagnostics: {
       unit: string;
       window_min: number;
@@ -163,7 +213,13 @@ export interface Snapshot {
       reserve_team: { size: number; active: boolean; owner: string; note: string };
     };
   };
-  counts: { in_ed: number; arrived_total: number; departed_total: number };
+  counts: {
+    in_ed: number;
+    arrived_total: number;
+    departed_total: number;
+    departed_home: number;
+    departed_ward: number;
+  };
   zones: Zone[];
   patients: PatientDot[];
   inbound_ambulances: Announcement[];

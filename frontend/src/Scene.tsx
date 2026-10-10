@@ -70,7 +70,13 @@ function projector(width: number, height: number) {
 
 const COMPACT_BELOW_PX = 560;
 
-function LabelLayer({ counts }: { counts: Record<number, number> }) {
+function LabelLayer({
+  counts,
+  exitCounts,
+}: {
+  counts: Record<number, number>;
+  exitCounts: { home: number; ward: number };
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -129,12 +135,13 @@ function LabelLayer({ counts }: { counts: Record<number, number> }) {
               className="zone-label"
               // Compact: push the two exit labels apart (Home behind its pad, Ward / ICU in front).
               style={place(
-                e.center[0],
+                // Compact: the count makes the label wider; keep it inside the canvas.
+                e.center[0] + (compact && e === EXITS.home ? -1.8 : 0),
                 0.9,
                 e.center[1] + (compact ? (e === EXITS.home ? -2.2 : 2.2) : 0),
               )}
             >
-              {e.label}
+              {e.label} · {e === EXITS.home ? exitCounts.home : exitCounts.ward}
             </div>
           ))}
         </>
@@ -210,6 +217,8 @@ function Dot({ dot, instant }: { dot: DotTarget; instant: boolean }) {
 interface SceneProps {
   scene: RenderedScene;
   counts: Record<number, number>;
+  /** Patients who have physically left through each exit so far. */
+  exitCounts: { home: number; ward: number };
   selectedZone: number | null;
   onSelectZone: (zone: number) => void;
 }
@@ -275,7 +284,7 @@ export function Scene(props: SceneProps) {
         <Canvas orthographic flat dpr={[1, 2]} camera={{ near: 0.1, far: 200 }}>
           <World {...props} />
         </Canvas>
-        <LabelLayer counts={props.counts} />
+        <LabelLayer counts={props.counts} exitCounts={props.exitCounts} />
       </div>
     </SceneBoundary>
   );

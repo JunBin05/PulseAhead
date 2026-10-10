@@ -32,6 +32,9 @@ class SuppliedInputs:
     tests: tuple[tuple[str, float], ...] = ()
     # Supplied clinical decision that arrives before required tests are done (premature clearance).
     early_decision: bool = False
+    # Supplied effective disposition: home, ward or icu. It is part of the clinical decision and
+    # stays hidden until that decision is received.
+    disposition: str = "home"
 
 
 @dataclass
@@ -91,6 +94,16 @@ def _tests(seed: int, key: str, urgency: str, critical: bool) -> tuple[tuple[str
     return tuple(out)
 
 
+def _disposition(seed: int, key: str, urgency: str, critical: bool) -> str:
+    prob = PROFILE["assumptions"]["disposition_probability"]["critical" if critical else urgency]
+    draw = random.Random(f"{seed}:{key}:disposition").random()
+    if draw < prob["icu"]:
+        return "icu"
+    if draw < prob["icu"] + prob["ward"]:
+        return "ward"
+    return "home"
+
+
 def walk_in_inputs(seed: int, patient_id: str) -> SuppliedInputs:
     rng = random.Random(f"{seed}:{patient_id}:supplied")
     a = PROFILE["assumptions"]
@@ -103,6 +116,7 @@ def walk_in_inputs(seed: int, patient_id: str) -> SuppliedInputs:
         arrival_mode="walk-in",
         care_task_min=_care_task_min(seed, patient_id, urgency),
         tests=_tests(seed, patient_id, urgency, False),
+        disposition=_disposition(seed, patient_id, urgency, False),
     )
 
 
@@ -120,6 +134,7 @@ def ambulance_patient_inputs(seed: int, run_id: str, index: int) -> SuppliedInpu
         ambulance_id=run_id,
         care_task_min=_care_task_min(seed, f"{run_id}:{index}", urgency),
         tests=_tests(seed, f"{run_id}:{index}", urgency, critical),
+        disposition=_disposition(seed, f"{run_id}:{index}", urgency, critical),
     )
 
 

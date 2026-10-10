@@ -47,7 +47,14 @@ PHASE_ZONE = {
     # Results return to the clinician in zone 2 before the decision.
     "awaiting_result_review": 2,
     "result_review_active": 2,
+    # Zone 4: home discharge processing, or a ward/ICU transfer (bed, allocation work, transport).
+    "awaiting_discharge": 4,
     "disposition_processing": 4,
+    "awaiting_ward_bed": 4,
+    "awaiting_ward_allocation": 4,
+    "ward_allocation_active": 4,
+    "awaiting_transport": 4,
+    "in_transport": 4,
     "departed": None,
 }
 
@@ -94,6 +101,15 @@ class Patient:
     effective_disposition_min: float | None = None
     departure_min: float | None = None
     care_done: Any = None
+    allocation_min: float = 15.0
+    transport_min: float = 15.0
+    space_grant_min: float | None = None
+    ward_bed_id: str | None = None
+    disp_unit: str | None = None
+    bed_reserved_min: float | None = None
+    allocation_start_min: float | None = None
+    transport_start_min: float | None = None
+    exit: str | None = None
 
     @property
     def has_space(self) -> bool:
@@ -106,6 +122,8 @@ class Patient:
             "clinician_slot": self.clinician_id,
             "nurse": self.nurse_id,
             "diagnostic_unit": self.test_unit,
+            "ward_bed": self.ward_bed_id,
+            "disposition_unit": self.disp_unit,
         }
 
     def tests_status(self) -> str:
@@ -149,12 +167,49 @@ class Patient:
             "tests_status": self.tests_status(),
             "tests_done": list(self.tests_done),
             "decision_received": self.decision_min is not None,
+            # The disposition is part of the clinical decision: hidden until it is received.
+            "disposition": s.disposition if self.decision_min is not None else None,
+            "ward_bed_id": self.ward_bed_id,
             "phase_since_min": round(self.phase_since_min, 2),
             "minutes_in_phase": round(now - self.phase_since_min, 2),
             "arrival_min": round(self.arrival_min, 2),
         }
 
-    def timestamps(self) -> dict[str, Any]:
+    def time_parts(self, now: float | None = None) -> dict[str, Any]:
+        """The three mutually exclusive parts of total ED time (OPEN_QUESTIONS Q5).
+
+        Initial wait is arrival to first assessment; care and tests is first assessment to effective
+        disposition; awaiting departure is effective disposition to physical departure. An unfinished
+        stay reports accrued minutes up to `now` and is never counted as complete.
+        """
+
+        def r(v: float | None) -> float | None:
+            return None if v is None else round(v, 3)
+
+        end = self.departure_min
+        complete = end is not None
+        upto = end if complete else now
+        first = self.first_assessment_min
+        eff = self.effective_disposition_min
+        initial = (first if first is not None else upto) - self.arrival_min if upto is not None else None
+        care = None
+        if first is not None and upto is not None:
+            care = (eff if eff is not None else upto) - first
+        awaiting = None
+        if eff is not None and upto is not None:
+            awaiting = upto - eff
+        boarding = awaiting if self.supplied.disposition != "home" and eff is not None else None
+        return {
+            "complete": complete,
+            "initial_wait_min": r(initial),
+            "care_tests_min": r(care),
+            "awaiting_departure_min": r(awaiting),
+            "boarding_min": r(boarding),
+            "total_ed_min": r(upto - self.arrival_min) if upto is not None else None,
+            "ed_space_min": r(upto - self.space_grant_min) if upto is not None and self.space_grant_min is not None else None,
+        }
+
+    def timestamps(self, now: float | None = None) -> dict[str, Any]:
         def r(v: float | None) -> float | None:
             return None if v is None else round(v, 3)
 
@@ -179,7 +234,15 @@ class Patient:
             "review_end_min": r(self.review_end_min),
             "care_complete_min": r(self.care_complete_min),
             "effective_disposition_min": r(self.effective_disposition_min),
+            "disposition": self.supplied.disposition if self.decision_min is not None else None,
+            "ward_bed_id": self.ward_bed_id,
+            "bed_reserved_min": r(self.bed_reserved_min),
+            "allocation_start_min": r(self.allocation_start_min),
+            "transport_start_min": r(self.transport_start_min),
+            "exit": self.exit,
+            "space_grant_min": r(self.space_grant_min),
             "departure_min": r(self.departure_min),
+            "time_parts": self.time_parts(now),
         }
 
 
@@ -261,6 +324,69 @@ class CongestionMonitor:
                 self.below_since_min = None
 
 
+class WardBeds:
+    """Finite Ward/ICU beds outside the ED. A bed is reserved for one transfer from the moment it is
+    granted until the patient physically departs, then stays occupied for the rest of the run.
+
+    Beds that are occupied by current inpatients become free on a disclosed schedule
+    (`free_at_min`); that schedule is a hidden future and is never exposed. Ward and ICU beds are
+    not interchangeable.
+    """
+
+    def __init__(self, env: simpy.Environment, beds: list[dict[str, Any]], on_free) -> None:
+        self.env = env
+        self.on_free = on_free
+        self.beds: dict[str, dict[str, Any]] = {}
+        self.waiting: list[tuple[int, int, str, simpy.Event]] = []
+        self._seq = 0
+        for b in beds:
+            ready = b["free_at_min"] <= 0
+            self.beds[b["id"]] = {"type": b["type"], "state": "free" if ready else "occupied"}
+            if not ready:
+                env.process(self._release_at(b["id"], b["free_at_min"]))
+
+    def _release_at(self, bed_id: str, at: float):
+        yield self.env.timeout(at)
+        self.beds[bed_id]["state"] = "free"
+        self.on_free(bed_id, self.beds[bed_id]["type"])
+        self.dispatch()
+
+    def counts(self) -> dict[str, dict[str, int]]:
+        out: dict[str, dict[str, int]] = {}
+        for kind in ("ward", "icu"):
+            ids = [b for b in self.beds.values() if b["type"] == kind]
+            out[kind] = {
+                "total": len(ids),
+                "free": sum(1 for b in ids if b["state"] == "free"),
+                "reserved": sum(1 for b in ids if b["state"] == "reserved"),
+                "occupied": sum(1 for b in ids if b["state"] == "occupied"),
+                "waiting": sum(1 for w in self.waiting if w[2] == kind),
+            }
+        return out
+
+    def request(self, kind: str, rank: int) -> simpy.Event:
+        event = self.env.event()
+        self._seq += 1
+        self.waiting.append((rank, self._seq, kind, event))
+        self.waiting.sort(key=lambda w: (w[0], w[1]))
+        self.dispatch()
+        return event
+
+    def dispatch(self) -> None:
+        # Walk the queue in service order; a waiter with no suitable bed does not block others.
+        for item in list(self.waiting):
+            _, _, kind, event = item
+            free = sorted(i for i, b in self.beds.items() if b["type"] == kind and b["state"] == "free")
+            if not free:
+                continue
+            self.beds[free[0]]["state"] = "reserved"
+            self.waiting.remove(item)
+            event.succeed(free[0])
+
+    def occupy(self, bed_id: str) -> None:
+        self.beds[bed_id]["state"] = "occupied"
+
+
 class SpacePool:
     """Finite named spaces. A free space can be granted only while its covering nurse is on duty.
 
@@ -330,6 +456,21 @@ class EDEngine:
         self.imaging = simpy.PriorityResource(self.env, capacity=PROFILE["imaging_slots"])
         self.free_lab = [f"L{i}" for i in range(1, PROFILE["lab_slots"] + 1)]
         self.free_imaging = [f"I{i}" for i in range(1, PROFILE["imaging_slots"] + 1)]
+        self.discharge = simpy.PriorityResource(self.env, capacity=PROFILE["discharge_slots"])
+        self.allocation = simpy.PriorityResource(self.env, capacity=PROFILE["ward_allocation_slots"])
+        self.transport = simpy.PriorityResource(self.env, capacity=PROFILE["transport_slots"])
+        self.free_discharge = [f"DP{i}" for i in range(1, PROFILE["discharge_slots"] + 1)]
+        self.free_allocation = [f"WA{i}" for i in range(1, PROFILE["ward_allocation_slots"] + 1)]
+        self.free_transport = [f"TR{i}" for i in range(1, PROFILE["transport_slots"] + 1)]
+        self.ward_beds = WardBeds(
+            self.env,
+            self.definition.get("ward_beds", PROFILE["ward_beds"]),
+            lambda bed_id, kind: self._emit(
+                "ward_bed_available", None, {"bed_id": bed_id, "type": kind}, {"ward_bed": bed_id}
+            ),
+        )
+        self.departed_home = 0
+        self.departed_ward = 0
         # Test start and finish log (kind, time) for recent work and throughput figures.
         self.test_starts: list[tuple[str, float]] = []
         self.test_log: list[tuple[str, float]] = []
@@ -543,6 +684,7 @@ class EDEngine:
     def _spawn(self, pid: str, supplied: SuppliedInputs) -> None:
         rng = random.Random(f"{self.seed}:{pid}")
         a = PROFILE["assumptions"]
+        fixed = self.definition.get("fixed_minutes", {})
         p = Patient(
             id=pid,
             supplied=supplied,
@@ -550,7 +692,11 @@ class EDEngine:
             triage_min=_triangular(rng, a["triage_dwell_minutes"]),
             work_min=_triangular(rng, a["active_assessment_minutes"]),
             review_min=_triangular(random.Random(f"{self.seed}:{pid}:review"), a["result_review_minutes"]),
-            disposition_min=_triangular(rng, a["disposition_processing_minutes"]),
+            allocation_min=fixed.get("allocation")
+            or _triangular(random.Random(f"{self.seed}:{pid}:allocation"), a["ward_allocation_minutes"]),
+            transport_min=fixed.get("transport")
+            or _triangular(random.Random(f"{self.seed}:{pid}:transport"), a["transport_minutes"]),
+            disposition_min=fixed.get("discharge") or _triangular(rng, a["disposition_processing_minutes"]),
             phase="awaiting_space" if supplied.critical_bypass else "awaiting_triage",
             phase_since_min=self.now,
         )
@@ -646,6 +792,7 @@ class EDEngine:
             self._set_phase(p, "awaiting_space")
             pool = self.general_pool
         p.space_id = yield pool.request(rank)
+        p.space_grant_min = self.now
         p.nurse_id = pool.coverage[p.space_id]
         self._set_phase(p, "awaiting_clinician")
         clin_req = self.clinicians.request(priority=rank)
@@ -690,13 +837,55 @@ class EDEngine:
             self._set_phase(p, "awaiting_care_completion")
             yield p.care_done
         p.effective_disposition_min = self.now
-        self._set_phase(p, "disposition_processing")
-        yield self.env.timeout(p.disposition_min)
+        disposition = p.supplied.disposition
+        if disposition == "home":
+            # Cleared discharge: finite home-discharge processing.
+            self._set_phase(p, "awaiting_discharge")
+            req = self.discharge.request(priority=rank)
+            yield req
+            p.disp_unit = self._take(self.free_discharge)
+            self._set_phase(p, "disposition_processing")
+            yield self.env.timeout(p.disposition_min)
+            self.discharge.release(req)
+            self.free_discharge.append(p.disp_unit)
+            p.disp_unit = None
+        else:
+            # Ward/ICU transfer: a suitable bed (reserved for the transfer), allocation work and
+            # transport are all required. The ED space is kept through all of it (boarding).
+            self._set_phase(p, "awaiting_ward_bed")
+            p.ward_bed_id = yield self.ward_beds.request(disposition, rank)
+            p.bed_reserved_min = self.now
+            self._set_phase(p, "awaiting_ward_allocation")
+            req = self.allocation.request(priority=rank)
+            yield req
+            p.disp_unit = self._take(self.free_allocation)
+            p.allocation_start_min = self.now
+            self._set_phase(p, "ward_allocation_active")
+            yield self.env.timeout(p.allocation_min)
+            self.allocation.release(req)
+            self.free_allocation.append(p.disp_unit)
+            p.disp_unit = None
+            self._set_phase(p, "awaiting_transport")
+            req = self.transport.request(priority=rank)
+            yield req
+            p.disp_unit = self._take(self.free_transport)
+            p.transport_start_min = self.now
+            self._set_phase(p, "in_transport")
+            yield self.env.timeout(p.transport_min)
+            self.transport.release(req)
+            self.free_transport.append(p.disp_unit)
+            p.disp_unit = None
         # Physical departure: the only point where the ED space is released.
         pool.release(p.space_id)
         p.departure_min = self.now
         self.departed_count += 1
-        # The departure event names the space it released.
+        p.exit = "home" if disposition == "home" else "ward"
+        if p.exit == "home":
+            self.departed_home += 1
+        else:
+            self.departed_ward += 1
+            self.ward_beds.occupy(p.ward_bed_id)
+        # The departure event names the space it released and the exit taken.
         released, nurse = p.space_id, p.nurse_id
         p.space_id = None
         p.nurse_id = None
@@ -705,9 +894,46 @@ class EDEngine:
         self._emit(
             "phase_change",
             p.id,
-            {"from": previous, "to": "departed", "zone": None, "has_space": False},
-            {"triage_desk": None, "ed_space": released, "clinician_slot": None, "nurse": nurse},
+            {
+                "from": previous,
+                "to": "departed",
+                "zone": None,
+                "has_space": False,
+                "exit": p.exit,
+                "disposition": disposition,
+            },
+            {
+                "triage_desk": None,
+                "ed_space": released,
+                "clinician_slot": None,
+                "nurse": nurse,
+                "ward_bed": p.ward_bed_id,
+            },
         )
+
+    def waiting_reason(self, p: Patient) -> str | None:
+        """Plain reason a zone 4 patient is waiting (never an invented one)."""
+        if p.phase == "awaiting_discharge":
+            return "Discharge processing is busy"
+        if p.phase == "awaiting_ward_allocation":
+            return "Ward allocation coordinator is busy"
+        if p.phase == "awaiting_transport":
+            return "Transport team is busy"
+        if p.phase == "awaiting_ward_bed":
+            kind = p.supplied.disposition
+            other = "icu" if kind == "ward" else "ward"
+            names = {"ward": "ward", "icu": "ICU"}
+            c = self.ward_beds.counts()
+            if c[other]["free"] > 0:
+                return (
+                    f"Unsuitable bed: needs an {names[kind]} bed, only {names[other]} beds are free "
+                    f"({c[other]['free']})"
+                )
+            return (
+                f"Unavailable bed: all {c[kind]['total']} {names[kind]} beds are occupied or reserved "
+                f"for other transfers"
+            )
+        return None
 
     def _monitor_loop(self):
         while True:

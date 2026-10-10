@@ -14,9 +14,10 @@ from .scenario import AmbulanceRun, SuppliedInputs
 
 
 def _walk_in(urgency: str, score: int, care: float | None = None,
-             tests: tuple[tuple[str, float], ...] = (), early: bool = False) -> SuppliedInputs:
+             tests: tuple[tuple[str, float], ...] = (), early: bool = False,
+             disposition: str = "home") -> SuppliedInputs:
     return SuppliedInputs(urgency, PROFILE["acuity_system"], score, False, "walk-in", None, care,
-                          tests, early)
+                          tests, early, disposition)
 
 
 def _amb(run_id: str, urgency: str, score: int, critical: bool = False,
@@ -110,6 +111,27 @@ def _diagnostics_script() -> dict[str, Any]:
     return {"walk_ins": walk_ins, "ambulances": []}
 
 
+def _boarding_script() -> dict[str, Any]:
+    walk_ins = [
+        # Home discharges: 25-minute processing on two slots, so the later ones queue.
+        (2.0, "H1", _walk_in("lower", 4)),
+        (2.0, "H2", _walk_in("lower", 5)),
+        (2.0, "H3", _walk_in("medium", 3)),
+        (2.0, "H4", _walk_in("medium", 3)),
+        # Ward transfers: two beds free at once, the rest become free later.
+        (2.0, "G1", _walk_in("medium", 3, disposition="ward")),
+        (2.0, "G2", _walk_in("medium", 3, disposition="ward")),
+        (2.0, "G3", _walk_in("lower", 4, disposition="ward")),
+        (2.0, "G4", _walk_in("lower", 4, disposition="ward")),
+        # ICU patients: the ICU bed is not free yet; ward beds are the wrong type.
+        (2.0, "I1", _walk_in("medium", 3, disposition="icu")),
+        (2.0, "I2", _walk_in("lower", 4, disposition="icu")),
+        # Urgent transfer arriving while lower-urgency transfers already wait for a bed.
+        (40.0, "U1", _walk_in("urgent", 2, disposition="ward")),
+    ]
+    return {"walk_ins": walk_ins, "ambulances": []}
+
+
 FIXTURES: dict[str, dict[str, Any]] = {
     "fixture-intake": {
         "id": "fixture-intake",
@@ -117,6 +139,26 @@ FIXTURES: dict[str, dict[str, Any]] = {
         "fixture": True,
         "background_arrivals": False,
         "script": _intake_script,
+    },
+    "fixture-boarding": {
+        "id": "fixture-boarding",
+        "name": "Fixture: discharge processing, ward/ICU beds, transport and boarding",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _boarding_script,
+        # Fixed work durations so contention is predictable.
+        "fixed_minutes": {"discharge": 25.0, "allocation": 20.0, "transport": 20.0},
+        # Supplied bed release schedule (hidden future). IC2 is never released within the run.
+        "ward_beds": [
+            {"id": "WD1", "type": "ward", "free_at_min": 0},
+            {"id": "WD2", "type": "ward", "free_at_min": 0},
+            {"id": "WD3", "type": "ward", "free_at_min": 70},
+            {"id": "WD4", "type": "ward", "free_at_min": 100},
+            {"id": "WD5", "type": "ward", "free_at_min": 130},
+            {"id": "WD6", "type": "ward", "free_at_min": 160},
+            {"id": "IC1", "type": "icu", "free_at_min": 120},
+            {"id": "IC2", "type": "icu", "free_at_min": 100000},
+        ],
     },
     "fixture-diagnostics": {
         "id": "fixture-diagnostics",

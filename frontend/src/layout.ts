@@ -38,7 +38,10 @@ const AREAS = {
   in_lab: { zone: 3, origin: [-1.8, -0.9], cols: 2, step: 1.2, text: 'In lab' },
   imaging_queue: { zone: 3, origin: [-2.1, 1.0], cols: 5, step: 0.7, text: 'Imaging queue' },
   in_imaging: { zone: 3, origin: [-1.8, 2.9], cols: 1, step: 1.2, text: 'In imaging' },
-  disposition_processing: { zone: 4, origin: [-2.1, -1.0], cols: 5, step: 0.85, text: 'Processing departure' },
+  discharge: { zone: 4, origin: [-2.1, -3.0], cols: 5, step: 0.7, text: 'Discharge' },
+  boarding: { zone: 4, origin: [-2.1, -1.1], cols: 5, step: 0.7, text: 'Awaiting ward/ICU bed' },
+  allocation: { zone: 4, origin: [-2.1, 0.8], cols: 5, step: 0.7, text: 'Ward allocation' },
+  transport: { zone: 4, origin: [-2.1, 2.7], cols: 5, step: 0.7, text: 'Transport' },
 } satisfies Record<string, Area>;
 
 type AreaKey = keyof typeof AREAS;
@@ -56,7 +59,13 @@ const PHASE_AREA: Record<Phase, AreaKey> = {
   in_lab: 'in_lab',
   awaiting_imaging: 'imaging_queue',
   in_imaging: 'in_imaging',
-  disposition_processing: 'disposition_processing',
+  awaiting_discharge: 'discharge',
+  disposition_processing: 'discharge',
+  awaiting_ward_bed: 'boarding',
+  awaiting_ward_allocation: 'allocation',
+  ward_allocation_active: 'allocation',
+  awaiting_transport: 'transport',
+  in_transport: 'transport',
 };
 
 // Each label starts just behind the first dot of its own row and stays on its own platform. Rows

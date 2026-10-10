@@ -32,6 +32,21 @@ PROFILE: dict[str, Any] = {
     # their ED space; they are not ED beds.
     "lab_slots": 2,
     "imaging_slots": 1,
+    # Disposition work (spec defaults: two discharge processing, one ward allocation, one transport
+    # team). Ward/ICU beds are a finite pool outside the ED with a disclosed release schedule.
+    "discharge_slots": 2,
+    "ward_allocation_slots": 1,
+    "transport_slots": 1,
+    "ward_beds": [
+        {"id": "WD1", "type": "ward", "free_at_min": 0},
+        {"id": "WD2", "type": "ward", "free_at_min": 0},
+        {"id": "WD3", "type": "ward", "free_at_min": 90},
+        {"id": "WD4", "type": "ward", "free_at_min": 150},
+        {"id": "WD5", "type": "ward", "free_at_min": 240},
+        {"id": "WD6", "type": "ward", "free_at_min": 420},
+        {"id": "IC1", "type": "icu", "free_at_min": 0},
+        {"id": "IC2", "type": "icu", "free_at_min": 200},
+    ],
     "reserve_triage_team": {
         "size": 1,
         "active": False,
@@ -68,6 +83,10 @@ PROFILE: dict[str, Any] = {
         "nurse_coverage": "ED nurse in charge",
         "lab": "Lab manager",
         "imaging": "Radiology manager",
+        "discharge_processing": "Ward supervisor / bed manager",
+        "ward_allocation": "Ward supervisor / bed manager",
+        "transport": "Ward supervisor / bed manager",
+        "ward_beds": "Ward supervisor / bed manager",
         "triage_desk": "Triage charge nurse",
         "reserve_triage_team": "Triage charge nurse",
     },
@@ -91,6 +110,18 @@ PROFILE: dict[str, Any] = {
         # (triangular 15/28/50 has median 30.4), imaging about 45 min (25/42/70 has median 44.9).
         "lab_turnaround_minutes": {"min": 15, "mode": 28, "max": 50, "median": 30},
         "imaging_turnaround_minutes": {"min": 25, "mode": 42, "max": 70, "median": 45},
+        # Home discharge processing is "disposition_processing_minutes" above (median about 10).
+        # Ward allocation work and transport per transfer (triangular, medians about 15).
+        "ward_allocation_minutes": {"min": 10, "mode": 15, "max": 22, "median": 15},
+        "transport_minutes": {"min": 10, "mode": 15, "max": 25, "median": 15},
+        # Supplied disposition by reporting group (critical bypass has its own row); the rest go
+        # home. Ward and ICU beds are not interchangeable.
+        "disposition_probability": {
+            "critical": {"icu": 0.50, "ward": 0.40},
+            "urgent": {"icu": 0.08, "ward": 0.35},
+            "medium": {"icu": 0.02, "ward": 0.15},
+            "lower": {"icu": 0.0, "ward": 0.03},
+        },
         # Doctor work to review returned results before the decision.
         "result_review_minutes": {"min": 3, "mode": 5, "max": 8},
         # Supplied test needs by reporting group (critical bypass uses its own row). Patients with

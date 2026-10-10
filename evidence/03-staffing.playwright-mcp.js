@@ -72,7 +72,7 @@ async (page) => {
       if (e.type === 'decision_received') decision[e.patient_id] = e;
       if (e.type === 'care_completed') careDone[e.patient_id] = e;
       if (e.type === 'care_started') careStart[e.patient_id] = e;
-      if (e.type === 'phase_change' && e.payload.to === 'disposition_processing') dispo[e.patient_id] = e;
+      if (e.type === 'phase_change' && e.payload.zone === 4 && !dispo[e.patient_id]) dispo[e.patient_id] = e;
     }
     for (const [doc, hs] of Object.entries(docHold)) {
       hs.sort((a, b) => a.from - b.from);
@@ -93,7 +93,7 @@ async (page) => {
         if (spaceOf[e.patient_id] && spaceOf[e.patient_id] !== sp) bad(`${e.patient_id} changed space ${spaceOf[e.patient_id]} -> ${sp}`);
         spaceOf[e.patient_id] = sp;
       }
-      if (['awaiting_care_completion', 'disposition_processing'].includes(e.payload.to) && e.resources.clinician_slot) bad(`${e.id} holds a doctor in ${e.payload.to}`);
+      if (['awaiting_care_completion', 'awaiting_discharge', 'disposition_processing'].includes(e.payload.to) && e.resources.clinician_slot) bad(`${e.id} holds a doctor in ${e.payload.to}`);
     }
     // timestamps from the export vs events
     const ts = {}; for (const p of ex.patients) ts[p.patient_id] = p;

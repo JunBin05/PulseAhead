@@ -35,7 +35,13 @@ const PHASE_LABEL: Record<Phase, string> = {
   in_imaging: 'Imaging running (keeps the ED space)',
   awaiting_result_review: 'Results back, waiting for a doctor to review',
   result_review_active: 'With a doctor, reviewing results',
-  disposition_processing: 'Cleared, processing departure',
+  awaiting_discharge: 'Cleared, waiting for discharge processing',
+  awaiting_ward_bed: 'Boarding: waiting for a suitable ward/ICU bed',
+  awaiting_ward_allocation: 'Bed reserved, waiting for ward allocation work',
+  ward_allocation_active: 'Ward allocation in progress',
+  awaiting_transport: 'Allocated, waiting for transport',
+  in_transport: 'In transport to the ward/ICU',
+  disposition_processing: 'Discharge processing',
 };
 
 const URGENCY_LABEL: Record<Urgency, string> = {
@@ -429,6 +435,26 @@ export function App() {
                   {snap.resources.diagnostics.imaging.waiting > 0 &&
                     ` · ${snap.resources.diagnostics.imaging.waiting} waiting`}
                 </dd>
+                <dt>Discharge processing busy</dt>
+                <dd data-testid="discharge-busy">
+                  {snap.resources.disposition.discharge.busy} of {snap.resources.disposition.discharge.servers}
+                </dd>
+                <dt>Ward allocation busy</dt>
+                <dd data-testid="allocation-busy">
+                  {snap.resources.disposition.allocation.busy} of {snap.resources.disposition.allocation.servers}
+                </dd>
+                <dt>Transport busy</dt>
+                <dd data-testid="transport-busy">
+                  {snap.resources.disposition.transport.busy} of {snap.resources.disposition.transport.servers}
+                </dd>
+                <dt>Ward beds free</dt>
+                <dd data-testid="ward-beds-free">
+                  {snap.resources.disposition.beds.ward.free} of {snap.resources.disposition.beds.ward.total}
+                </dd>
+                <dt>ICU beds free</dt>
+                <dd data-testid="icu-beds-free">
+                  {snap.resources.disposition.beds.icu.free} of {snap.resources.disposition.beds.icu.total}
+                </dd>
                 <dt>Doctors busy</dt>
                 <dd>
                   {snap.resources.clinician_slots.busy} of {snap.resources.clinician_slots.total}
@@ -476,6 +502,10 @@ export function App() {
             <Scene
               scene={scene}
               counts={zoneCounts}
+              exitCounts={{
+                home: snap?.counts.departed_home ?? 0,
+                ward: snap?.counts.departed_ward ?? 0,
+              }}
               selectedZone={selectedZone}
               onSelectZone={toggleZone}
             />
@@ -592,8 +622,40 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
         )}
         {zone.id === 4 && (
           <>
-            <dt>Processing departure</dt>
-            <dd>{zone.active}</dd>
+            <dt>Home discharge: waiting</dt>
+            <dd data-testid="drawer-discharge-queue">{zone.awaiting_discharge ?? 0}</dd>
+            <dt>Home discharge: processing</dt>
+            <dd data-testid="drawer-discharge-active">
+              {zone.discharge_active ?? 0} of {snap.resources.disposition.discharge.servers}
+            </dd>
+            <dt>Boarding: waiting for a suitable bed</dt>
+            <dd data-testid="drawer-boarding">{zone.awaiting_ward_bed ?? 0}</dd>
+            <dt>Ward allocation: waiting</dt>
+            <dd data-testid="drawer-allocation-queue">{zone.awaiting_ward_allocation ?? 0}</dd>
+            <dt>Ward allocation: in progress</dt>
+            <dd data-testid="drawer-allocation-active">
+              {zone.allocation_active ?? 0} of {snap.resources.disposition.allocation.servers}
+            </dd>
+            <dt>Transport: waiting</dt>
+            <dd data-testid="drawer-transport-queue">{zone.awaiting_transport ?? 0}</dd>
+            <dt>Transport: moving a patient</dt>
+            <dd data-testid="drawer-transport-active">
+              {zone.in_transport ?? 0} of {snap.resources.disposition.transport.servers}
+            </dd>
+            <dt>Ward beds (free, reserved, occupied)</dt>
+            <dd data-testid="drawer-ward-beds">
+              {snap.resources.disposition.beds.ward.free}, {snap.resources.disposition.beds.ward.reserved},{' '}
+              {snap.resources.disposition.beds.ward.occupied} of {snap.resources.disposition.beds.ward.total}
+            </dd>
+            <dt>ICU beds (free, reserved, occupied)</dt>
+            <dd data-testid="drawer-icu-beds">
+              {snap.resources.disposition.beds.icu.free}, {snap.resources.disposition.beds.icu.reserved},{' '}
+              {snap.resources.disposition.beds.icu.occupied} of {snap.resources.disposition.beds.icu.total}
+            </dd>
+            <dt>Left through Home exit</dt>
+            <dd data-testid="drawer-exit-home">{snap.counts.departed_home}</dd>
+            <dt>Left through Ward / ICU exit</dt>
+            <dd data-testid="drawer-exit-ward">{snap.counts.departed_ward}</dd>
           </>
         )}
       </dl>
@@ -633,6 +695,9 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
                   {p.care_status === 'in_progress' && ' · Stabilization in progress'}
                   {` · ${p.acuity_system} ${p.acuity_score} (supplied)`}
                   {p.ambulance_id && ` · Ambulance ${p.ambulance_id}`}
+                  {p.disposition && ` · Destination: ${p.disposition === 'home' ? 'home' : p.disposition === 'icu' ? 'ICU' : 'ward'}`}
+                  {p.ward_bed_id && ` · Bed ${p.ward_bed_id}`}
+                  {p.waiting_reason && ` · ${p.waiting_reason}`}
                 </span>
                 <span className="tag">
                   {p.critical_bypass ? 'Critical bypass' : URGENCY_LABEL[p.urgency]}

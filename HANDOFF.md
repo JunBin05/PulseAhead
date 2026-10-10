@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10 (after ticket 04). Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-10 (after ticket 05). Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -23,9 +23,10 @@ Updated 2026-10-10 (after ticket 04). Branch `pulseahead-mvp`. Repo root is `C:\
 | 02 Walk-ins, critical entries, inbound ambulances | **done**: 8/8 pass (no review gate due) | `evidence/02-triage-and-ambulance-feed.md`, `evidence/02-intake.playwright-mcp.js`, `evidence/shots/02-fixture-t20.png` |
 | 03 Assessment and shared staffing | **done**: 7/7 pass (no review gate due) | `evidence/03-assessment-and-staffing.md`, `evidence/03-staffing.playwright-mcp.js`, `evidence/shots/03-staffing-t40.png` |
 | 04 Diagnostic queues and return flow | **done**: 7/7 pass (no review gate due) | `evidence/04-diagnostics-and-return-flow.md`, `evidence/04-diagnostics.playwright-mcp.js`, `evidence/shots/04-diagnostics-t90.png` |
-| 05–22 | not started | n/a |
+| 05 Cleared discharge and constrained ward exits | **done**: 7/7 pass (no review gate due) | `evidence/05-disposition-and-exits.md`, `evidence/05-disposition.playwright-mcp.js`, `evidence/shots/05-boarding-t70.png` |
+| 06–22 | not started | n/a |
 
-No ticket is in progress. Ticket 04 was finished, verified and committed before this handoff.
+No ticket is in progress. Ticket 05 was finished, verified and committed before this handoff.
 
 ## Verified through Playwright MCP (all pass, production build on :8000)
 
@@ -65,6 +66,13 @@ No ticket is in progress. Ticket 04 was finished, verified and committed before 
 - Lab/imaging task-per-hour capacity and 30-minute started/completed counts recomputed from events.
 - 56 UI steps: sidebar, zone 3 drawer, zone buttons and mesh counts equal `/state` at the same version.
 
+**Ticket 05** (fixture `fixture-boarding` through the UI, plus 12 h seed 7 through the API):
+- Discharge 2, ward allocation 1, transport 1 units never exceeded; supplied work durations equal the observed intervals.
+- Ward/ICU beds: right type, reserved during transfer, never before their release time, urgency order, no bed for the ICU patient while only ward beds are free (kept visible as unfinished).
+- ED space held through all of zone 4 and released only at departure; exit pads and counts equal `/state`.
+- Waiting reasons: discharge busy, allocation busy, transport busy, unavailable bed, unsuitable bed.
+- Three time parts and per-urgency summaries recomputed from timestamps; unfinished stays counted apart.
+
 **Not verified yet (not-run), owned by later tickets:**
 - 200-dot / 30 fps performance (ticket 20)
 - reduced-motion and 2D fallback (ticket 20)
@@ -74,8 +82,8 @@ No ticket is in progress. Ticket 04 was finished, verified and committed before 
 ## Known bugs, deferred findings, open questions
 
 - **Deferred review findings** (full list in `evidence/01-working-3d-replay.md`, "Deferred to the ticket that owns them"):
-  - **Ticket 06:** wait-area dot rows overflow into the next area above about 15 waiting patients; recovery is not labelled separately from "Congested"; the congestion monitor's boundaries are untested.
-  - **Ticket 05:** departures have no exit destination; the Home and Ward/ICU pads are static.
+  - **Ticket 06:** wait-area dot rows overflow into the next area (now above about 10 waiting patients per row); recovery is not labelled separately from "Congested"; the congestion monitor's boundaries are untested.
+  - **Ticket 05:** resolved (exits show destination and counts; bed pool is finite).
   - **Ticket 08:** per-source freshness; `freshness.age_min` is always 0.
   - The ticket 02 ambulance placeholder item is resolved.
 - **Kept by judgement:** `@react-three/drei` is pinned but unused; `ZONE_NAMES` duplicates the profile.
@@ -83,7 +91,8 @@ No ticket is in progress. Ticket 04 was finished, verified and committed before 
   - **Q1:** 2 of the 24 spaces (`R1`, `R2`) are resuscitation spaces held for critical bypass. General spaces are `S01`–`S22`.
   - **Q2:** "available staffed spaces" counts free general spaces whose covering nurse is on duty; "awaiting a space" counts both queues.
   - **Both confirmed by the user on 2026-10-10 ("keep as is").**
-  - **Q4 (new, ticket 04):** one diagnostic round, tests in a fixed order, premature decision as a supplied early decision.
+  - **Q5 (new, ticket 05):** the three exclusive time parts (initial wait, care and tests, awaiting departure), boarding as the awaiting-departure part of Ward/ICU transfers, and the Ward/ICU bed pool numbers.
+  - **Q4 (ticket 04):** one diagnostic round, tests in a fixed order, premature decision as a supplied early decision.
   - **Q3 (ticket 03):** fictional staffing units: doctors `D1`-`D4` (reserve `D5` inactive), nurses `N1`-`N6` each covering 4 spaces, a supplied stabilization task for urgent/critical patients.
 - **Ticket 03 limits** (details in `evidence/03-assessment-and-staffing.md`):
   - Only nurse coverage changes during a run, via the scenario's supplied `staffing` roster (fixtures only). Doctors are always on duty; `D5` is inactive until ticket 16.
@@ -93,6 +102,11 @@ No ticket is in progress. Ticket 04 was finished, verified and committed before 
   - Seed 7 rarely stresses lab or imaging; diagnostic bottlenecks come from fixtures or later scenarios (ticket 09).
   - Zone 2 first assessment and result review share the "Awaiting clinician" and "With clinician" rows.
   - Zone 3 dots can sit under area labels when several rows are populated (same limit as zone 2).
+- **Ticket 05 limits** (details in `evidence/05-disposition-and-exits.md`):
+  - Beds are free, reserved or occupied only (no cleaning, no return); with seed 7 the six ward beds run out late in the shift.
+  - All four disposition resources are owned by "Ward supervisor / bed manager".
+  - The 2-slot discharge limit lengthens waits slightly for earlier fixtures (ticket 02 A05-2 now departs 57.839, was 54.814; ticket 04 W13 97.603, was 97.443).
+  - Zone 4 dots can sit under area labels (same limit as zones 2 and 3).
 - **Unexplained, observed once:** the zone selection changed with no scripted click, and one backend `reset` arrived that the session did not send. Most likely manual clicks in the visible Playwright Chrome window. It was not reproduced in three reruns.
 - **Console warning:** `THREE.Clock` deprecated. It comes from @react-three/fiber 9.8.1 internals, not our code.
 - **Arrival rate:** seed 7 normal gave 4.9 arrivals/h against about 6.4/h expected from the assumptions. This is one sample, not a calibration.
@@ -100,10 +114,10 @@ No ticket is in progress. Ticket 04 was finished, verified and committed before 
 ## Code map
 
 - **Backend** (`backend/pulseahead/`):
-  - `profile.py`: fictional ED with 24 spaces (2 resus), 4 named doctors plus a reserve physician, 6 named nurses with coverage blocks, 1 triage desk, a declared reserve triage team, owners and assumptions.
+  - `profile.py`: fictional ED with 24 spaces (2 resus), 4 named doctors plus a reserve physician, 6 named nurses with coverage blocks, 1 triage desk, a declared reserve triage team, lab 2 and imaging 1, discharge 2, ward allocation 1, transport 1, a Ward/ICU bed pool with release schedule, owners and assumptions.
   - `scenario.py`: supplied inputs (acuity, urgency group, critical bypass, stabilization task) and ambulance run scripts. The hidden arrival time and task length stay here.
-  - `fixtures.py`: test-only scripted scenarios (`fixture-intake`, `fixture-staffing`, `fixture-diagnostics`; a fixture may carry a supplied `staffing` roster).
-  - `engine.py`: the SimPy flow. Triage desk → staffed general space (`SpacePool`), or critical bypass → staffed resus space; then a named doctor, first assessment, supplied tests (lab `L1`-`L2`, imaging `I1`, zone 3), result review by a doctor (zone 2), decision received, required care complete (`awaiting_care_completion` if premature), disposition and departure. Also the ambulance lifecycle and the congestion monitor.
+  - `fixtures.py`: test-only scripted scenarios (`fixture-intake`, `fixture-staffing`, `fixture-diagnostics`, `fixture-boarding`; a fixture may carry a supplied `staffing` roster, `ward_beds` schedule or `fixed_minutes`).
+  - `engine.py`: the SimPy flow. Triage desk → staffed general space (`SpacePool`), or critical bypass → staffed resus space; then a named doctor, first assessment, supplied tests (lab `L1`-`L2`, imaging `I1`, zone 3), result review by a doctor (zone 2), decision received, required care complete (`awaiting_care_completion` if premature), then home discharge processing (zone 4) or a Ward/ICU transfer (`WardBeds` bed reservation, allocation work, transport), and physical departure through the Home or Ward/ICU exit. Also the ambulance lifecycle and the congestion monitor.
   - `replay.py`: sessions, versions and the snapshot read model.
   - `api.py`: endpoints (`/api/health`, `/api/v1/profile`, `/api/v1/fixtures`, `/api/v1/replays` create/state/advance with `expected_version` (409 on mismatch)/reset/events/export). It also serves `frontend/dist`.
 - **Frontend** (`frontend/src/`):
@@ -139,11 +153,12 @@ Start commands, from `Real/`:
 ## Exact next steps
 
 1. Start the backend and build the frontend (see Servers). Confirm Playwright MCP works with `browser_navigate` to `http://127.0.0.1:8000/`.
-2. **Ticket 05:** cleared discharge and constrained ward exits (blocked only by 03, done; 04 is also done).
-   - Read `issues/05-disposition-and-exits.md` and spec §Four phases (zone 4), §Editable demo defaults (2 discharge processing, 1 ward allocation, 1 transport team; discharge 10, ward allocation 15, transport 15 min) and the total ED time rules.
-   - Add supplied disposition (home or Ward/ICU, with a required bed type), finite home-discharge processing, ward allocation, transport, and a finite ward/ICU bed pool with suitability and release assumptions. Reserve a ward bed during transfer; release the ED space only at physical departure.
-   - Zone 4 branches to Home and Ward/ICU exits (the exit pads are static today); show boarding and the reason (no suitable bed, unavailable bed, transport).
-   - Export arrival, first assessment, effective disposition and departure, and the three mutually exclusive time parts by urgency group.
-   - Add a fixture (`fixture-boarding`) in `fixtures.py`; verify through Playwright MCP, write `evidence/05-*.md`, tick only passed boxes, commit `ticket 05: <title>`.
-3. Continue: 06 → **code-review gate** (base `e69ceb6`, which is before tickets 03 to 05) → 07 …
-4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow changed, `02-intake`, `03-staffing` and `04-diagnostics` snippets. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`; copy them there with the leading `//` lines removed.
+2. **Ticket 06:** local zone overload versus overall ED congestion (blockers 02, 03, 04, 05 are done).
+   - Read `issues/06-zone-pressure-and-ed-congestion.md` and spec §Zone pressure versus overall congestion and §Congestion and forecasting.
+   - Local thresholds (queue at or above the threshold for 10 min to confirm, below it with capacity available for 5 min to clear): triage 3, assessment 6, lab 4, imaging 2, departure processing/allocation 3. Store onset and confirmation separately. Missing inputs give Cannot assess.
+   - The overall ED congestion rule exists (`CongestionMonitor`, 20 min to confirm, 10 min to clear); add recovery labelling and check its boundaries with fixtures.
+   - Show λ (received work, previous 30 min) and μ (staffed capacity) in matching units per zone (patients/h for triage and assessment; tasks/h for lab and imaging; home processing and ward transfer separately), recent throughput apart, Unknown when inputs are missing. `resources.diagnostics` and `resources.disposition` already carry capacity per hour.
+   - Zone colours green/yellow/red/gray with text and icon, ALERT bubbles from model state; failure categories with affected counts. Fix the deferred dot-row overflow (exact overflow count instead of rows running into the next area).
+   - Add fixtures (`fixture-congestion-boundary`, `fixture-diagnostic-only`) for exact 20/10/5-minute boundaries; verify through Playwright MCP, write `evidence/06-*.md`, tick only passed boxes, commit `ticket 06: <title>`.
+3. Then the **code-review gate** (`code-review` skill, base `e69ceb6`, which is before tickets 03 to 06): fix Standards and Spec findings inline, re-verify affected criteria, commit the fixes. Continue: 07 → 08 → 09 → 10 (review gate) ...
+4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow changed, the `02-intake`, `03-staffing`, `04-diagnostics` and `05-disposition` snippets. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`; copy them there with the leading `//` lines removed.

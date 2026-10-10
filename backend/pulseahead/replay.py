@@ -52,7 +52,10 @@ class ReplaySession:
         e = self.engine
         now = e.now
         active = e.active_patients()
-        patients = [p.public(now) for p in sorted(active, key=lambda p: p.id)]
+        patients = [
+            {**p.public(now), "waiting_reason": e.waiting_reason(p)}
+            for p in sorted(active, key=lambda p: p.id)
+        ]
 
         def in_phase(*phases: str) -> list[str]:
             return [p["id"] for p in patients if p["phase"] in phases]
@@ -101,8 +104,38 @@ class ReplaySession:
                 }
                 capacity = {"kind": "ed_spaces", "shared_with_zone": 2}
             else:
-                ids = in_phase("disposition_processing")
-                detail = {"queue": 0, "active": len(ids)}
+                ids = in_phase(
+                    "awaiting_discharge",
+                    "disposition_processing",
+                    "awaiting_ward_bed",
+                    "awaiting_ward_allocation",
+                    "ward_allocation_active",
+                    "awaiting_transport",
+                    "in_transport",
+                )
+                detail = {
+                    "queue": len(
+                        in_phase(
+                            "awaiting_discharge",
+                            "awaiting_ward_bed",
+                            "awaiting_ward_allocation",
+                            "awaiting_transport",
+                        )
+                    ),
+                    "active": len(in_phase("disposition_processing", "ward_allocation_active", "in_transport")),
+                    # Home path and ward/ICU transfer constraints are kept apart.
+                    "awaiting_discharge": len(in_phase("awaiting_discharge")),
+                    "discharge_active": len(in_phase("disposition_processing")),
+                    "awaiting_ward_bed": len(in_phase("awaiting_ward_bed")),
+                    "awaiting_ward_allocation": len(in_phase("awaiting_ward_allocation")),
+                    "allocation_active": len(in_phase("ward_allocation_active")),
+                    "awaiting_transport": len(in_phase("awaiting_transport")),
+                    "in_transport": len(in_phase("in_transport")),
+                    "home_patients": len([p for p in patients if p["zone"] == 4 and p["disposition"] == "home"]),
+                    "transfer_patients": len(
+                        [p for p in patients if p["zone"] == 4 and p["disposition"] in ("ward", "icu")]
+                    ),
+                }
                 capacity = {"kind": "ed_spaces_retained"}
             zones.append(
                 {
@@ -207,6 +240,43 @@ class ReplaySession:
             "note": "One patient can need several tests, so lab and imaging are reported as separate task rates.",
         }
 
+        def svc(res: Any, spec: dict, owner: str) -> dict:
+            return {
+                "servers": res.capacity,
+                "busy": res.count,
+                "waiting": len(res.queue),
+                "owner": owner,
+                "median_min": spec["median"],
+                "capacity_tasks_per_hour": round(res.capacity * 60.0 / spec["median"], 2),
+            }
+
+        a_ = PROFILE["assumptions"]
+        beds = e.ward_beds
+        disposition = {
+            "unit": "patients per hour",
+            "discharge": svc(
+                e.discharge,
+                {"median": a_["disposition_processing_minutes"]["mode"]},
+                PROFILE["owners"]["discharge_processing"],
+            ),
+            "allocation": svc(e.allocation, a_["ward_allocation_minutes"], PROFILE["owners"]["ward_allocation"]),
+            "transport": svc(e.transport, a_["transport_minutes"], PROFILE["owners"]["transport"]),
+            "beds": {
+                "owner": PROFILE["owners"]["ward_beds"],
+                **beds.counts(),
+                # Bed state only: the release schedule of occupied beds is hidden future.
+                "list": [{"id": i, "type": b["type"], "state": b["state"]} for i, b in sorted(beds.beds.items())],
+            },
+            "boarding": sum(
+                1
+                for p in patients
+                if p["phase"]
+                in ("awaiting_ward_bed", "awaiting_ward_allocation", "ward_allocation_active",
+                    "awaiting_transport", "in_transport")
+            ),
+            "note": "Home processing and ward/ICU transfer constraints are reported separately; one blended rate would hide a blocked ward.",
+        }
+
         announcements = [a.public(now) for a in sorted(e.announcements.values(), key=lambda a: a.id)]
         inbound = [a for a in announcements if a["status"] in ("en_route", "delayed")]
         inbound_patients = sum(a["patient_count"] for a in inbound)
@@ -264,6 +334,7 @@ class ReplaySession:
                 },
                 "staff": staff,
                 "diagnostics": diagnostics,
+                "disposition": disposition,
                 "clinician_slots": {
                     "total": e.clinicians.capacity,
                     "busy": e.clinicians.count,
@@ -285,6 +356,8 @@ class ReplaySession:
                 "in_ed": len(patients),
                 "arrived_total": len(e.patients),
                 "departed_total": e.departed_count,
+                "departed_home": e.departed_home,
+                "departed_ward": e.departed_ward,
             },
             "zones": zones,
             "patients": patients,
@@ -324,6 +397,34 @@ class ReplaySession:
             "event_count": len(e.events),
         }
 
+    def _time_summary(self) -> dict[str, Any]:
+        """Mean of the three time parts by reporting urgency group, completed stays only.
+
+        Unfinished stays are counted separately and never averaged in as if complete.
+        """
+        e = self.engine
+        out: dict[str, Any] = {}
+        for group in ("urgent", "medium", "lower"):
+            done = [p for p in e.patients.values() if p.supplied.urgency == group and p.departure_min is not None]
+            open_ = [p for p in e.patients.values() if p.supplied.urgency == group and p.departure_min is None]
+            parts = [p.time_parts() for p in done]
+
+            def mean(key: str, rows: list[dict[str, Any]] = parts) -> float | None:
+                vals = [r[key] for r in rows if r[key] is not None]
+                return round(sum(vals) / len(vals), 3) if vals else None
+
+            out[group] = {
+                "completed": len(done),
+                "unfinished": len(open_),
+                "mean_total_ed_min": mean("total_ed_min"),
+                "mean_initial_wait_min": mean("initial_wait_min"),
+                "mean_care_tests_min": mean("care_tests_min"),
+                "mean_awaiting_departure_min": mean("awaiting_departure_min"),
+                "ward_icu_transfers": sum(1 for p in done if p.supplied.disposition != "home"),
+                "mean_boarding_min": mean("boarding_min"),
+            }
+        return out
+
     def events(self, since: int = 0) -> dict[str, Any]:
         with self.lock:
             e = self.engine
@@ -350,7 +451,18 @@ class ReplaySession:
                 "seed": self.seed,
                 "sim_time_min": round(e.now, 3),
                 "events": list(e.events),
-                "patients": [p.timestamps() for p in e.patients.values()],
+                "patients": [p.timestamps(e.now) for p in e.patients.values()],
+                "time_summary": self._time_summary(),
+                "unfinished": [
+                    {
+                        "patient_id": p.id,
+                        "phase": p.phase,
+                        "urgency": p.supplied.urgency,
+                        "accrued_ed_min": p.time_parts(e.now)["total_ed_min"],
+                    }
+                    for p in e.patients.values()
+                    if p.departure_min is None
+                ],
                 "congestion_episodes": list(e.monitor.episodes),
             }
 
