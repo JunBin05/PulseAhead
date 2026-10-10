@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PulseAhead is a hackathon MVP: a synthetic 3D operational digital twin of one fictional 24-space emergency department (ED). Patient dots move through four zones. The app forecasts sustained congestion, compares six staff-approved operational actions against no action, and routes each approval to the resource owner.
 
-**No application code exists yet.** This folder holds only the approved plan:
+**Application code has not been written yet.** The folder holds the approved plan, plus a `backend/.venv` with the pinned Python dependencies. All planning docs are under `PulseAhead-Tickets/docs/`:
 
-- `PulseAhead-Tickets/docs/PULSEAHEAD_3D_MVP_SPEC.md` is the canonical spec and the source of truth for every rule. `PULSEAHEAD_3D_MVP_SPEC.md` at the root is an identical copy; keep the two in sync or treat the docs copy as authoritative.
-- `PulseAhead-Tickets/docs/PULSEAHEAD_3D_TICKET_PLAN.md` is the 22-ticket index with blockers. Tickets live in `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/NN-*.md`, and the tracker README is in `.scratch/pulseahead-3d/`. The tracker is local files only; there is no external issue tracker.
+- `PULSEAHEAD_3D_MVP_SPEC.md` is the canonical spec and the source of truth for every rule. `PULSEAHEAD_3D_MVP_SPEC.md` at the `Real/` root is an identical copy; treat the docs copy as authoritative.
+- `PULSEAHEAD_3D_TICKET_PLAN.md` is the 22-ticket index with blockers. Tickets live in `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/NN-*.md`. The tracker is local files only; there is no external issue tracker.
 - `PULSEAHEAD_3D_BUILD_PLAN.md` has the 16-hour checkpoints and the cut-first list. `PULSEAHEAD_3D_UX.md` has the layout and journey. `PULSEAHEAD_RUBRIC_MAP.md` maps the work to the judging rubric.
 
 ## Ticket workflow
@@ -18,11 +18,22 @@ PulseAhead is a hackathon MVP: a synthetic 3D operational digital twin of one fi
 - Each ticket is a vertical slice: simulation state, a versioned API, a usable UI, and Playwright MCP evidence, delivered together. Do not build a frontend-only mock or an engine with no UI.
 - Leave acceptance-criteria checkboxes unchecked until real Playwright MCP evidence supports them. For each check, record pass, fail, or not-run, plus the fixture/version and the expected and actual values.
 
-## Planned stack and commands
+## Stack and commands
 
-The planned stack is Python with SimPy for the flow engine, FastAPI for the API, and React/TypeScript with Three.js and React Three Fiber for the scene. Use stable, compatible React and renderer versions, with no alpha features. The built frontend and the API should be served from one origin.
+The stack is Python 3.12 with SimPy for the engine and FastAPI for the API, in `backend/` with a venv at `backend/.venv`. The frontend is React 19 + TypeScript + three + @react-three/fiber 9 + drei 10 on Vite, in `frontend/`. Versions are pinned exactly; no alpha or beta packages. In production, FastAPI serves the built `frontend/dist` from the same origin.
 
-Build, run, and lint commands do not exist yet. Ticket 01 establishes them; add them here once they exist.
+Python is not on PATH. Use `backend/.venv/Scripts/python.exe`, or `C:\Users\Vaas\AppData\Local\Programs\Python\Python312\python.exe` to create a venv.
+
+Commands are added here as tickets create them.
+
+## Working rules
+
+- Branch `pulseahead-mvp`. Commit once per ticket as `ticket NN: <title>`.
+- Each ticket writes `evidence/NN-<slug>.md`. For every acceptance criterion, record pass, fail or not-run, the seed/fixture/version, expected vs actual values, and the response excerpt or screenshot path. Tick a ticket checkbox only when its evidence passed.
+- Ports: backend 8000, Vite dev server 5173 (proxies `/api` to 8000).
+- Put ambiguous spec rules in `OPEN_QUESTIONS.md` rather than guessing.
+- Run `impeccable` (project design skill) before UI work; it keeps product context in `PRODUCT.md` and the design system in `DESIGN.md` at the `Real/` root. Status colours must always come with text and an icon.
+- Playwright MCP writes snapshots to `.playwright-mcp/`, which is git-ignored.
 
 ## Testing: Playwright MCP only
 
