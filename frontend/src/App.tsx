@@ -4,13 +4,8 @@ import { buildScene } from './layout';
 import { Scene } from './Scene';
 import {
   IconCheck,
-  IconClock,
   IconOctagon,
   IconOverview,
-  IconPause,
-  IconPlay,
-  IconReset,
-  IconStep,
   IconTriangle,
   IconUnknown,
 } from './icons';
@@ -18,6 +13,12 @@ import { ZONE_LOOK, type ZoneDisplay } from './status';
 import { ActionChip, ComparePanel, RoleSwitcher } from './Actions';
 import { DemoBar, type DemoController } from './Demo';
 import { EvaluationPanel } from './Evaluation';
+import { clockOrDash, fig, formatClock, ofTotal, patientCount } from './format';
+import { AmbulancePanel, DataQualityPanel, FeedsPanel } from './panels/DataPanels';
+import { ResourcesPanel, URGENCY_LABEL } from './panels/ResourcesPanel';
+import { RunsPanel } from './panels/RunsPanel';
+import { RunBar } from './shell/RunBar';
+import { Tabs } from './shell/Tabs';
 import {
   AlertList,
   ForecastStrip,
@@ -39,11 +40,12 @@ import {
   type SavedSummary,
   type ScenarioInfo,
   type Snapshot,
-  type Urgency,
   type ZoneDetail,
 } from './types';
 
 const SPEEDS = [1, 2, 5, 10] as const;
+type LeftTab = 'story' | 'resources' | 'data' | 'runs';
+type RightTab = 'zone' | 'act';
 
 /** Test-only: `?fixture=<id>` starts a controlled fixture scenario for Playwright MCP checks.
  * It is not linked or shown anywhere in the staff workflow. */
@@ -72,27 +74,6 @@ const PHASE_LABEL: Record<Phase, string> = {
   disposition_processing: 'Discharge processing',
 };
 
-const URGENCY_LABEL: Record<Urgency, string> = {
-  urgent: 'Urgent',
-  medium: 'Medium urgency',
-  lower: 'Lower urgency',
-};
-
-const URGENCY_COLOR: Record<Urgency, string> = {
-  urgent: 'var(--urgency-urgent)',
-  medium: 'var(--urgency-medium)',
-  lower: 'var(--urgency-lower)',
-};
-
-const URGENCY_SIZE: Record<Urgency, number> = { urgent: 18, medium: 14, lower: 12 };
-
-function formatClock(min: number): string {
-  const total = Math.floor(min);
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return `T+${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
 /** No snapshot yet means 'idle' (Not started), never Normal. */
 function zoneState(snap: Snapshot | null, zone: number): ZoneDisplay {
   if (!snap) return 'idle';
@@ -101,10 +82,6 @@ function zoneState(snap: Snapshot | null, zone: number): ZoneDisplay {
 
 function minutes(n: number): string {
   return `${n.toFixed(1)} min`;
-}
-
-function patientCount(n: number): string {
-  return `${n} ${n === 1 ? 'patient' : 'patients'}`;
 }
 
 type Conn =
@@ -141,29 +118,6 @@ const ZONE_FEEDS: Record<number, string[]> = {
   3: ['diagnostics', 'spaces', 'staffing'],
   4: ['disposition', 'spaces', 'staffing'],
 };
-
-const FEED_ORDER = ['queues', 'spaces', 'staffing', 'diagnostics', 'disposition', 'ambulance'] as const;
-
-const FEED_LOOK: Record<Feed['status'], { tone: string; icon: ReactNode; word: string }> = {
-  fresh: { tone: 'normal', icon: <IconCheck />, word: 'Current' },
-  stale: { tone: 'pressure', icon: <IconClock />, word: 'Stale' },
-  missing: { tone: 'unknown', icon: <IconUnknown />, word: 'Missing' },
-};
-
-/** A figure a service cannot currently report is null: say so, never show it as zero. */
-const NOT_CURRENT = 'Not current';
-
-function fig(v: number | null | undefined, fallback = 0): number | string {
-  return v === null ? NOT_CURRENT : (v ?? fallback);
-}
-
-function ofTotal(v: number | null | undefined, total: number): string {
-  return v === null || v === undefined ? NOT_CURRENT : `${v} of ${total}`;
-}
-
-function clockOrDash(min: number | null | undefined): string {
-  return min === null || min === undefined ? '—' : formatClock(min);
-}
 
 function StatusBadge({ snap }: { snap: Snapshot | null }) {
   // The label text comes from the backend; only tone and icon are chosen here. An essential feed
@@ -221,6 +175,12 @@ export function App() {
   const [lastCmp, setLastCmp] = useState<ComparisonResult | null>(null);
   // 2D list view: the same zone status, alerts, comparison and approvals without the 3D scene.
   const [listView, setListView] = useState(false);
+  // Which tab each rail shows. Panels in hidden tabs stay mounted, so nothing loses its state.
+  const [leftTab, setLeftTab] = useState<LeftTab>('story');
+  const [rightTab, setRightTab] = useState<RightTab>('zone');
+  useEffect(() => {
+    setRightTab(compareOpen ? 'act' : 'zone');
+  }, [compareOpen]);
   const compareReturnRef = useRef<HTMLElement | null>(null);
 
   const idRef = useRef<string | null>(null);
@@ -576,6 +536,20 @@ export function App() {
         <StatusBadge snap={snap} />
       </header>
 
+      <RunBar
+        snap={snap}
+        playing={playing}
+        speed={speed}
+        speeds={SPEEDS}
+        stepMinutes={STEP_MINUTES}
+        onStart={start}
+        onTogglePlay={() => setPlaying((p) => !p)}
+        onStep={() => void advance(STEP_MINUTES)}
+        onSpeed={(s) => setSpeed(s as (typeof SPEEDS)[number])}
+        onReset={reset}
+        playRef={playRef}
+      />
+
       <div aria-live="polite" role="status">
         {conn.state === 'error' && (
           <div className="banner" data-tone="error" data-testid="conn-error">
@@ -611,199 +585,54 @@ export function App() {
       </div>
 
       <main className="workspace">
-        <aside aria-label="Controls and feeds">
-          <DemoBar ctl={demoCtl} />
-          <section className="panel" aria-labelledby="controls-h">
-            <h2 id="controls-h">Simulation controls</h2>
-            {!snap ? (
-              <div className="intro">
-                <p>
-                  PulseAhead shows where patients are waiting in a fictional emergency department
-                  (ED) and how long until congestion sets in.
-                </p>
-                <p className="muted" style={{ marginBottom: 'var(--s-4)' }}>
-                  Start the simulation to watch synthetic patients move through four zones.
-                </p>
-                <button
-                  className="btn btn-primary btn-block"
-                  onClick={start}
-                  data-testid="start"
-                >
-                  <IconPlay /> Start simulation
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="btn-row">
-                  <button
-                    ref={playRef}
-                    className="btn btn-primary"
-                    onClick={() => setPlaying((p) => !p)}
-                    aria-pressed={playing}
-                    data-testid="play-pause"
-                    style={{ flex: 1 }}
-                  >
-                    {playing ? <IconPause /> : <IconPlay />}
-                    {playing ? 'Pause' : 'Play'}
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={() => void advance(STEP_MINUTES)}
-                    // Not disabled while a request is in flight: that would drop keyboard focus.
-                    // `run` already ignores a second command until the first one returns.
-                    disabled={playing}
-                    data-testid="step"
-                    title={`Advance ${STEP_MINUTES} simulated minutes`}
-                  >
-                    <IconStep /> Step {STEP_MINUTES} min
-                  </button>
-                </div>
-                <span className="field-label" id="speed-l">
-                  Speed (simulated minutes per second)
-                </span>
-                <div className="segmented" role="group" aria-labelledby="speed-l">
-                  {SPEEDS.map((s) => (
-                    <button
-                      key={s}
-                      aria-pressed={speed === s}
-                      onClick={() => setSpeed(s)}
-                      data-testid={`speed-${s}`}
-                    >
-                      {s}×
-                    </button>
-                  ))}
-                </div>
-                <div style={{ marginTop: 'var(--s-4)' }}>
-                  <button className="btn btn-block" onClick={reset} data-testid="reset">
-                    <IconReset /> Reset replay
-                  </button>
-                </div>
-                <p className="muted" style={{ marginTop: 'var(--s-3)' }}>
-                  {snap.scenario_name} · seed {snap.seed} · run {snap.run_number} · state v
-                  {snap.version}
-                </p>
-              </>
-            )}
-          </section>
-
-          <DemoPanel
-            snap={snap}
-            scenarios={scenarios}
-            scenarioId={scenarioId}
-            onScenario={setScenarioId}
-            fixtureLocked={TEST_FIXTURE !== undefined}
-            onSave={save}
-            saveNote={saveNote}
-            saved={savedList}
-            onLoad={load}
-            fcSamples={fcSamples}
-            onFcSamples={setFcSamples}
+        <aside className="rail rail-left" aria-label="Story, resources, data and runs">
+          <Tabs
+            label="Panels"
+            idPrefix="left"
+            value={leftTab}
+            onChange={(v) => setLeftTab(v as LeftTab)}
+            tabs={[
+              { id: 'story', label: 'Story', content: <DemoBar ctl={demoCtl} /> },
+              {
+                id: 'resources',
+                label: 'Resources',
+                content: <ResourcesPanel snap={snap} />,
+              },
+              {
+                id: 'data',
+                label: 'Data',
+                content: (
+                  <>
+                    <AmbulancePanel snap={snap} />
+                    <FeedsPanel snap={snap} />
+                    <DataQualityPanel snap={snap} />
+                  </>
+                ),
+              },
+              {
+                id: 'runs',
+                label: 'Runs',
+                content: (
+                  <>
+                    <RunsPanel
+                      snap={snap}
+                      scenarios={scenarios}
+                      scenarioId={scenarioId}
+                      onScenario={setScenarioId}
+                      fixtureLocked={TEST_FIXTURE !== undefined}
+                      onSave={save}
+                      saveNote={saveNote}
+                      saved={savedList}
+                      onLoad={load}
+                      fcSamples={fcSamples}
+                      onFcSamples={setFcSamples}
+                    />
+                    <EvaluationPanel />
+                  </>
+                ),
+              },
+            ]}
           />
-
-          <EvaluationPanel />
-
-          <AmbulancePanel snap={snap} />
-
-          <FeedsPanel snap={snap} />
-
-          <DataQualityPanel snap={snap} />
-
-          {snap && (
-            <section className="panel" aria-labelledby="res-h">
-              <h2 id="res-h">ED resources</h2>
-              {Object.values(snap.feeds).some((f) => f.id !== 'replay' && f.status !== 'fresh') && (
-                <p className="muted" data-testid="resources-stale" style={{ marginBottom: 'var(--s-3)' }}>
-                  Some figures are the last valid values from a feed that is no longer current:{' '}
-                  {Object.values(snap.feeds)
-                    .filter((f) => f.id !== 'replay' && f.status !== 'fresh')
-                    .map((f) => `${f.label.toLowerCase()} (last valid ${clockOrDash(f.last_update_min)})`)
-                    .join(', ')}
-                  .
-                </p>
-              )}
-              <dl className="kv">
-                <dt>Available staffed spaces</dt>
-                <dd data-testid="available-spaces">
-                  {ofTotal(snap.resources.ed_spaces.available_staffed, snap.resources.ed_spaces.total)}
-                </dd>
-                <dt>Staffed spaces</dt>
-                <dd data-testid="staffed-spaces">
-                  {snap.resources.ed_spaces.staffed_total} of {snap.resources.ed_spaces.total}
-                </dd>
-                <dt>Occupied spaces</dt>
-                <dd data-testid="occupied-spaces">{snap.resources.ed_spaces.occupied}</dd>
-                <dt>Awaiting a space</dt>
-                <dd data-testid="awaiting-space">{fig(snap.resources.ed_spaces.awaiting_space)}</dd>
-                <dt>Resuscitation spaces free</dt>
-                <dd data-testid="resus-available">
-                  {snap.resources.resus_spaces.available} of {snap.resources.resus_spaces.total}
-                </dd>
-                <dt>Triage desk busy</dt>
-                <dd data-testid="triage-busy">
-                  {ofTotal(snap.resources.triage_desk.busy, snap.resources.triage_desk.total)}
-                </dd>
-                <dt>Lab busy</dt>
-                <dd data-testid="lab-busy">
-                  {ofTotal(snap.resources.diagnostics.lab.busy, snap.resources.diagnostics.lab.servers)}
-                  {(snap.resources.diagnostics.lab.waiting ?? 0) > 0 &&
-                    ` · ${snap.resources.diagnostics.lab.waiting} waiting`}
-                </dd>
-                <dt>Imaging busy</dt>
-                <dd data-testid="imaging-busy">
-                  {ofTotal(snap.resources.diagnostics.imaging.busy, snap.resources.diagnostics.imaging.servers)}
-                  {(snap.resources.diagnostics.imaging.waiting ?? 0) > 0 &&
-                    ` · ${snap.resources.diagnostics.imaging.waiting} waiting`}
-                </dd>
-                <dt>Discharge processing busy</dt>
-                <dd data-testid="discharge-busy">
-                  {ofTotal(snap.resources.disposition.discharge.busy, snap.resources.disposition.discharge.servers)}
-                </dd>
-                <dt>Ward allocation busy</dt>
-                <dd data-testid="allocation-busy">
-                  {ofTotal(snap.resources.disposition.allocation.busy, snap.resources.disposition.allocation.servers)}
-                </dd>
-                <dt>Transport busy</dt>
-                <dd data-testid="transport-busy">
-                  {ofTotal(snap.resources.disposition.transport.busy, snap.resources.disposition.transport.servers)}
-                </dd>
-                <dt>Ward beds free</dt>
-                <dd data-testid="ward-beds-free">
-                  {snap.resources.disposition.beds.ward.free} of {snap.resources.disposition.beds.ward.total}
-                </dd>
-                <dt>ICU beds free</dt>
-                <dd data-testid="icu-beds-free">
-                  {snap.resources.disposition.beds.icu.free} of {snap.resources.disposition.beds.icu.total}
-                </dd>
-                <dt>Doctors busy</dt>
-                <dd>
-                  {ofTotal(snap.resources.clinician_slots.busy, snap.resources.clinician_slots.total)}
-                </dd>
-                <dt>Patients in the ED</dt>
-                <dd data-testid="in-ed">{snap.counts.in_ed}</dd>
-                <dt>Departed so far</dt>
-                <dd data-testid="departed">{snap.counts.departed_total}</dd>
-              </dl>
-            </section>
-          )}
-
-          <section className="panel" aria-labelledby="leg-h">
-            <h2 id="leg-h">Patient dots</h2>
-            <ul className="legend">
-              {(['urgent', 'medium', 'lower'] as Urgency[]).map((u) => (
-                <li key={u}>
-                  <span
-                    className="swatch"
-                    style={{
-                      width: URGENCY_SIZE[u],
-                      height: URGENCY_SIZE[u],
-                      background: URGENCY_COLOR[u],
-                    }}
-                  />
-                  {URGENCY_LABEL[u]}
-                </li>
-              ))}
-            </ul>
-          </section>
         </aside>
 
         <section aria-label="Four-zone ED map">
@@ -910,42 +739,64 @@ export function App() {
           )}
         </section>
 
-        <aside className="drawer-col" aria-label="Selected zone">
-          {snap && !compareOpen && (
-            <button className="btn btn-block" onClick={openCompare} data-testid="compare-open"
-              style={{ marginBottom: 'var(--s-3)' }}>
-              Compare actions
-            </button>
-          )}
-          {snap && compareOpen && (
-            <ComparePanel snap={snap} role={role} samples={fcSamples} onClose={closeCompare} onChanged={retry} onResult={setLastCmp} />
-          )}
-          <section className="panel" aria-labelledby="drawer-h">
-            {!zone ? (
-              <>
-                <h2 id="drawer-h">Zone details</h2>
-                <p className="muted">
-                  {snap
-                    ? 'Select a zone on the map or in the zone list to see its patients, queues and capacity.'
-                    : 'Zone details appear here once the simulation has started.'}
-                </p>
-              </>
-            ) : zoneDetail &&
-              zoneDetail.zone.id === zone.id &&
-              zoneDetail.replay_id === snap!.replay_id &&
-              zoneDetail.version === snap!.version ? (
-              <ZoneDrawer snap={snap!} detail={zoneDetail} fcView={fcView} explanation={explanation} />
-            ) : (
-              <div data-testid="zone-drawer-loading" data-zone={zone.id}>
-                <h2 id="drawer-h">
-                  Zone {zone.id} · {zone.name}
-                </h2>
-                <p className="muted" role="status">
-                  Loading zone details for state v{snap!.version}…
-                </p>
-              </div>
-            )}
-          </section>
+        <aside className="rail drawer-col" aria-label="Selected zone and actions">
+          <Tabs
+            label="Zone and actions"
+            idPrefix="right"
+            value={rightTab}
+            onChange={(v) => setRightTab(v as RightTab)}
+            tabs={[
+              {
+                id: 'zone',
+                label: 'Zone',
+                content: (
+                  <section className="panel" aria-labelledby="drawer-h">
+                    {!zone ? (
+                      <>
+                        <h2 id="drawer-h">Zone details</h2>
+                        <p className="muted">
+                          {snap
+                            ? 'Select a zone on the map or in the zone list to see its patients, queues and capacity.'
+                            : 'Zone details appear here once the simulation has started.'}
+                        </p>
+                      </>
+                    ) : zoneDetail &&
+                      zoneDetail.zone.id === zone.id &&
+                      zoneDetail.replay_id === snap!.replay_id &&
+                      zoneDetail.version === snap!.version ? (
+                      <ZoneDrawer snap={snap!} detail={zoneDetail} fcView={fcView} explanation={explanation} />
+                    ) : (
+                      <div data-testid="zone-drawer-loading" data-zone={zone.id}>
+                        <h2 id="drawer-h">
+                          Zone {zone.id} · {zone.name}
+                        </h2>
+                        <p className="muted" role="status">
+                          Loading zone details for state v{snap!.version}…
+                        </p>
+                      </div>
+                    )}
+                  </section>
+                ),
+              },
+              {
+                id: 'act',
+                label: 'Act',
+                content: (
+                  <>
+                    {snap && !compareOpen && (
+                      <button className="btn btn-block" onClick={openCompare} data-testid="compare-open">
+                        Compare actions
+                      </button>
+                    )}
+                    {snap && compareOpen && (
+                      <ComparePanel snap={snap} role={role} samples={fcSamples} onClose={closeCompare} onChanged={retry} onResult={setLastCmp} />
+                    )}
+                    {!snap && <p className="muted">Actions can be compared once the simulation has started.</p>}
+                  </>
+                ),
+              },
+            ]}
+          />
         </aside>
       </main>
     </div>
@@ -1426,327 +1277,3 @@ function StaffingSummary({ snap }: { snap: Snapshot }) {
   );
 }
 
-const AMB_STATUS: Record<'en_route' | 'delayed', string> = {
-  en_route: 'En route',
-  delayed: 'Delayed, ETA overdue',
-};
-
-function FeedsPanel({ snap }: { snap: Snapshot | null }) {
-  if (!snap) return null;
-  const q = snap.data_quality;
-  return (
-    <section className="panel" aria-labelledby="feeds-h">
-      <h2 id="feeds-h">Data feeds</h2>
-      <p className="feed-summary" data-testid="feeds-summary" data-assessable={q.assessable}>
-        <span className="status" data-tone={q.assessable ? 'normal' : 'unknown'}>
-          {q.assessable ? <IconCheck /> : <IconUnknown />}
-          <span>{q.assessable ? 'Essential feeds current' : 'Cannot assess'}</span>
-        </span>
-      </p>
-      {!q.assessable && (
-        <p data-testid="feeds-reasons" style={{ marginBottom: 'var(--s-3)' }}>
-          {q.reasons.join(' ')}
-        </p>
-      )}
-      <p className="muted">
-        Replay clock <span data-testid="replay-heartbeat">{formatClock(snap.feeds.replay.last_update_min ?? 0)}</span>
-        . It does not refresh any feed below. A feed whose newest valid update is older than{' '}
-        {q.stale_after_min} simulated minutes is stale.
-      </p>
-      <ul className="feed-list" data-testid="feed-list">
-        {FEED_ORDER.map((id) => snap.feeds[id]).filter(Boolean).map((f) => {
-          const look = FEED_LOOK[f.status];
-          return (
-            <li key={f.id} data-testid={`feed-${f.id}`} data-status={f.status} data-essential={f.essential}>
-              <div className="feed-row">
-                <strong>{f.label}</strong>
-                <span className="feed-status" data-tone={look.tone} data-testid={`feed-${f.id}-status`}>
-                  {look.icon}
-                  {look.word}
-                </span>
-              </div>
-              <div className="muted" data-testid={`feed-${f.id}-age`}>
-                {f.essential ? 'Essential' : 'Optional'} ·{' '}
-                {f.last_update_min === null
-                  ? 'no valid update received'
-                  : `last valid update ${formatClock(f.last_update_min)} · ${f.age_min} min old`}
-              </div>
-              {f.limitation && (
-                <div className="muted" data-testid={`feed-${f.id}-limit`}>
-                  {f.limitation}
-                </div>
-              )}
-              {f.status === 'fresh' && f.resumed_at_min != null && (
-                <div className="muted" data-testid={`feed-${f.id}-resumed`}>
-                  Resumed at {formatClock(f.resumed_at_min)}; assessment restored.
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-const KIND_LABEL: Record<string, string> = {
-  duplicate: 'Duplicate ignored',
-  out_of_order: 'Out of order, newer state kept',
-  quarantined: 'Invalid, quarantined',
-  outlier_kept: 'Extreme but valid, kept',
-};
-
-function DataQualityPanel({ snap }: { snap: Snapshot | null }) {
-  if (!snap) return null;
-  const { counts, recent, sequence_gaps: gaps } = snap.data_quality;
-  const missing = gaps.reduce((n, g) => n + g.missing, 0);
-  return (
-    <section className="panel" aria-labelledby="dq-h">
-      <h2 id="dq-h">Data quality</h2>
-      <dl className="kv">
-        <dt>Events accepted</dt>
-        <dd data-testid="dq-accepted">{counts.accepted}</dd>
-        <dt>Duplicates ignored</dt>
-        <dd data-testid="dq-duplicates">{counts.duplicates}</dd>
-        <dt>Out of order, ignored</dt>
-        <dd data-testid="dq-out-of-order">{counts.out_of_order}</dd>
-        <dt>Invalid, quarantined</dt>
-        <dd data-testid="dq-quarantined">{counts.quarantined}</dd>
-        <dt>Extreme but valid, kept</dt>
-        <dd data-testid="dq-outliers">{counts.outliers_kept}</dd>
-        <dt>Event ids not received</dt>
-        <dd data-testid="dq-gaps">{missing}</dd>
-      </dl>
-      {recent.length === 0 ? (
-        <p className="muted" data-testid="dq-empty" style={{ marginTop: 'var(--s-3)' }}>
-          Nothing has been ignored, refused or flagged.
-        </p>
-      ) : (
-        <details style={{ marginTop: 'var(--s-3)' }}>
-          <summary>Latest {recent.length} items</summary>
-          <ul className="feed-list" data-testid="dq-list">
-            {recent.map((it, i) => (
-              <li key={`${it.id}-${i}`} data-testid="dq-item" data-kind={it.kind} data-id={it.id ?? ''}>
-                <div className="feed-row">
-                  <strong>{it.id ?? 'no id'}</strong>
-                  <span className="feed-status" data-tone={it.kind === 'outlier_kept' ? 'normal' : 'unknown'}>
-                    {it.kind === 'outlier_kept' ? <IconCheck /> : <IconTriangle />}
-                    {KIND_LABEL[it.kind] ?? it.kind}
-                  </span>
-                </div>
-                <div className="muted">
-                  {it.source} feed · received {formatClock(it.received_min)}
-                  {it.subject ? ` · ${it.subject}` : ''}
-                </div>
-                <div>{it.reason}</div>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
-  );
-}
-
-function AmbulancePanel({ snap }: { snap: Snapshot | null }) {
-  const inbound = snap?.inbound_ambulances ?? [];
-  const summary = snap?.inbound_summary;
-  return (
-    <section className="panel" aria-labelledby="amb-h">
-      <h2 id="amb-h">Inbound ambulances</h2>
-      <dl className="kv">
-        <dt>Ambulances en route</dt>
-        <dd data-testid="amb-count">{summary ? summary.ambulances : '—'}</dd>
-        <dt>Announced inbound patients</dt>
-        <dd data-testid="amb-patients">{summary ? summary.patients : '—'}</dd>
-      </dl>
-      {!snap ? (
-        <p className="muted" style={{ marginTop: 'var(--s-3)' }}>
-          Announcements appear once the simulation has started.
-        </p>
-      ) : inbound.length === 0 ? (
-        <p className="muted" style={{ marginTop: 'var(--s-3)' }} data-testid="amb-empty">
-          No ambulances are currently announced.
-          {summary?.feed_last_update_min != null &&
-            ` Last ambulance update at ${formatClock(summary.feed_last_update_min)}.`}
-        </p>
-      ) : (
-        <ul className="amb-list" data-testid="amb-list">
-          {inbound.map((a) => {
-            const critical = a.acuity?.filter((x) => x.critical_bypass).length ?? 0;
-            return (
-              <li key={a.id} data-testid={`amb-${a.id}`} data-status={a.status}>
-                <div className="amb-row">
-                  <strong>{a.id}</strong>
-                  <span className="amb-status" data-tone={a.status === 'delayed' ? 'pressure' : 'unknown'}>
-                    {a.status === 'delayed' ? <IconTriangle /> : <IconClock />}
-                    {AMB_STATUS[a.status as 'en_route' | 'delayed']}
-                  </span>
-                </div>
-                <div className="muted">
-                  ETA {formatClock(a.eta_min)} ±{a.eta_uncertainty_min} min ·{' '}
-                  {patientCount(a.patient_count)}
-                  {a.minutes_overdue !== null && ` · ${Math.round(a.minutes_overdue)} min overdue`}
-                </div>
-                <div className="muted">
-                  {a.acuity
-                    ? `Supplied acuity: ${a.acuity.map((x) => x.acuity).join(', ')}${
-                        critical ? ` · ${critical} critical bypass` : ''
-                      }`
-                    : 'Acuity not yet reported'}
-                  {` · updated ${formatClock(a.source_updated_min)}`}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function partitionOf(info: ScenarioInfo | undefined, seed: number): string {
-  if (!info) return 'unknown';
-  for (const [name, seeds] of Object.entries(info.seed_partitions)) if (seeds.includes(seed)) return name;
-  return 'custom';
-}
-
-/** Presenter controls and the evidence record: scenario family, its warm-up and scored duration, the
- * seed partition, and saved runs. Kept apart from the staff controls above. */
-function DemoPanel({
-  snap,
-  scenarios,
-  scenarioId,
-  onScenario,
-  fixtureLocked,
-  onSave,
-  saveNote,
-  saved,
-  onLoad,
-  fcSamples,
-  onFcSamples,
-}: {
-  snap: Snapshot | null;
-  scenarios: ScenarioInfo[];
-  scenarioId: string;
-  onScenario: (id: string) => void;
-  fixtureLocked: boolean;
-  onSave: () => void;
-  saveNote: string | null;
-  saved: SavedSummary[];
-  onLoad: (savedId: string) => void;
-  fcSamples: ForecastSamples;
-  onFcSamples: (n: ForecastSamples) => void;
-}) {
-  const info = scenarios.find((s) => s.id === scenarioId);
-  const runInfo = snap ? scenarios.find((s) => s.id === snap.scenario) : undefined;
-  const pending = snap !== null && snap.scenario !== scenarioId;
-  return (
-    <section className="panel" aria-labelledby="demo-h">
-      <h2 id="demo-h">Demo and evidence</h2>
-      <label className="field-label" htmlFor="scenario-select">
-        Scenario
-      </label>
-      <select
-        id="scenario-select"
-        className="select"
-        data-testid="scenario-select"
-        value={scenarioId}
-        disabled={fixtureLocked || scenarios.length === 0}
-        onChange={(e) => onScenario(e.target.value)}
-      >
-        {scenarios.length === 0 && <option value={scenarioId}>Normal shift</option>}
-        {scenarios.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-            {s.demo ? ` (${s.demo})` : ''}
-          </option>
-        ))}
-      </select>
-      {info && (
-        <p className="muted" data-testid="scenario-desc" style={{ marginTop: 'var(--s-2)' }}>
-          {info.description} {info.workload_variant}
-        </p>
-      )}
-      {pending && (
-        <p data-testid="scenario-pending" style={{ marginTop: 'var(--s-2)' }}>
-          The running replay is “{snap?.scenario_name}”. Reset to run {info?.name ?? scenarioId}.
-        </p>
-      )}
-      {snap?.saved_run && (
-        <p className="synthetic-chip" data-testid="loaded-run" style={{ marginTop: 'var(--s-3)' }}>
-          Loaded saved run {snap.saved_run.id}: {snap.saved_run.label}
-        </p>
-      )}
-      {snap && runInfo && (
-        <dl className="kv" style={{ marginTop: 'var(--s-3)' }} data-testid="run-record">
-          <dt>Warm-up / scored</dt>
-          <dd data-testid="run-warmup">
-            {runInfo.warmup_min} min / {runInfo.scored_min} min
-          </dd>
-          <dt>Seed</dt>
-          <dd data-testid="run-seed">
-            {snap.seed} ({partitionOf(runInfo, snap.seed)})
-          </dd>
-          <dt>Versions</dt>
-          <dd data-testid="run-versions">
-            API {snap.api_version} · profile {snap.profile_id}
-          </dd>
-        </dl>
-      )}
-      <span className="field-label" id="fc-samples-l" style={{ marginTop: 'var(--s-3)' }}>
-        Forecast futures per refresh
-      </span>
-      <div className="segmented" role="group" aria-labelledby="fc-samples-l">
-        {([50, 100] as const).map((n) => (
-          <button key={n} aria-pressed={fcSamples === n} onClick={() => onFcSamples(n)} data-testid={`fc-samples-${n}`}>
-            {n}
-          </button>
-        ))}
-      </div>
-      <div style={{ marginTop: 'var(--s-4)' }}>
-        <button className="btn btn-block" onClick={onSave} disabled={!snap} data-testid="save-run">
-          Save run
-        </button>
-      </div>
-      <div aria-live="polite" role="status">
-        {saveNote && (
-          <p data-testid="save-note" className="muted" style={{ marginTop: 'var(--s-2)' }}>
-            {saveNote}
-          </p>
-        )}
-      </div>
-      <h3 className="subhead">Saved runs</h3>
-      {saved.length === 0 ? (
-        <p className="muted" data-testid="saved-empty">
-          No saved runs yet.
-        </p>
-      ) : (
-        <ul className="feed-list" data-testid="saved-list">
-          {saved.map((s) => (
-            <li key={s.saved_id} data-testid={`saved-${s.saved_id}`} data-completed={s.completed}>
-              <div className="feed-row">
-                <strong>{s.scenario_name}</strong>
-                <span className="feed-status" data-tone={s.completed ? 'normal' : 'unknown'}>
-                  {s.completed ? <IconCheck /> : <IconClock />}
-                  {s.completed ? 'Completed' : 'In progress'}
-                </span>
-              </div>
-              <div className="muted">
-                {s.label} · seed {s.seed} · {formatClock(s.sim_time_min)} · {s.event_count} events
-              </div>
-              <div className="btn-row">
-                <button className="btn" onClick={() => onLoad(s.saved_id)} data-testid={`saved-load-${s.saved_id}`}>
-                  Load
-                </button>
-                <a className="btn" href={`/api/v1/saved/${s.saved_id}`} target="_blank" rel="noreferrer">
-                  Open record
-                </a>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
