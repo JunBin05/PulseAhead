@@ -1,5 +1,52 @@
 # HANDOFF: PulseAhead build
 
+## START HERE (2026-10-11, end of session) - supersedes everything below
+
+**Where the code is**
+- Local clone: `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`, branch `pulseahead-mvp`, HEAD `f8cd69c` (plus this handoff commit).
+- Pushed to `xuzhe` remote (https://github.com/Xuzhe123-cmd/PulseAhead, branch `pulseahead-mvp`) and to `origin` (https://github.com/JunBin05/PulseAhead) as branch **`xuzhe-demo-redesign`**. Pushing to JunBin's `pulseahead-mvp` returns 403; use the new branch (or a PR).
+- Commit identity: `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit ...` with the attribution trailer the session gives.
+
+**How to run**
+1. `cd frontend && npm run build`.
+2. From the repo root: `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000` (never `--reload`; restart after Python edits).
+3. Open http://127.0.0.1:8000/ and press **Start guided demo**. Quick pace runs beats A to F in about 25 s; Pitch is 25 s per beat.
+
+**State of the product (all synthetic)**
+- **Engine:** `flow-5`. Three reserve actions are built: ward coordination, diagnostic reserve slot (lab or imaging), and staffed surge space. Four interventions are "not modeled". Seed 7 normal = 705 events / 59 patients (checked by every smoke).
+- **Forecast:** `mc-flow-2`, warning threshold 0.6 and reactive trigger Building, both chosen on development/tuning seeds and frozen.
+- **Held-out run, test seed [1], once (flow-4, before the surge action):**
+  - 12 of 29 episodes warned early, 11 late only, 6 missed.
+  - 0.29 false warnings per shift (target 1, met).
+  - PulseAhead 34,331 vs tuned reactive 33,584 vs no action 36,785 patient-min: it beats no action, not the reactive baseline.
+  - Test seeds [0] and [1] are both seen; the API refuses other test seeds.
+- **Demo case:** mixed-cascade demo-partition seed 3052 (`backend/pulseahead/demo_case.json`, from `python -m pulseahead.demo_scan`).
+  - Staffed-space overload: alert at T+04:45 with a 66% chance, counts onset T+05:46, 61 min lead.
+  - Drivers: blocked beds and diagnostics. Best action: imaging reserve slot; surge space supported #2.
+- **UI:** dark control-room theme (`frontend/src/theme.css`, `tokens.css`), KPI row (`shell/KpiRow.tsx`), run bar, story stage with charts (`Demo.tsx`), left tabs Resources/Data/Runs, right tabs Zone/Act. `UX_REDESIGN_BRIEF.md` describes the end-to-end UX for the planned Mobbin redesign.
+
+**Verified last:** smokes `demo`, `surge`, `robustness`, `11`, `14`, `17`, `waits` all pass. A full A-F demo ran in Playwright with no errors. Widths 375/768/1024 have no horizontal scroll and no button under 44 px.
+
+**Not done / next, in order**
+1. Re-run regression 01 (`evidence/01-regression.playwright-mcp.js` via Playwright MCP `browser_run_code_unsafe` with `filename`) and `evidence/18-smoke.mjs` on the redesign. Fix anything they break.
+2. Re-run the 28-shift demo-partition evaluation (`node evidence/demo-partition-eval.mjs`). The policies now include the surge action; report the numbers as measured.
+3. Beat F still shows the flow-4 held-out result: label that plainly in the UI. A fresh held-out run on test seed [2] is a decision for the user.
+4. Polish for the pitch:
+   - shorten the long caption lines in beats C-E;
+   - the Act tab's compare panel is still text-heavy; make the top action a decision card;
+   - make the alert list into cards;
+   - add a 2D-list-view check.
+5. Measure 200 dots at 30 fps; re-run the code-review gate on `f8cd69c`.
+6. Owner items: hosting (ticket 21, needs an authorized target), timed 3-minute rehearsal (ticket 22), non-expert comprehension check.
+
+**Rules that must hold:**
+- No mocked numbers or forced Best action; every caption number comes from an API response.
+- The Synthetic label is always visible.
+- Bump `ENGINE_VERSION` on any engine change.
+- Never tune on test seeds.
+- Run smokes against the real :8000 backend.
+- Keep the `data-testid` hooks.
+
 ## Functional demo + dark control-room redesign (latest)
 
 - **Engine flow-5:** new staff-approved action "Staffed surge space" (reserve space X1 with reserve nurse XN, owner ED nurse in charge, review 5 / setup 20 / active 60). No change without an approved action: seed 7 normal still 705 / 59. Smoke: `evidence/surge-smoke.mjs` (all pass).
