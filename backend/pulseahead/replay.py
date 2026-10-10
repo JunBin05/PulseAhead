@@ -1274,10 +1274,12 @@ class ReplayStore:
             session.advance(min(MAX_ADVANCE_MIN, target - session.engine.now))
         got = list(session.engine.gate.received)
         if len(got) != record["event_count"] or digest_events(got) != record["event_digest"]:
-            raise SavedRunMismatch(
-                f"saved run {record['saved_id']} does not reproduce: {len(got)} events rebuilt, "
-                f"{record['event_count']} saved"
+            why = (
+                f"{len(got)} events rebuilt, {record['event_count']} saved"
+                if len(got) != record["event_count"]
+                else f"all {len(got)} events rebuilt but their digest differs from the saved digest"
             )
+            raise SavedRunMismatch(f"saved run {record['saved_id']} does not reproduce: {why}")
         session.saved_run = {
             "id": record["saved_id"],
             "label": record["label"],

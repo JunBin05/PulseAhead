@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10 (tickets 01-08 done; the 03-06 review gate is closed and committed as `b4e7f5a review: fixes after ticket 03-06 gate`; tickets 07 and 08 are committed on top). Ticket 09 is IN PROGRESS and UNCOMMITTED (see "Ticket 09 WIP" below); HEAD is `24f24d7`. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-10 (tickets 01-09 done; the 03-06 review gate is closed and committed as `b4e7f5a review: fixes after ticket 03-06 gate`; tickets 07, 08 and 09 are committed on top). HEAD is the commit `ticket 09: Generate varied shifts and reproduce saved replays`. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -27,10 +27,10 @@ Updated 2026-10-10 (tickets 01-08 done; the 03-06 review gate is closed and comm
 | 06 Local overload vs ED congestion | **done**: 8/8 pass; review gate for 03-06 closed, fixes re-verified (see "Review gate state") | `evidence/06-zone-pressure-and-ed-congestion.md`, `evidence/06-pressure.playwright-mcp.js`, `evidence/06-ui.playwright-mcp.js`, `evidence/shots/06-*.png` |
 | 07 Zone drawers and camera | **done**: 7/7 pass (no review gate due) | `evidence/07-zone-drawers-and-camera.md`, `evidence/07-zones.playwright-mcp.js`, `evidence/07-ease.playwright-mcp.js`, `evidence/shots/07-*.png` |
 | 08 Fresh, noisy, missing and invalid inputs | **done**: 7/7 pass (no review gate due) | `evidence/08-received-data-and-robustness.md`, `evidence/08-feeds.playwright-mcp.js` (PART `A` and `B`), `evidence/shots/08-*.png` |
-| 09 Scenario families and saved runs | **in progress, uncommitted**: code written and built, nothing verified through Playwright MCP yet, no evidence file, no ticks | n/a |
+| 09 Generate varied shifts and reproduce saved replays | **done**: 7/7 pass (no review gate due); two caveats owned by later tickets (no-effective-action ranking, empty choices/forecast settings) | `evidence/09-synthetic-scenarios-and-save-load.md`, `evidence/09-scenarios.playwright-mcp.js` (PART `A`, `B`), `evidence/09-save-load-ui.playwright-mcp.js`, `evidence/09-saved-persistence.playwright-mcp.js` (PART `A`, `B`), `evidence/09-critical-bypass.playwright-mcp.js`, `evidence/shots/09-diagnostic-zone3-overload.png` |
 | 10–22 | not started | n/a |
 
-Tickets 01 to 08 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
+Tickets 01 to 09 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
 
 ## Verified through Playwright MCP (all pass, production build on :8000)
 
@@ -89,7 +89,16 @@ Tickets 01 to 08 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
 - Optional feeds stale limit only their part; `missing_inputs` figures are `null` and read "Not current"; hidden fault schedule never in any response.
 - Regressions 01 to 05, 06 (pressure engine + seed7, ui, zone4, label geometry) and 07 all pass.
 
+**Ticket 09** (production build on :8000; API at 60-min steps to T+600, UI at 5-min steps):
+- Catalog: 7 families, warm-up 120 / scored 480, 1 development + 2 tuning + 4 test seeds each (disjoint), versions, no time windows in `/scenarios` or `/profile`.
+- Each family on a test seed to T+600: announcements before arrival, critical-bypass arrivals straight into zone 2, 2→3→2 diagnostic loops, and its bottleneck recomputed from `/events` (surge rate ratio, queue at onset against threshold, ward waiters with no suitable bed, overlapping episodes, early surge then quiet).
+- Hidden-field scan of `/state`, `/zones`, `/events`, `/ingest`, `/scenarios`, `/profile` at five times per family; disposition null until `decision_received`; hidden-future fixture pair identical at T+60 and T+70, different at T+120.
+- Save / page reload / Load: same events, counts, patients, announcements, zone, camera, speed; resume equals a fresh replay; Load while playing drops the playback; Reset clears label, dots, bubbles, drawer, camera; completed run labelled; tampered records refused (409); saved runs survive a backend restart.
+- Regressions 01 to 05, 06 (engine, seed7, ui, zone4, label geometry) and 07 pass on the final build.
+
 **Not verified yet (not-run), owned by later tickets:**
+- no-effective-action: that no staff-approved action shows a benefit (tickets 17 and 19; change the family parameters if a best action appears)
+- save/load of decisions, active actions and forecast settings (tickets 10 to 12 must populate `choices` and `settings.forecast` in the saved record and re-verify load)
 - 200-dot / 30 fps performance (ticket 20)
 - reduced-motion and 2D fallback (ticket 20; the camera jumps under reduced motion, checked in ticket 07)
 - forecast-based zone warnings (ticket 10)
@@ -158,7 +167,7 @@ Tickets 01 to 08 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
 
 ## Servers
 
-Currently running, started by this session (backend restarted after the ticket 06 build); stop them by killing the python and node processes:
+Currently running, started by this session (backend restarted after the ticket 09 build); stop them by killing the python and node processes:
 - **Backend:** uvicorn on 127.0.0.1:8000 (log `%TEMP%\pulse-backend.log`). It serves the built `frontend/dist` from the same origin. Sessions live in memory, so a restart loses them.
 - **Frontend dev:** Vite on 127.0.0.1:5173 (proxies `/api` to 8000). It was started by an earlier session and may still be running.
 
@@ -217,39 +226,28 @@ The `code-review` skill ran two reviewers (Standards, Spec) over `e69ceb6...3ecc
 - **Known limits:** external messages never move a patient (by design); a resumed feed's heartbeat shows hidden changes while the lost events stay gaps; observed-count noise is not modelled (ticket 18); `_sample` keeps 400 minutes per faulted session; `07-ease` was not re-run.
 - **Test-snippet lesson:** a Playwright snippet's source is echoed back in its result, so long snippets cost output tokens on every run; run only what the change touches plus 01.
 
-## Ticket 09 WIP (uncommitted, written 2026-10-10, UNVERIFIED except where stated)
+## Ticket 09 summary
 
-Ticket: `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/09-synthetic-scenarios-and-save-load.md` (7 criteria, all unticked). `git status` shows modified `.gitignore`, `backend/pulseahead/{api,engine,fixtures,profile,replay}.py`, `frontend/src/{App.tsx,api.ts,app.css,types.ts}` and new `backend/pulseahead/saved.py`. `tsc` and `npm run build` pass; the backend on :8000 was restarted with the latest backend code (restart it anyway if unsure).
-
-**What is built**
-- **`profile.py`:** `SCENARIOS` holds the seven families (`normal`, `busy-recovers`, `arrival-surge`, `diagnostic-delay`, `boarding-blockage`, `mixed-cascade`, `no-effective-action`) as plain data: `surges` (arrival-rate segments for walk-ins and ambulances), `test_boosts`, `turnaround_scales`, `disposition_boost`, `ward_beds`, `staffing`. Also `WARMUP_MIN=120`, `SCORED_MIN=480`, `ENGINE_VERSION`, `CATALOG_VERSION`, per-family `seed_partitions` (development [7], tuning 1000+10i+1/2, test 2000+10i+1..4), `seed_partition()`, `scenario_catalog()` (qualitative; no time windows), `SCENARIO_PARAM_KEYS`. Demo roles: `arrival-surge` = recovering short surge, `diagnostic-delay` = diagnostic-backlog demo, `boarding-blockage` = ward blockage, `no-effective-action` = honest no-help case.
-- **`engine.py`:** `_segment_mult`, `_rate_ceiling`, `_adjust` (extra or slower tests and heavier admissions, keyed by seed and identity), thinned ambulance stream when a scenario has `surges` or `rate_ceiling`. The default path is bit-identical: `normal` seed 7 still gives 705 events and 59 patients over 720 min (checked after the change).
-- **`fixtures.py`:** `fixture-hidden-future-a` and `-b` (same seed, same `rate_ceiling`; only B has a surge and imaging backlog from T+75), to show observation responses cannot depend on the future.
-- **`replay.py`:** `run_record()` (profile snapshot, scenario parameters, warm-up/scored, seed partition, versions; also in `/export` as `run_record`), `save(ui, settings)`, `ReplayStore.load(record)` (rebuilds from the seed to the saved time and refuses with `SavedRunMismatch` unless the received-event digest matches), `digest_events`, snapshot field `saved_run` (null unless loaded; cleared on reset).
-- **`saved.py`:** JSON files in `backend/saved_runs/` (git-ignored), so they survive a backend restart.
-- **`api.py`:** `GET /api/v1/scenarios`, `POST /api/v1/replays/{id}/save` (body `{ui:{selected_zone,camera,view_mode}, settings:{speed,step_min}}`), `GET /api/v1/saved`, `GET /api/v1/saved/{id}`, `POST /api/v1/saved/{id}/load` (409 on mismatch). `/api/v1/profile` now lists only id, name, family and description per scenario.
-- **Frontend:** `DemoPanel` in the sidebar (testids `scenario-select`, `scenario-desc`, `scenario-pending`, `loaded-run`, `run-record`, `run-warmup`, `run-seed`, `run-versions`, `save-run`, `save-note`, `saved-list`, `saved-<id>`, `saved-load-<id>`). Start uses the selected scenario, Reset applies it; `save` and `load` restore selected zone, camera and speed. The selector is disabled when `?fixture=` is set.
-
-**Probe results so far (exploratory, not evidence)**
-- All seven families run for 600 min on every seed in their partitions. `diagnostic-delay`: imaging overload by T+65..132 on all 7 seeds. `boarding-blockage`: confirmed `ward_beds` episode T+95..213 on all 7. `mixed-cascade`: imaging and ward beds (mixed = true) on all 7. `arrival-surge`: a triage episode that clears on all 7. `busy-recovers`: pressure that clears (seed 7 is the mildest, arrival ratio 1.26 against 2.2 to 3.5 on others). `no-effective-action` (7.0x walk-ins and 3.5x ambulances for T+0..45, then 0.5x): a triage episode that clears (latest clear T+194) on all 7 seeds.
-- **Known:** plain `normal` is not always quiet over 600 min (imaging or ward beds overload on 4 of 7 seeds); this comes from earlier tickets' assumptions and was not changed. The UI uses the default seed 20261010, which is in no partition ("custom").
-
-**Still to do for ticket 09**
-1. Write `evidence/09-synthetic-scenarios-and-save-load.md` and `evidence/09-scenarios.playwright-mcp.js` (PART A API, PART B UI and save/load). Planned checks:
-   - Catalog: 7 ids, warm-up 120 and scored 480, development [7], 2 tuning and 4 test seeds per family, partitions disjoint, versions present, no time windows (`surges`, `start`, `free_at_min`) in the catalog.
-   - Per family on a test seed: received inbound announcements, critical-bypass arrivals, diagnostic loops (review after tests), and the family's bottleneck recomputed from `/events` (arrival-rate ratio inside vs outside the surge window; zone 3 queue at the overload onset; ward-bed waiters with no suitable bed; mixed categories; early triage episode cleared).
-   - Hidden-field scan of `/state`, `/zones/1..4`, `/events`, `/ingest`, `/scenarios`, `/profile` (forbidden: `surges`, `test_boosts`, `turnaround_scales`, `disposition_boost`, `free_at_min`, `rate_ceiling`, `feed_faults`, `injections`, `missing_inputs`; `disposition` must be null until `decision_received`).
-   - Forecast-isolation precursor: fixtures hidden-future A and B give identical state, zones, events and ingest (ignoring replay id and scenario name) at T+60 and T+70, and differ at T+120.
-   - `export.run_record`: profile resources, ward bed schedule, assumptions, scenario parameters, warm-up/scored, seed partition, versions; equal to `/api/v1/profile` assumptions and `/scenarios` versions.
-   - Save/load through the UI: pick `diagnostic-delay`, Start, step to T+90, open zone 3, Save; reload the page; Load; check time, version, dot count, `saved_run` label, zone and camera restored, saved events equal the rebuilt replay's `/events`; step on and compare with a fresh replay advanced the same amount; loading drops a slow in-flight advance; a completed (T+600) run is labelled "Completed synthetic run" and carries `results.time_summary`; a tampered saved file (copy a record, change `event_digest`) returns 409 and nothing is approximated; saved runs survive a backend restart.
-2. Add open question **Q9** to `OPEN_QUESTIONS.md`: family definitions as parameter sets; seed partitions (development, tuning, test numbering); warm-up and scored are recorded only (a run still starts empty at T+0); no-effective-action is a surge that passes before an action could land (its "no action shown to help" is verified by tickets 17 and 19, not here); the catalog hides time windows while the saved record carries them; saved runs persist as files and are verified by event digest.
-3. Run regression: `01` always; `02` to `05`, `06-pressure` (engine and seed7), `06-ui`, `06-zone4-layout`, `06-label-geometry`, `07-zones` because response shapes (`saved_run`, `run_record`) and the sidebar changed. Stage snippets by stripping the leading `//` lines with a node script (UTF-8, no BOM) into `Prototype/.playwright-mcp/`.
-4. Tick the ticket checkboxes only for criteria whose evidence passed; set the ticket status; update this file; commit `ticket 09: Generate varied shifts and reproduce saved replays` with the attribution trailer from the session's system reminder.
+- **Backend:**
+  - `profile.py`: `SCENARIOS` holds the seven families as plain data (arrival-rate `surges`, `test_boosts`, `turnaround_scales`, `disposition_boost`, `ward_beds`, `staffing`), `WARMUP_MIN` 120, `SCORED_MIN` 480, `ENGINE_VERSION` `flow-3` (bump it on any engine change), `CATALOG_VERSION`, per-family `seed_partitions` (development [7], tuning `1000+10i+1/2`, test `2000+10i+1..4`), `seed_partition()`, `scenario_catalog()` (no time windows).
+  - `engine.py`: `_segment_mult`, `_rate_ceiling`, `_adjust`; the default path is bit-identical (seed 7 normal: 705 events, 59 patients).
+  - `fixtures.py`: `fixture-hidden-future-a` / `-b`.
+  - `replay.py`: `run_record()` (also `export.run_record`), `save()`, `ReplayStore.load()` (rebuild from seed, event count and SHA-256 digest, `SavedRunMismatch` -> 409), snapshot field `saved_run`.
+  - `saved.py`: JSON files in `backend/saved_runs/` (git-ignored).
+  - `api.py`: `GET /api/v1/scenarios`, `POST /replays/{id}/save`, `GET /saved`, `GET /saved/{id}`, `POST /saved/{id}/load`.
+- **Frontend:** `DemoPanel` in the sidebar (scenario selector, run record, Save, saved list, Load, "Open record"). Start uses the selected scenario, Reset applies it. The selector is disabled under `?fixture=`. Load restores selected zone, camera and speed.
+- **Evidence:** 7/7 criteria pass (`evidence/09-synthetic-scenarios-and-save-load.md`). Open question Q9 records the decisions.
+- **Known limits:**
+  - `GET /saved/{id}` (the "Open record" link) shows the scenario's hidden time windows; that is evidence, not an observation response.
+  - `choices` and `settings.forecast` are empty until tickets 10 to 12.
+  - The selector clips the demo role and the "Warm-up / scored" label wraps (ticket 20).
+  - Plain `normal` can show an imaging or ward-bed episode within 600 min.
+- **Snippet staging lesson:** a snippet's echo is the whole source, so ticket 09's evidence is split into small files; use a helper that strips the leading `//` lines and sets `PART` (UTF-8, no BOM).
 
 ## Exact next steps
 
-1. Finish ticket 09 from "Ticket 09 WIP" above (the code exists; verification, Q9, evidence, ticks and the commit remain). Run `git diff --stat` first and re-check the claims there before trusting them.
-2. Continue in blocker order: 09 -> 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
+1. Start ticket 10 (forecast-based zone warnings; read its ticket file, the spec and Q9 first). Ticket 09 is committed and verified.
+2. Continue in blocker order: 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
 3. **Stop before ticket 21** (hosting): ask the user for an authorized target. Ticket 22's rehearsal and the organizer check stay with the user.
 4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow or layout changed, the `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition` and `06-*` snippets, plus `07-zones`. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`: stage them with the leading `//` lines removed, as UTF-8 without a BOM (PowerShell `Get-Content`/`Set-Content` re-encodes the middle dot and adds a BOM; use `node`). For `06-pressure`, also set `PART`.
 

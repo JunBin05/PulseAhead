@@ -111,3 +111,20 @@ Spec §Data: "Process ... only when received", "Missing essential information or
 - **Patients are shown as the received events describe them**, each from the one-minute sample at their newest received event.
 
 **Alternative not taken:** let an outside valid transition move a patient (a second write path into the state); treat any stale optional feed as Cannot assess for the whole ED.
+
+## Q9. How are the seven scenario families defined, partitioned, saved and reloaded? (ticket 09)
+
+Spec §Scenarios and ticket 09: seven retained families, "seed partitions", "warm-up/scored duration", "workload variants", "save/load replay identity ... and completed results", and "Normal state/zone/ETA responses never expose hidden replay schedules". The spec gives no family parameters, no seed numbering and no storage format.
+
+**Working decision:**
+- **Families are parameter sets.** Each family is plain data in `profile.py` `SCENARIOS`: arrival-rate segments for walk-ins and ambulances, extra or slower tests, a heavier admission mix, a ward-bed release schedule and a nurse roster. The engine reads them through one path, so replay and forecast share it. Plain `normal` is unchanged (seed 7: 705 events, 59 patients over 720 min).
+- **Demo roles.** `diagnostic-delay` = the diagnostic-backlog demo (imaging overload confirmed at T+92 on test seed 2033; zone 3 reads Overloaded at T+95 on the UI default seed), `arrival-surge` = the recovering short surge, `boarding-blockage` = the ward blockage, `no-effective-action` = the honest no-effective-action case.
+- **Seed partitions** per family `i` (in listing order): development `[7]`, tuning `1000+10i+1` and `+2`, test `2000+10i+1` to `+4`. A seed outside the lists is labelled "custom" (the UI default 20261010 is custom); a fixture is labelled "fixture".
+- **Warm-up (120 min) and scored (480 min) are recorded, not simulated differently.** A run still starts empty at T+0 and is treated as completed at T+600. The windows travel with the run record for the later evaluation tickets.
+- **No-effective-action is a surge that passes before an action could land** (7x walk-ins and 3.5x ambulances for 45 min, then half the baseline). Ticket 09 verifies only that the scenario has this shape and that its episode clears. That no staff-approved action shows a benefit is a ranking result: tickets 17 and 19 must verify it, and must change the parameters if a best action appears.
+- **Hidden future vs. evidence.** `/api/v1/scenarios` and `/api/v1/profile` name each family's kind of variant but not its time windows. The windows (and the ward-bed release schedule) are the replay's hidden future: they appear only in the export (`export.run_record`, and the bed schedule also in `export.profile`) and in saved-run records, never in `/state`, `/zones`, `/events`, `/ingest`, `/profile` or `/scenarios`.
+- **Saved runs are files** under `backend/saved_runs/` (git-ignored), so they survive a backend restart. A record holds the received events, announcements, choices (empty until action tickets exist), simulation settings (forecast settings are null until ticket 10), selected zone and camera, the run record and, for a finished shift, results.
+- **Load rebuilds from the seed and verifies.** Loading replays the saved scenario and seed to the saved time and compares the received events by count and SHA-256 digest. A record that does not reproduce is refused with 409 and a reason; nothing is approximated. A loaded run is a new replay with a `saved_run` label ("Saved in-progress synthetic run" or "Completed synthetic run"); a reset clears it.
+- **Plain `normal` is not always quiet over 600 min.** In an exploratory probe of 7 seeds, 4 had an imaging or ward-bed overload at some point, a consequence of earlier tickets' disclosed assumptions (Q5, Q6). Not changed.
+
+**Alternative not taken:** store hidden windows in the catalog and hide them in the UI only; store the full engine state in the saved file instead of rebuilding from the seed and checking a digest.
