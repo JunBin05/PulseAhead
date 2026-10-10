@@ -120,7 +120,7 @@ def main() -> int:
 
     shifts = []
     for family, info in SCENARIOS.items():
-        for part in ("development", "tuning"):
+        for part in ("development", "tuning", "demo"):
             for seed in info["seed_partitions"][part]:
                 log(f"shift {family} {part} seed {seed}")
                 shifts.append(scan_shift(family, seed, part, log))
@@ -137,7 +137,7 @@ def main() -> int:
     cands.sort(key=rank)
     result = {
         "kind": "demo_case_scan", "engine_version": ENGINE_VERSION, "forecast_model": fcast.MODEL_VERSION,
-        "warning_threshold": fcast.WARNING_THRESHOLD, "partitions": ["development", "tuning"],
+        "warning_threshold": fcast.WARNING_THRESHOLD, "partitions": ["development", "tuning", "demo"],
         "min_lead_min": MIN_LEAD_MIN, "driver_rules": demo_case.DRIVER_RULES,
         "ranking": "more supported drivers, then best_action over supported_not_top, then overall status Stable, "
                    "then longer lead, then lower seed",
@@ -156,7 +156,7 @@ def main() -> int:
             for c in sh["candidates"]:
                 reasons[c["reason"]] = reasons.get(c["reason"], 0) + 1
         (EVIDENCE / "demo-case-scan.md").write_text(
-            "# Demo case scan (development and tuning seeds only)\n\n"
+            "# Demo case scan (non-test seeds only: development, tuning, demo)\n\n"
             f"Scanned {len(shifts)} shifts at warning threshold {fcast.WARNING_THRESHOLD} (model {fcast.MODEL_VERSION}). "
             "**No episode qualified** (lead >= 30 min, >= 2 supported drivers, a feasible supported action). "
             "No demo case is written; the demo reports that honestly.\n\n"
@@ -184,7 +184,7 @@ def main() -> int:
         },
     }
     demo_case.CASE_FILE.write_text(json.dumps(chosen, indent=1), encoding="utf-8")
-    md = ["# Demo case scan (development and tuning seeds only)", "",
+    md = ["# Demo case scan (non-test seeds only: development, tuning, demo)", "",
           f"Scanned {len(shifts)} shifts, forecast every {ev.STEP_MIN} min at {ev.SAMPLES} futures; "
           f"{len(cands)} qualifying early-warned episodes (lead >= {MIN_LEAD_MIN:.0f} min, >= 2 supported drivers, "
           "a feasible supported action for the alerted zone).", "", "## Chosen", "", chosen["why"], "",

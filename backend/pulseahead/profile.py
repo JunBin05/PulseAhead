@@ -201,7 +201,7 @@ WARMUP_MIN = 120
 SCORED_MIN = 480
 
 ENGINE_VERSION = "flow-4"
-CATALOG_VERSION = "1"
+CATALOG_VERSION = "2"  # 2: adds the non-test "demo" seed partition (demo-case selection only)
 
 # Seven retained scenario families (spec: normal shifts, busy shifts that recover, arrival surges,
 # diagnostic delays, boarding blockages, mixed cascades, no-effective-action cases). Each is plain
@@ -326,6 +326,8 @@ def _partitions(index: int) -> dict[str, list[int]]:
         "development": [7],
         "tuning": [1000 + 10 * index + 1, 1000 + 10 * index + 2],
         "test": [2000 + 10 * index + k for k in (1, 2, 3, 4)],
+        # Extra non-test seeds used only to look for a demo case under frozen settings; never tuned on.
+        "demo": [3000 + 10 * index + k for k in (1, 2, 3, 4)],
     }
 
 

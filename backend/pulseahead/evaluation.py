@@ -41,7 +41,7 @@ COORDINATOR = act.DEMO_COORDINATOR
 # The held-out partition is "test"; seed index 0 was evaluated and its results seen before any tuning, so
 # the one frozen-settings evaluation uses index 1.
 TEST_SEED_INDEX = 1
-PARTITIONS = ("development", "tuning", "test")
+PARTITIONS = ("development", "tuning", "demo", "test")
 # Reactive baseline: the owner approves a feasible action once its service is at one of these states.
 REACTIVE_TRIGGER = "building"  # chosen with the threshold on development/tuning seeds (evidence/tuning-results.md)
 REACTIVE_STATES = {"overloaded": {"overloaded"}, "building": {"building", "overloaded"}}
