@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
+import { AnalystPanel } from './Analyst';
 import { clock } from './Forecast';
 import { IconCheck, IconClock, IconOctagon, IconTriangle } from './icons';
 import type {
@@ -546,6 +547,16 @@ export function ComparePanel({
           </article>
         ))}
       {cmp?.status === 'ok' && <WhatIf cmp={cmp} a={whatA} b={whatB} onA={setWhatA} onB={setWhatB} />}
+      {cmp?.status === 'ok' && (
+        <AnalystPanel
+          snap={snap}
+          samples={samples}
+          cmpRows={cmp.actions}
+          stale={stale}
+          busy={sending || !!openReq || !!fl}
+          onRequest={(row) => void request(row)}
+        />
+      )}
       {note && (
         <p className="request-message" role="alert" data-testid="request-note">
           <IconTriangle /> {note}

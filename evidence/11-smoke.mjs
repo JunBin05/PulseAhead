@@ -40,7 +40,7 @@ check('ward coordination is feasible from received state', st.actions.catalog[0]
 check('approvers come from ownership: Ward supervisor / bed manager (zone 4 service)',
   st.actions.catalog[0].owners.length === 1 && st.actions.catalog[0].owners[0] === OWNER);
 check('not-modeled presets are listed and cannot be requested',
-  st.actions.not_modeled.length === 4 && (await j(`/replays/${id}/requests`, { preset: 'reserve_physician' })).s === 422);
+  st.actions.not_modeled.length === 3 && (await j(`/replays/${id}/requests`, { preset: 'reserve_physician' })).s === 422);
 
 // 2. Paired comparison.
 const cmp = await j(`/replays/${id}/compare`, { samples: 50, expected_version: st.version });

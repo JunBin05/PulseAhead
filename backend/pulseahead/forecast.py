@@ -389,7 +389,10 @@ class Future:
         self.ticks: list[tuple[float, int, int, dict[str, int], int, int]] = []
         self._known_cum = 0
         self._bg_cum = 0
-        self._res = {"allocation": self.allocation, "lab": self.lab, "imaging": self.imaging}
+        self._res = {
+            "allocation": self.allocation, "lab": self.lab, "imaging": self.imaging,
+            "transport": self.transport, "discharge": self.discharge,
+        }
         # An action already in flight (received) and the action being compared both change one service's
         # capacity at a time from now; occupied work always drains (a slot is never taken from a task).
         fl = inp.get("in_flight")

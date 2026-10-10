@@ -1343,3 +1343,53 @@ p {
 .run-bar .segmented button {
   min-width: var(--target);
 }
+
+/* LLM analyst: cited causes, priced proposals, untested ideas */
+.analyst {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.analyst h3,
+.analyst h4 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.analyst-list {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analyst-list > li {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.analyst-list.untested > li {
+  border-style: dashed;
+}
+
+.analyst-cites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.analyst-cites code {
+  padding: 0 var(--s-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}

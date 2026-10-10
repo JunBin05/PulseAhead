@@ -1,4 +1,5 @@
 import type {
+  AnalysisResult,
   ActionRequest,
   ComparisonResult,
   DemoCase,
@@ -88,6 +89,12 @@ export const api = {
  /** No action against each feasible action on the same keyed futures, for the state at `version`. */
   compare: (id: string, samples: number, version: number) =>
     request<ComparisonResult>(`/replays/${id}/compare`, {
+      method: 'POST',
+      body: JSON.stringify({ samples, expected_version: version }),
+    }),
+  /** LLM analyst for the state at `version`: cited causes, priced proposals, untested ideas. */
+  analysis: (id: string, samples: number, version: number) =>
+    request<AnalysisResult>(`/replays/${id}/analysis`, {
       method: 'POST',
       body: JSON.stringify({ samples, expected_version: version }),
     }),

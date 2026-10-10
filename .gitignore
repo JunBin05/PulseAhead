@@ -7,3 +7,5 @@ run-artifacts/
 .playwright-mcp/
 *.log
 backend/saved_runs/
+
+.env

@@ -71,6 +71,16 @@ PROFILE: dict[str, Any] = {
             "name": "Reserve imaging slot", "active": False,
             "note": "One extra imaging slot. Turnaround per test is unchanged; results are never manufactured.",
         },
+        "transport_reserve_slot": {
+            "unit": "TR2", "service": "transport", "owner_key": "transport",
+            "name": "Reserve transport team", "active": False,
+            "note": "One extra transport slot. Each transfer takes as long as before; it never creates a ward bed or a clinical clearance.",
+        },
+        "discharge_reserve_slot": {
+            "unit": "DP3", "service": "discharge", "owner_key": "discharge_processing",
+            "name": "Reserve discharge-processing slot", "active": False,
+            "note": "One extra home-discharge processing slot. It never creates a clinical clearance; only already-cleared patients use it.",
+        },
         # Declared reserve space X1 (a staffed cubicle kept closed) and its reserve nurse XN. Opening it adds
         # one staffed general ED space; it is never a ward bed and never clears a patient.
         "ed_surge_space": {

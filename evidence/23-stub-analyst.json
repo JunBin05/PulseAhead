@@ -1,0 +1,24 @@
+{
+  "causes": [
+    {"statement": "Decided Ward/ICU transfers are waiting on the single transport team while disposition work is otherwise moving.",
+     "confidence": "supported", "cited": ["service.transport.queue", "zone.4.awaiting_transport", "service.nonexistent.queue"]},
+    {"statement": "A second pressure may be building from announced arrivals, but no cited evidence supports it.",
+     "confidence": "supported", "cited": []},
+    {"statement": "Diagnose the waiting patient as septic and prescribe antibiotics.",
+     "confidence": "possible", "cited": ["zone.4.queue"]}
+  ],
+  "proposals": [
+    {"title": "Use the reserve transport team", "rationale": "Decided patients are waiting for transport; the declared reserve adds one transport slot.",
+     "kind": "reserve", "reserve": "transport_reserve_slot", "cited": ["service.transport.queue"]},
+    {"title": "Use the reserve ward-allocation coordinator", "rationale": "Allocation work may be the blockage.",
+     "kind": "reserve", "reserve": "ward_allocation_coordinator", "cited": ["zone.4.queue"]},
+    {"title": "Use the reserve transport team and the reserve discharge slot together", "rationale": "Combination of two reserves; only one action can run at a time.",
+     "kind": "idea", "reserve": null, "cited": ["zone.4.queue"]},
+    {"title": "Ask day surgery to open its corridor as overflow holding", "rationale": "A process change the model has no resource for.",
+     "kind": "idea", "reserve": null, "cited": []},
+    {"title": "Open an overflow corridor", "rationale": "Would save 25 minutes of waiting.",
+     "kind": "idea", "reserve": null, "cited": []},
+    {"title": "Discharge patient G3 early", "rationale": "Reduce the queue.",
+     "kind": "idea", "reserve": null, "cited": []}
+  ]
+}

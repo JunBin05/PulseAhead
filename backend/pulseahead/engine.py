@@ -647,6 +647,8 @@ class EDEngine:
             "allocation": (self.allocation, self.free_allocation),
             "lab": (self.lab, self.free_lab),
             "imaging": (self.imaging, self.free_imaging),
+            "transport": (self.transport, self.free_transport),
+            "discharge": (self.discharge, self.free_discharge),
         }[service]
 
     # -- staffed surge space (one declared reserve space with its reserve nurse) -----------------
@@ -1114,7 +1116,7 @@ class EDEngine:
             self._set_phase(p, "disposition_processing")
             yield self.env.timeout(p.disposition_min)
             self.discharge.release(req)
-            self.free_discharge.append(p.disp_unit)
+            self._give_back(self.free_discharge, p.disp_unit)
             p.disp_unit = None
         else:
             # Ward/ICU transfer: a suitable bed (reserved for the transfer), allocation work and
@@ -1140,7 +1142,7 @@ class EDEngine:
             self._set_phase(p, "in_transport")
             yield self.env.timeout(p.transport_min)
             self.transport.release(req)
-            self.free_transport.append(p.disp_unit)
+            self._give_back(self.free_transport, p.disp_unit)
             p.disp_unit = None
         # Physical departure: the only point where the ED space is released.
         pool.release(p.space_id)
