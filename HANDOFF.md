@@ -1,5 +1,13 @@
 # HANDOFF: PulseAhead build
 
+## Update after the remaining-gaps pass (latest)
+
+- **Demo case:** a non-test `demo` seed partition (3001-3004 per family, catalog version 2) widened the scan to 49 non-test shifts at the frozen threshold. 5 episodes have 2+ supported drivers and 30+ min lead, but all are staffed-space overloads, for which no action preset exists, so none qualifies. The demo still stops honestly at beat A. A real fix needs a third intervention (staffed surge spaces, "not modeled"), not a relaxed rule.
+- **Robustness suite:** `evidence/robustness-smoke.mjs` passes (stale essential feed gives Cannot assess; optional-feed gaps blind only their service; duplicate, out-of-order and invalid inputs keep the forecast assessable).
+- **Simple-flow baseline** (`evidence/simple-flow-baseline.md`, dev/tuning, in-sample for the Monte Carlo threshold): lambda>mu rule 18/42 early, 5.19 false warnings per shift; Monte Carlo 0.6: 25/42 early, 0.86.
+- **Spread on 28 non-test demo-partition shifts** (`evidence/demo-partition-eval.md`, frozen settings): 49 of 77 episodes early, 22 late, 6 missed; 0.82 false warnings per shift; PulseAhead below no action in 25 of 28 shifts and below the tuned reactive baseline in 19 of 28 (130,329.6 vs 130,730.9 patient-min total). That is a small edge on separate seeds, unlike the held-out test [1] result where reactive was ahead; both are descriptive.
+- Not done: code review gate (/code-review), 200-dot / 30 fps measurement, hosting (ticket 21), rehearsal (ticket 22).
+
 ## Priority 2 outcome (read first): tuned and frozen, held-out run done, demo has no qualifying case
 
 Threshold 0.6 and reactive trigger Building were chosen on development/tuning seeds only and frozen (forecast model mc-flow-2; engine flow-4 unchanged). The held-out run on test seed [1] (once, id 73ec843aaf) is in `evidence/heldout-test1.md`: false warnings 0.29 per shift (met), 12 of 29 episodes early, 11 late only, 6 missed; PulseAhead 34,331.1 vs reactive 33,584.3 vs no action 36,785.2 patient-min, so PulseAhead beats no action but not the tuned reactive baseline. Test [1] is now seen. **Decision for the user:** with threshold 0.6 the demo scan finds no qualifying case, so beat A stops honestly and beat F shows the measured evidence. Options: keep that, or accept a demo case from a provisional-threshold scan (busy-recovers 1011, evidence/demo-case-scan-threshold-0.4.md, labelled as not the frozen model), or relax the two-driver rule. Not done silently. Regression 01 passed on the final build. Saved replays from mc-flow-1 no longer load (by design).

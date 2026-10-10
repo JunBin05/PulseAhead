@@ -146,7 +146,7 @@ console.log(`NOTE  reserve unit ${top.reserve.unit} completed ${used} test(s); o
 const lat = await get('/evaluations/latest');
 const dir = join(ROOT, 'backend', 'saved_runs', 'evaluations');
 const files = readdirSync(dir).filter((x) => x.endsWith('.json')).map((x) => JSON.parse(readFileSync(join(dir, x), 'utf8')));
-const newest = files.filter((x) => x.status === 'done').sort((a, b) => (a.created < b.created ? 1 : -1))[0];
+const newest = files.filter((x) => x.status === 'done' && (x.partition ?? 'test') === 'test').sort((a, b) => (a.created < b.created ? 1 : -1))[0];
 check('beat F: /evaluations/latest is the newest saved file, complete', lat.id === newest.id && lat.complete === true && lat.status === 'done', `${lat.id} ${lat.created}`);
 const g = lat.results.aggregate;
 check('beat F: episodes = early + late + missed; targets stated',

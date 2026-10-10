@@ -1,0 +1,14 @@
+PASS  staffing stop: every forecast while the essential feed is stale is Cannot assess  -- T+45:cannot_assess T+50:cannot_assess T+55:cannot_assess T+60:cannot_assess T+65:cannot_assess
+PASS  staffing stop: no chance, alert or low-risk reading is shown while Cannot assess
+PASS  staffing stop: overall status label also reads Cannot assess, not Stable  -- Cannot assess
+PASS  staffing stop: forecasts are available before and after the gap  -- 6 before, 6 after
+PASS  feed faults: forecast stays assessable throughout  -- 20 forecasts
+PASS  feed faults: duplicates, out-of-order and quarantined inputs are counted, outliers kept  -- {"accepted":162,"duplicates":11,"out_of_order":2,"quarantined":9,"outliers_kept":2}
+PASS  feed faults: every chance is a probability in [0, 1]
+PASS  optional stop: forecast stays ok (essential feeds are healthy)  -- 20 forecasts
+PASS  optional stop: lab and imaging read unknown (no chance) while their feed is stale  -- T+55:unknown/unknown T+60:unknown/unknown T+65:unknown/unknown T+70:unknown/unknown T+75:unknown/unknown
+PASS  optional stop: triage and assessment still have chances while diagnostics is blind
+PASS  diagnostics gap: imaging is unknown (never a low chance) while its queue feed is missing  -- 3 of 20 forecasts unknown for imaging: T+90,95,100
+PASS  diagnostics gap: lab keeps a numeric chance
+
+ALL PASS
