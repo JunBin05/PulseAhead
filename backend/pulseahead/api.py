@@ -16,6 +16,7 @@ from .fixtures import FIXTURES
 from .profile import (
     CATALOG_VERSION, ENGINE_VERSION, PROFILE, PROFILE_ID, SCENARIOS, SCORED_MIN, WARMUP_MIN, scenario_catalog,
 )
+from . import forecast as fcast
 from .replay import API_VERSION, MAX_ADVANCE_MIN, ReplayStore, SavedRunMismatch
 
 app = FastAPI(title="PulseAhead synthetic ED twin", version=API_VERSION)
@@ -56,6 +57,12 @@ class SaveSettings(BaseModel):
 class SaveBody(BaseModel):
     ui: SaveUi = SaveUi()
     settings: SaveSettings = SaveSettings()
+
+
+class ForecastBody(BaseModel):
+    samples: Literal[50, 100] = 50
+    expected_version: int | None = None
+    zone: int | None = Field(default=None, ge=1, le=4)
 
 
 def _session(replay_id: str):
@@ -181,6 +188,27 @@ def load_saved(saved_id: str) -> dict:
     except SavedRunMismatch as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return session.snapshot()
+
+
+@app.post("/api/v1/replays/{replay_id}/forecast")
+def forecast(replay_id: str, body: ForecastBody | None = None) -> dict:
+    """Independent futures from the received state and history only (see forecast.py)."""
+    body = body or ForecastBody()
+    result, cached = _session(replay_id).forecast(body.samples, body.expected_version)
+    if result is None:
+        raise HTTPException(status_code=409, detail="state version changed; request a fresh forecast")
+    return {**result, "cached": cached}
+
+
+@app.post("/api/v1/replays/{replay_id}/forecast/explain")
+def forecast_explain(replay_id: str, body: ForecastBody) -> dict:
+    """Why one zone's alert appeared: received facts, model statements and a relaxed-constraint comparison."""
+    if body.zone is None or body.expected_version is None:
+        raise HTTPException(status_code=422, detail="zone and expected_version (the forecast's state version) are required")
+    out = _session(replay_id).forecast_explain(body.zone, body.samples, body.expected_version)
+    if out is None:
+        raise HTTPException(status_code=409, detail="no forecast is held for that state version; request a fresh one")
+    return out
 
 
 @app.get("/api/v1/replays/{replay_id}/ingest")

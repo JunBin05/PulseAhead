@@ -852,3 +852,119 @@ p {
   align-items: center;
   justify-content: center;
 }
+
+/* ---- forecast (ticket 10) -------------------------------------------------------------- */
+.fc-strip {
+  margin-bottom: var(--s-3);
+  padding: var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--status-unknown-ink);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--s-2);
+}
+
+.fc-strip[data-state='normal'] {
+  border-left-color: var(--status-normal-ink);
+}
+
+.fc-strip[data-state='pressure'] {
+  border-left-color: var(--status-pressure-ink);
+  background: var(--status-pressure-tint);
+}
+
+.fc-strip[data-state='overload'] {
+  border-left-color: var(--status-overload-ink);
+  background: var(--status-overload-tint);
+}
+
+.fc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+}
+
+.fc-grid dt {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.fc-grid dd {
+  margin: 0;
+  font-weight: 650;
+  font-size: var(--text-sm);
+}
+
+.fc-details summary {
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.fc-details ul {
+  margin: 0;
+  padding-left: var(--s-5);
+  font-size: var(--text-sm);
+}
+
+.fc-alerts {
+  margin-top: var(--s-4);
+}
+
+.fc-alerts h3 {
+  font-size: var(--text-sm);
+  margin: var(--s-3) 0 var(--s-2);
+}
+
+.fc-alerts ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+
+.fc-alert {
+  display: grid;
+  gap: var(--s-1);
+  width: 100%;
+  min-height: var(--target);
+  padding: var(--s-3);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.fc-alert:hover {
+  background: var(--surface-sunken);
+}
+
+.fc-alert[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.fc-alert-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-2);
+  align-items: center;
+}
+
+.zone-fc {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.fc-grid dd, .fc-alert span {
+  overflow-wrap: anywhere;
+}

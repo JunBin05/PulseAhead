@@ -163,6 +163,22 @@ def _congestion_script() -> dict[str, Any]:
 
 
 
+def _eta_private_script(arrive_min: float) -> dict[str, Any]:
+    # One announced ambulance (ETA 40, uncertainty 5). Only the private arrival time differs between the
+    # two fixtures, so their received state is identical until the earlier one arrives.
+    return {
+        "walk_ins": [
+            (2.0, "W01", _walk_in("medium", 3)),
+            (2.0, "W02", _walk_in("lower", 4)),
+            (2.0, "W03", _walk_in("urgent", 2, 10.0)),
+        ],
+        "ambulances": [
+            AmbulanceRun("A01", 5.0, 40.0, 5.0, [_amb("A01", "medium", 3), _amb("A01", "lower", 4)], True,
+                         arrive_min=arrive_min),
+        ],
+    }
+
+
 def _feed_staffing_script() -> dict[str, Any]:
     # Steady demand and a live ambulance feed while the staffing feed is stopped.
     walk_ins = [
@@ -380,6 +396,22 @@ FIXTURES: dict[str, dict[str, Any]] = {
         "rate_ceiling": 5.0,
         "surges": [{"start": 75.0, "end": 115.0, "walk_in": 5.0, "ambulance": 4.0}],
         "test_boosts": [{"kind": "imaging", "start": 75.0, "end": 115.0, "extra_prob": 0.9}],
+    },
+    # Same announcement (ETA 40), different private arrival: A at 36, B at 44. Used to show a forecast
+    # uses only the received announcement, never the actual arrival time.
+    "fixture-eta-private-a": {
+        "id": "fixture-eta-private-a",
+        "name": "Fixture: announced ETA 40, private arrival at 36 (pair A)",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": lambda: _eta_private_script(36.0),
+    },
+    "fixture-eta-private-b": {
+        "id": "fixture-eta-private-b",
+        "name": "Fixture: announced ETA 40, private arrival at 44 (pair B)",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": lambda: _eta_private_script(44.0),
     },
     "fixture-feed-optional-stop": {
         "id": "fixture-feed-optional-stop",

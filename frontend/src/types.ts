@@ -39,6 +39,7 @@ export interface PatientDot {
   diagnostic_unit: string | null;
   tests_status: 'not_ordered' | 'none' | 'pending' | 'complete';
   tests_done: ('lab' | 'imaging')[];
+  tests_required: ('lab' | 'imaging')[] | null;
   /** Supplied with the clinical decision; null until that decision is received. */
   disposition: 'home' | 'ward' | 'icu' | null;
   ward_bed_id: string | null;
@@ -503,4 +504,159 @@ export interface SavedRunInfo {
   settings: SavedSettings;
   choices: unknown[];
   versions: Record<string, string>;
+}
+
+// ---- forecast (ticket 10) ------------------------------------------------------------------
+export interface ForecastOnset {
+  low_min: number;
+  median_min: number;
+  high_min: number;
+  expected_in_min: number;
+  low_in_min?: number;
+  high_in_min?: number;
+}
+
+export interface ForecastSummary {
+  state: string;
+  samples: number;
+  kind: 'new_onset' | 'confirmation' | 'recovery' | 'unknown';
+  chance: number | null;
+  events?: number;
+  no_event_fraction?: number;
+  onset: ForecastOnset | null;
+  elapsed_min?: number | null;
+  since_confirmed_min?: number | null;
+  note?: string;
+}
+
+export interface ForecastService extends ForecastSummary {
+  id: string;
+  zone: number;
+}
+
+export interface ForecastZone {
+  zone: number;
+  state: 'normal' | 'building' | 'overloaded' | 'unknown';
+  services: string[];
+  top_service: string;
+  new_overload_chance: number | null;
+  events: number;
+  onset: ForecastOnset | null;
+  warning: boolean;
+}
+
+export interface ForecastDeadline {
+  action: string;
+  setup_min: number;
+  review_min: number;
+  margin_min: number;
+  basis: string;
+  status: 'open' | 'too_late' | 'unavailable' | 'recovery';
+  latest_start_min: number | null;
+  in_min?: number;
+}
+
+export interface ForecastAlert {
+  id: string;
+  service: string;
+  zone: number;
+  name: string;
+  category: string;
+  category_label: string;
+  kind: 'forecast_risk' | 'building' | 'overloaded';
+  state: string;
+  chance: number | null;
+  onset: ForecastOnset | null;
+  events: number | null;
+  samples: number;
+  affected_patients: number | null;
+  urgent_group_waiting: number;
+  impact: number | null;
+  impact_note: string;
+  deadline: ForecastDeadline;
+  mixed: boolean;
+  also_active: string[];
+}
+
+export interface Forecast {
+  api_version: string;
+  kind: 'forecast';
+  status: 'ok' | 'cannot_assess';
+  reasons: string[];
+  cached?: boolean;
+  source: { replay_id: string; run_number: number; version: number; sim_time_min: number };
+  forecast_time_min: number;
+  synthetic: boolean;
+  model: {
+    version: string;
+    settings: {
+      samples: number;
+      horizon_min: number;
+      tail_min: number;
+      refresh_every_min: number;
+      seed: number;
+      warning_threshold: number;
+      onset_range: string;
+    };
+    assumptions: Record<string, string>;
+  };
+  overall: (ForecastSummary & { state: string }) | null;
+  zones: ForecastZone[];
+  services: Record<string, ForecastService>;
+  alerts: {
+    actionable: ForecastAlert[];
+    recovery: ForecastAlert[];
+    unknown: { service: string; zone: number; name: string; text: string }[];
+    mixed: boolean;
+    categories: string[];
+  };
+  series: { marks_min: number[]; bands: Record<string, { p10: number; p50: number; p90: number }[]> };
+  limitations: string[];
+  next_step: { code: string; text: string };
+  inputs?: {
+    present_patients: number;
+    announced_ambulances: number;
+    announced_patients: number;
+    arrival_adjustment: Record<string, number>;
+    turnaround_scale: Record<string, number>;
+  };
+  compute: { ms: number; futures: number };
+}
+
+export interface ForecastExplanation {
+  kind: 'forecast_explanation';
+  status?: 'cannot_assess';
+  source: { replay_id: string; run_number: number; version: number; sim_time_min: number };
+  forecast_time_min: number;
+  zone: number;
+  service: string;
+  service_name: string;
+  state: string;
+  category: string;
+  category_label: string;
+  why_this_alert: {
+    observed: { label: string; value: string }[];
+    model: string[];
+    sensitivity: {
+      relaxed: string | null;
+      chance_before?: number;
+      chance_after?: number;
+      events_before?: number;
+      events_after?: number;
+      samples?: number;
+      note: string;
+    } | null;
+    demand_breakdown: { known_median: number; background_median: number } | null;
+  };
+  technical: {
+    rates: Record<string, unknown>;
+    samples: number;
+    model_version: string;
+    seed: number;
+    horizon_min: number;
+    tail_min: number;
+    arrival_adjustment: Record<string, number>;
+    turnaround_scale: Record<string, number>;
+  };
+  compute: { ms: number };
 }

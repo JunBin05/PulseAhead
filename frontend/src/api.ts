@@ -1,4 +1,4 @@
-import type { SavedSummary, ScenarioCatalog, Snapshot, ZoneDetail } from './types';
+import type { Forecast, ForecastExplanation, SavedSummary, ScenarioCatalog, Snapshot, ZoneDetail } from './types';
 
 const BASE = '/api/v1';
 
@@ -56,6 +56,15 @@ export const api = {
       body: JSON.stringify(scenario === undefined ? {} : { scenario }),
     }),
   scenarios: () => request<ScenarioCatalog>('/scenarios'),
+  /** Independent futures from the received state; the response carries the state version it used. */
+  forecast: (id: string, samples: number) =>
+    request<Forecast>(`/replays/${id}/forecast`, { method: 'POST', body: JSON.stringify({ samples }) }),
+  /** Why one zone's alert appeared, for the forecast already computed at `version`. */
+  explain: (id: string, zone: number, samples: number, version: number) =>
+    request<ForecastExplanation>(`/replays/${id}/forecast/explain`, {
+      method: 'POST',
+      body: JSON.stringify({ zone, samples, expected_version: version }),
+    }),
   save: (
     id: string,
     body: { ui: { selected_zone: number | null; camera: string }; settings: { speed: number; step_min: number } },

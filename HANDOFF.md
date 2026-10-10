@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10 (tickets 01-09 done; the 03-06 review gate is closed and committed as `b4e7f5a review: fixes after ticket 03-06 gate`; tickets 07, 08 and 09 are committed on top). HEAD is the commit `ticket 09: Generate varied shifts and reproduce saved replays`. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-10 (tickets 01-09 done and committed; HEAD is `d7b2b37 ticket 09: Generate varied shifts and reproduce saved replays`). **Ticket 10 is IN PROGRESS and UNCOMMITTED** (see "Ticket 10 WIP" below). Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -28,7 +28,8 @@ Updated 2026-10-10 (tickets 01-09 done; the 03-06 review gate is closed and comm
 | 07 Zone drawers and camera | **done**: 7/7 pass (no review gate due) | `evidence/07-zone-drawers-and-camera.md`, `evidence/07-zones.playwright-mcp.js`, `evidence/07-ease.playwright-mcp.js`, `evidence/shots/07-*.png` |
 | 08 Fresh, noisy, missing and invalid inputs | **done**: 7/7 pass (no review gate due) | `evidence/08-received-data-and-robustness.md`, `evidence/08-feeds.playwright-mcp.js` (PART `A` and `B`), `evidence/shots/08-*.png` |
 | 09 Generate varied shifts and reproduce saved replays | **done**: 7/7 pass (no review gate due); two caveats owned by later tickets (no-effective-action ranking, empty choices/forecast settings) | `evidence/09-synthetic-scenarios-and-save-load.md`, `evidence/09-scenarios.playwright-mcp.js` (PART `A`, `B`), `evidence/09-save-load-ui.playwright-mcp.js`, `evidence/09-saved-persistence.playwright-mcp.js` (PART `A`, `B`), `evidence/09-critical-bypass.playwright-mcp.js`, `evidence/shots/09-diagnostic-zone3-overload.png` |
-| 10–22 | not started | n/a |
+| 10 Predict bottlenecks and explain the time remaining | **WIP committed, not closed**: code and Playwright evidence snippets exist and passed (see "Ticket 10 status at commit"); `evidence/10-forecast-and-alert-panel.md` not written, no ticket boxes ticked, `07-zones` regression not run, review gate not run | `evidence/10-*.playwright-mcp.js`, `evidence/shots/10-zone3-forecast.png` |
+| 11–22 | not started | n/a |
 
 Tickets 01 to 09 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
 
@@ -244,10 +245,68 @@ The `code-review` skill ran two reviewers (Standards, Spec) over `e69ceb6...3ecc
   - Plain `normal` can show an imaging or ward-bed episode within 600 min.
 - **Snippet staging lesson:** a snippet's echo is the whole source, so ticket 09's evidence is split into small files; use a helper that strips the leading `//` lines and sets `PART` (UTF-8, no BOM).
 
+## Ticket 10 status at commit (2026-10-11)
+
+Committed as `WIP ticket 10` at the user's request ("commit the progress and push"). **Not closed.**
+
+**Passed through Playwright MCP (production build on :8000, backend restarted after the last Python edit):**
+- `10-isolation` 10/10: hidden-future pair and private-arrival vs announced-ETA pair give identical state and forecasts until the received state differs; no hidden field in any forecast or explanation; stale/missing/never-forecast versions refused (409/422); cache.
+- `10-horizon` 20/20: known demand, building (confirmation chance, elapsed, no countdown), confirmed (recovery), triage-only overload with overall Stable, missing imaging (unknown), stale staffing feed (cannot_assess at age 11), no zero/negative countdown, deadline formula, impact unavailable.
+- `10-scan` A and B 9/9 each: 168 forecasts over 7 families (alert order, deadline formula, 2741 countdown values positive, lambda>mu without onset gives no timer, chance = events/samples).
+- `10-inputs` 7/7: in-progress work resumed with received elapsed time, ward beds as received, an ambulance counted once.
+- `10-ui-agreement` 6/6 (25 steps UI vs API at the same version), `10-ui-states` A 8/8 (pending, interactive map, expired estimate, failed refresh, retry, 409) and B 5/5 (Cannot assess, resume, widths 375-1440).
+- `10-bench` A 3/3 and B 2/2: 50 vs 100 futures (max chance difference 0.11, none above 2 standard errors; latency 50 about 0.26 s, 100 about 0.52 s); full development shift (seed 7 normal, 144 forecasts, median 250 ms, max 336 ms, 43 s total); machine: Ryzen 7 7735HS, 16 threads.
+- Regression run on this build: `01` (counts, widths, keyboard pass; 10x cadence read 9.49 sim min/s against 9.97 earlier, likely forecast CPU contention, recorded for ticket 20), `02`, `03`, `04`, `05` (0 problems), `06-label-geometry` (30 cases, 0 overlaps), `06-zone4-layout` (0 problems), `06-pressure` engine and seed7 (0 mismatches), `06-ui` (0 problems on the isolated re-run; the first run had timing failures because it ran concurrently with another snippet in the same browser, so run snippets one at a time).
+
+**Still to do for ticket 10:**
+1. Run `07-zones` (staged at `Prototype/.playwright-mcp/07-zones.js`).
+2. Write `evidence/10-forecast-and-alert-panel.md` (criteria table, pass/fail per check above, the benchmark and the predeclared evaluation size in Q10), tick the nine ticket boxes that passed, set the ticket status.
+3. Commit `ticket 10: Predict bottlenecks and explain the time remaining`, then run the `code-review` gate and commit `review: fixes after ticket 10 gate`.
+4. Then tickets 11 onward as under "Exact next steps".
+
+**New this session:** `forecast.py` `inputs.in_progress` and `inputs.ward_beds` (transparency of what is resumed), `fixture-eta-private-a/-b` fixtures, the drawer's source line has its own test id `fc-zone-source`, Q10 in `OPEN_QUESTIONS.md`.
+
+## Ticket 10 WIP notes (written 2026-10-10; superseded where the section above says otherwise)
+
+Ticket: `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-alert-panel.md` (9 criteria, all unticked). `git status`: modified `backend/pulseahead/{api,engine,replay}.py`, `frontend/src/{App.tsx,api.ts,app.css,types.ts}`; new `backend/pulseahead/forecast.py`, `frontend/src/Forecast.tsx`, `evidence/shots/10-first-look.png` (exploratory screenshot, not evidence). `tsc` and `npm run build` passed; the backend on :8000 was restarted before the last edit (the `next_step` change in `forecast.py` is NOT loaded: restart it, and re-run `py_compile`/`ast.parse` on `forecast.py` first).
+
+**Read the spec sections "Zone pressure versus overall congestion", "Congestion and forecasting", "Operational action catalog" (deadline rule) and the ticket before continuing.**
+
+**What is built**
+- **`engine.py`:** public patient record gains `tests_required` (kinds, `null` until tests are ordered). Nothing else in the engine changed.
+- **`forecast.py`** (pure function of a received snapshot plus received events; it never touches the engine's patients or hidden schedules):
+  - `build_input(snapshot, events)` makes the plain input (patients with phase/elapsed, held spaces, on-duty nurses, bed states, ED-taken beds from received departures, announced ambulances, monitor state, received history).
+  - `Future` is one SimPy runner per sampled future. It reuses the engine's `SpacePool`, `WardBeds`, `CongestionMonitor` and `LocalMonitor`, and resumes every present patient from its received phase with elapsed-conditioned remaining work. Hidden needs (tests, durations, disposition, care task) are sampled from the profile's disclosed assumptions from one `random.Random(f"fc:{seed}:{k}:{patient_id}")` per patient, so branches are paired. Forecast seed `FORECAST_SEED = 7310004` is independent of replay seeds.
+  - Arrivals: announced ambulances around ETA +/- disclosed uncertainty (7% cancel; overdue = soon), unannounced walk-ins and ambulance runs from disclosed rates, scaled by received arrivals of the last 30 min (shrinkage, 0.5 to 4, half-life 30 min); turnaround scaled by received completed turnarounds (0.5 to 3). Occupied ward/ICU beds not taken by ED patients release uniformly in 10 to 300 min. Constants and wording are in `FORECAST_ASSUMPTIONS`.
+  - Output: `overall` (stable: new-onset chance, no-event fraction, conditional 5th to 95th percentile onset range, median, `expected_in_min`; building: confirmation chance, elapsed, no countdown; confirmed: clear chance), per-service and per-zone local summaries, `alerts` (actionable sorted by latest start = onset low - 5 review - setup - 5 margin, with provisional action label; recovery and unknown kept apart; impact always `null`), `series` (p10/p50/p90 per 5 min), `limitations`, `next_step`, `compute.ms`. `status: cannot_assess` when essential feeds are stale. Provisional warning threshold 0.4 (ticket 18 tunes it).
+  - `explain_zone()`: observed facts, model statements, announced-vs-unannounced demand split, and a paired "one more unit" sensitivity of the bottleneck service.
+- **`replay.py` / `api.py`:** `ReplaySession.forecast(samples, expected_version)` (cache by (version, samples), last 6; plain input built under the session lock, futures sampled outside it) and `forecast_explain(zone, samples, version)` (explains the cached forecast for that version; 409 if not held). `POST /api/v1/replays/{id}/forecast` body `{samples: 50|100, expected_version?}`; `POST /api/v1/replays/{id}/forecast/explain` body `{zone, samples, expected_version}` (version required).
+- **Frontend:** `Forecast.tsx` has `useForecast` (refresh when sim time passes the next 5-minute mark, one request in flight, responses for another replay/run dropped, retry), `useExplanation`, `ForecastStrip` (Congestion chance, Expected start, awaiting a space, available staffed spaces, source line, next step, limitations; testids `fc-strip`, `fc-chance`, `fc-expected`, `fc-awaiting`, `fc-available`, `fc-source`, `fc-next`, `fc-retry`, `fc-limitations`), `AlertList` under the map (`fc-alerts`, `fc-alert-<service>`, `-text`, `-deadline`; clicking focuses the zone), `ZoneForecast` in the drawer (`fc-zone`, `fc-local`, `fc-overall`, `fc-explain`, `fc-observed`, `fc-model`, `fc-sensitivity`, `fc-tech`) and a forecast line on each zone button (`zone-N-forecast`). The Demo panel has a 50/100 futures selector (`fc-samples-50`, `fc-samples-100`).
+
+**Exploratory results (not evidence)**
+- 50 futures take about 0.2 to 0.25 s, 100 about 0.45 s, an explanation with sensitivity 0.2 to 0.5 s (target 2 s for a forecast). Single process, no pooling needed so far.
+- `diagnostic-delay` seed 2033 at T+80: imaging 68% chance, median in 35 min (range 5 to 70), real onset T+82; with one more imaging slot the same futures give 10%. At T+100 imaging is Overloaded (0% clears), overall 0% (stable).
+- The UI at T+100 shows the strip, the zone button forecast lines and the Recovery alert list correctly (see `shots/10-first-look.png`).
+
+**Still to do for ticket 10 (nothing below is done)**
+1. Restart the backend; rebuild if frontend changed. Re-read the diff for coherence.
+2. Write Q10 in `OPEN_QUESTIONS.md`: forecast design as above (sampled hidden attributes from disclosed assumptions, arrival and turnaround adjustment, bed release, alert-list click focuses its zone, provisional warning threshold 0.4, provisional action per service for the deadline, `tests_required` exposure, explanation keyed to a cached version).
+3. Evidence (split into small snippets, one per concern) and `evidence/10-forecast-and-alert-panel.md`:
+   - Isolation: identical received states with changed hidden futures give identical forecasts. Fixtures `fixture-hidden-future-a` and `-b` give identical state until T+75; compare `/forecast` at T+60 and T+70 (same samples, ignoring replay id and `compute.ms`), and at T+120 they differ because the received state differs. Add a case where two runs share a received state but differ later (private ambulance arrival time vs announced ETA).
+   - Known ETA vs private arrival: only received announcements enter; no hidden arrival time in input or output.
+   - Local vs global horizon cases and building-confirmation probability: use `fixture-congestion-boundary` (overall onset 31, confirmed 51, cleared 85; local space 31/41/103) and `fixture-queue-surge`, `fixture-diagnostics-gap` (missing imaging gives Cannot assess for that service), stale feeds (`fixture-feed-staffing-stop` gives `cannot_assess`).
+   - No lambda>mu-only timer, no negative countdown, no new-onset timer for building or confirmed intervals; expired estimate shows refresh, not zero.
+   - Displayed explanation and source agree with `/state`, `/zones` and the forecast response at the same version (UI vs API per step).
+   - Alert ordering (deadline first, then affected count; recovery and unknown separate; impact unavailable), pending/stale/error states (delay and abort `**/forecast` with `page.route`), map stays interactive during a forecast.
+   - Benchmark 50 vs 100 samples (latency, onset-chance difference at development checkpoints on `diagnostic-delay`, `busy-recovers`, `arrival-surge` seeds) and one full development shift (seed 7 normal, T+720, forecast every 5 min); record machine and timings; predeclare the evaluation size from the measured cost (spec: aim 14 tuning and 28 test shifts, fallback 7 and 7 one per family) in `evidence/10-*.md`.
+4. Regression: `01` always, `02` to `05`, `06-*` (engine, seed7, ui, zone4, label-geometry) and `07-zones`, because the public patient record, the sidebar/strip and the zone buttons changed. The zone-button forecast line and the new strip change layout: re-check `01` widths and `06-label-geometry`.
+5. Tick only passed criteria, set the ticket status, update this file, commit `ticket 10: Predict bottlenecks and explain the time remaining` with the attribution trailer.
+6. **Then run the `code-review` skill gate for ticket 10** (subagents allowed for this gate), fix in-scope findings, re-verify, commit `review: fixes after ticket 10 gate`.
+
 ## Exact next steps
 
-1. Start ticket 10 (forecast-based zone warnings; read its ticket file, the spec and Q9 first). Ticket 09 is committed and verified.
-2. Continue in blocker order: 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
+1. Finish ticket 10 from "Ticket 10 WIP" above (code exists; verification, Q10, evidence, ticks, commit and the review gate remain). Run `git status` and `git diff --stat` first and re-check the claims there before trusting them.
+2. Continue in blocker order: (10 review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
 3. **Stop before ticket 21** (hosting): ask the user for an authorized target. Ticket 22's rehearsal and the organizer check stay with the user.
 4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow or layout changed, the `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition` and `06-*` snippets, plus `07-zones`. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`: stage them with the leading `//` lines removed, as UTF-8 without a BOM (PowerShell `Get-Content`/`Set-Content` re-encodes the middle dot and adds a BOM; use `node`). For `06-pressure`, also set `PART`.
 

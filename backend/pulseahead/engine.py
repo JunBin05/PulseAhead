@@ -204,6 +204,8 @@ class Patient:
             "care_status": self.care_status(),
             "tests_status": self.tests_status(),
             "tests_done": list(self.tests_done),
+            # The test kinds are known once they are ordered (end of first assessment), never before.
+            "tests_required": [k for k, _ in self.supplied.tests] if self.tests_ordered else None,
             "decision_received": self.decision_min is not None,
             # The disposition is part of the clinical decision: hidden until it is received.
             "disposition": s.disposition if self.decision_min is not None else None,

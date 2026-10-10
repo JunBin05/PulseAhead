@@ -16,6 +16,17 @@ import {
 } from './icons';
 import { ZONE_LOOK, type ZoneDisplay } from './status';
 import {
+  AlertList,
+  ForecastStrip,
+  ZoneForecast,
+  useExplanation,
+  useForecast,
+  zoneForecastLine,
+  type ExplanationView,
+  type ForecastSamples,
+  type ForecastView,
+} from './Forecast';
+import {
   ZONE_NAMES,
   type CongestionState,
   type Feed,
@@ -198,6 +209,8 @@ export function App() {
   const [scenarioId, setScenarioId] = useState('normal');
   const [savedList, setSavedList] = useState<SavedSummary[]>([]);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  // Development setting: how many independent futures each forecast samples.
+  const [fcSamples, setFcSamples] = useState<ForecastSamples>(50);
 
   const idRef = useRef<string | null>(null);
   const versionRef = useRef(0);
@@ -473,6 +486,17 @@ export function App() {
     };
   }, [snap?.replay_id, snap?.version, selectedZone, zoneDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const { view: fcView, retry: fcRetry } = useForecast(snap, fcSamples);
+  const explanation = useExplanation(fcView.data, selectedZone, fcSamples);
+
+  // Choosing an alert from the alert list focuses its zone (a zone button keeps the earlier rule:
+  // only an Overloaded zone is zoomed).
+  const selectAlert = useCallback((z: number) => {
+    selectedRef.current = z;
+    setSelectedZone(z);
+    setFocusZone(z);
+  }, []);
+
   const scene = useMemo(() => buildScene(snap), [snap]);
   const zoneCounts = scene.perZone;
   const zone = snap && selectedZone ? snap.zones.find((z) => z.id === selectedZone) : undefined;
@@ -624,6 +648,8 @@ export function App() {
             saveNote={saveNote}
             saved={savedList}
             onLoad={load}
+            fcSamples={fcSamples}
+            onFcSamples={setFcSamples}
           />
 
           <AmbulancePanel snap={snap} />
@@ -731,6 +757,7 @@ export function App() {
         </aside>
 
         <section aria-label="Four-zone ED map">
+          <ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />
           <div
             className="scene-wrap"
             data-testid="scene"
@@ -791,10 +818,16 @@ export function App() {
                     {patientCount(snap ? snap.zones.find((q) => q.id === z)?.patient_count ?? 0 : 0)}
                   </span>
                   <LocalChip state={zoneState(snap, z)} testid={`zone-${z}-status`} />
+                  {snap && (
+                    <span className="zone-fc" data-testid={`zone-${z}-forecast`}>
+                      {zoneForecastLine(fcView, z)}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
           </div>
+          {snap && <AlertList snap={snap} view={fcView} onSelect={selectAlert} selectedZone={selectedZone} />}
         </section>
 
         <aside className="drawer-col" aria-label="Selected zone">
@@ -812,7 +845,7 @@ export function App() {
               zoneDetail.zone.id === zone.id &&
               zoneDetail.replay_id === snap!.replay_id &&
               zoneDetail.version === snap!.version ? (
-              <ZoneDrawer snap={snap!} detail={zoneDetail} />
+              <ZoneDrawer snap={snap!} detail={zoneDetail} fcView={fcView} explanation={explanation} />
             ) : (
               <div data-testid="zone-drawer-loading" data-zone={zone.id}>
                 <h2 id="drawer-h">
@@ -830,7 +863,17 @@ export function App() {
   );
 }
 
-function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
+function ZoneDrawer({
+  snap,
+  detail,
+  fcView,
+  explanation,
+}: {
+  snap: Snapshot;
+  detail: ZoneDetail;
+  fcView: ForecastView;
+  explanation: ExplanationView | null;
+}) {
   // Zone, roster, staff, queues and capacity come from the versioned zone response; `snap` is the
   // same version and supplies the shared resource totals and the pressure services.
   const zone = {
@@ -1042,6 +1085,7 @@ function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
           {snap.resources.diagnostics.imaging.median_turnaround_min} min (demo assumptions).
         </p>
       )}
+      <ZoneForecast snap={snap} view={fcView} zone={zone.id} explanation={explanation} />
       <PressureSection snap={snap} zoneId={zone.id} />
       {(zone.id === 2 || zone.id === 3) && <StaffingSummary snap={snap} />}
       {patients.length > 0 && (
@@ -1490,6 +1534,8 @@ function DemoPanel({
   saveNote,
   saved,
   onLoad,
+  fcSamples,
+  onFcSamples,
 }: {
   snap: Snapshot | null;
   scenarios: ScenarioInfo[];
@@ -1500,6 +1546,8 @@ function DemoPanel({
   saveNote: string | null;
   saved: SavedSummary[];
   onLoad: (savedId: string) => void;
+  fcSamples: ForecastSamples;
+  onFcSamples: (n: ForecastSamples) => void;
 }) {
   const info = scenarios.find((s) => s.id === scenarioId);
   const runInfo = snap ? scenarios.find((s) => s.id === snap.scenario) : undefined;
@@ -1557,6 +1605,16 @@ function DemoPanel({
           </dd>
         </dl>
       )}
+      <span className="field-label" id="fc-samples-l" style={{ marginTop: 'var(--s-3)' }}>
+        Forecast futures per refresh
+      </span>
+      <div className="segmented" role="group" aria-labelledby="fc-samples-l">
+        {([50, 100] as const).map((n) => (
+          <button key={n} aria-pressed={fcSamples === n} onClick={() => onFcSamples(n)} data-testid={`fc-samples-${n}`}>
+            {n}
+          </button>
+        ))}
+      </div>
       <div style={{ marginTop: 'var(--s-4)' }}>
         <button className="btn btn-block" onClick={onSave} disabled={!snap} data-testid="save-run">
           Save run

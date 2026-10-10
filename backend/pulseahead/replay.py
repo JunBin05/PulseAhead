@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from . import forecast as fcast
 from .engine import QUEUE_SERVICE, EDEngine
 from .feeds import HEARTBEAT_MIN, SERVICE_SOURCE, SOURCES, STALE_AFTER_MIN
 from .pressure import CATEGORY_LABEL, SERVICES
@@ -45,6 +46,9 @@ class ReplaySession:
         # Set when this run was rebuilt from a saved run; cleared by a reset.
         self.saved_run: dict[str, Any] | None = None
         self._samples: list[tuple[float, dict[str, Any]]] = []
+        # Forecasts by (state version, samples): result, plain input, snapshot. Recent ones only.
+        self._fc: dict[tuple[int, int], tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = {}
+        self._fc_lock = threading.Lock()
         if self.engine.gate.has_faults:
             self._sample(0.0)
 
@@ -76,6 +80,7 @@ class ReplaySession:
             self.engine = EDEngine(self.seed, self.scenario)
             self.saved_run = None
             self._samples = []
+            self._fc = {}
             if self.engine.gate.has_faults:
                 self._sample(0.0)
             self.run_number += 1
@@ -694,6 +699,40 @@ class ReplaySession:
             "recent": list(reversed(e.gate.log[-20:])),
         }
         return out
+
+    # -- forecast (received state and received history only) -----------------------------------
+    def forecast(self, samples: int = fcast.DEFAULT_SAMPLES, expected_version: int | None = None
+                 ) -> tuple[dict[str, Any] | None, bool]:
+        """Returns (result, cached). None when expected_version is stale. The plain input is built under
+        the session lock; the futures are sampled outside it so replay controls stay responsive."""
+        with self._fc_lock:
+            with self.lock:
+                if expected_version is not None and expected_version != self.version:
+                    return None, False
+                key = (self.version, samples)
+                hit = self._fc.get(key)
+                if hit is not None:
+                    return hit[0], True
+                snap = self.snapshot()
+                inp = fcast.build_input(snap, list(self.engine.gate.received))
+            result = fcast.forecast_from_input(inp, snap, samples, fcast.FORECAST_SEED)
+            with self.lock:
+                self._fc[key] = (result, inp, snap)
+                for old in sorted(self._fc)[:-6]:
+                    del self._fc[old]
+            return result, False
+
+    def forecast_explain(self, zone: int, samples: int, version: int) -> dict[str, Any] | None:
+        """Explains the forecast already computed for `version` (None when it is no longer held)."""
+        with self._fc_lock:
+            hit = self._fc.get((version, samples))
+        if hit is None:
+            return None
+        result, inp, snap = hit
+        if result["status"] != "ok":
+            return {"api_version": "v1", "kind": "forecast_explanation", "source": result["source"],
+                    "status": result["status"], "reasons": result["reasons"], "zone": zone}
+        return fcast.explain_zone(inp, snap, result, zone, samples, fcast.FORECAST_SEED)
 
     # -- one zone, versioned ---------------------------------------------------------------
     def zone_detail(self, zone_id: int) -> dict[str, Any] | None:
