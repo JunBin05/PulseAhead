@@ -1,4 +1,4 @@
-import type { Snapshot, ZoneDetail } from './types';
+import type { SavedSummary, ScenarioCatalog, Snapshot, ZoneDetail } from './types';
 
 const BASE = '/api/v1';
 
@@ -49,6 +49,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ minutes, expected_version: expectedVersion }),
     }),
-  reset: (id: string) =>
-    request<Snapshot>(`/replays/${id}/reset`, { method: 'POST', body: JSON.stringify({}) }),
+  /** Reset restarts the same seed; a `scenario` switches the scenario family for the new run. */
+  reset: (id: string, scenario?: string) =>
+    request<Snapshot>(`/replays/${id}/reset`, {
+      method: 'POST',
+      body: JSON.stringify(scenario === undefined ? {} : { scenario }),
+    }),
+  scenarios: () => request<ScenarioCatalog>('/scenarios'),
+  save: (
+    id: string,
+    body: { ui: { selected_zone: number | null; camera: string }; settings: { speed: number; step_min: number } },
+  ) => request<SavedSummary>(`/replays/${id}/save`, { method: 'POST', body: JSON.stringify(body) }),
+  saved: () => request<{ saved: SavedSummary[] }>('/saved'),
+  load: (savedId: string) =>
+    request<Snapshot>(`/saved/${savedId}/load`, { method: 'POST', body: JSON.stringify({}) }),
 };

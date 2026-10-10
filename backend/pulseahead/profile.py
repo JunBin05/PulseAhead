@@ -175,6 +175,170 @@ PROFILE: dict[str, Any] = {
     },
 }
 
-SCENARIOS: dict[str, dict[str, Any]] = {
-    "normal": {"id": "normal", "name": "Normal shift", "rate_multiplier": 1.0},
-}
+# Two-hour warm-up and eight-hour scored shift (spec editable defaults). A run starts empty at T+0; the
+# warm-up and scored windows are recorded with every run for the evaluation tickets.
+WARMUP_MIN = 120
+SCORED_MIN = 480
+
+ENGINE_VERSION = "flow-3"
+CATALOG_VERSION = "1"
+
+# Seven retained scenario families (spec: normal shifts, busy shifts that recover, arrival surges,
+# diagnostic delays, boarding blockages, mixed cascades, no-effective-action cases). Each is plain
+# data read by the engine: arrival-rate segments (`surges`), extra or slower tests (`test_boosts`,
+# `turnaround_scales`), a heavier admission mix (`disposition_boost`), a ward-bed schedule and a
+# nurse roster. Windows are in simulated minutes from T+0 and are the replay's hidden future: they
+# are saved with a run's evidence record but never appear in an observation response.
+_FAMILIES: list[dict[str, Any]] = [
+    {
+        "id": "normal",
+        "name": "Normal shift",
+        "family": "normal",
+        "demo": None,
+        "description": "Ordinary demand with the disclosed arrival wave, walk-ins and announced ambulances.",
+        "workload_variant": "Baseline arrival rate (about six patients per hour including ambulances).",
+        "rate_multiplier": 1.0,
+    },
+    {
+        "id": "busy-recovers",
+        "name": "Busy shift that recovers",
+        "family": "busy_recovers",
+        "demo": None,
+        "description": "A sustained busier spell mid-shift, then demand returns to the baseline.",
+        "workload_variant": "Walk-in and ambulance demand about three times the baseline for roughly 90 minutes, then baseline.",
+        "rate_multiplier": 1.0,
+        "surges": [{"start": 60.0, "end": 150.0, "walk_in": 3.2, "ambulance": 2.5}],
+    },
+    {
+        "id": "arrival-surge",
+        "name": "Short arrival surge",
+        "family": "arrival_surge",
+        "demo": "recovering short surge",
+        "description": "A short unannounced burst of walk-ins and ambulances that the ED works through.",
+        "workload_variant": "About five times the walk-in rate for under half an hour, then baseline.",
+        "rate_multiplier": 1.0,
+        "surges": [{"start": 45.0, "end": 70.0, "walk_in": 5.0, "ambulance": 3.0}],
+    },
+    {
+        "id": "diagnostic-delay",
+        "name": "Diagnostic backlog",
+        "family": "diagnostic_delay",
+        "demo": "diagnostic-backlog demo",
+        "description": "More patients need imaging and lab work and results come back slower; zone 3 backs up.",
+        "workload_variant": "Extra imaging and lab demand with slower turnaround for about three hours.",
+        "rate_multiplier": 1.0,
+        "test_boosts": [
+            {"kind": "imaging", "start": 0.0, "end": 240.0, "extra_prob": 0.8},
+            {"kind": "lab", "start": 0.0, "end": 240.0, "extra_prob": 0.4},
+        ],
+        "turnaround_scales": [
+            {"kind": "imaging", "start": 0.0, "end": 300.0, "scale": 2.0},
+            {"kind": "lab", "start": 0.0, "end": 300.0, "scale": 1.5},
+        ],
+    },
+    {
+        "id": "boarding-blockage",
+        "name": "Ward boarding blockage",
+        "family": "boarding_blockage",
+        "demo": "ward blockage",
+        "description": "Admitted patients wait in ED spaces because few ward and ICU beds are free.",
+        "workload_variant": "More admissions and a late bed-release schedule.",
+        "rate_multiplier": 1.0,
+        "disposition_boost": {"start": 0.0, "end": 420.0, "ward": 0.35},
+        "ward_beds": [
+            {"id": "WD1", "type": "ward", "free_at_min": 0},
+            {"id": "WD2", "type": "ward", "free_at_min": 0},
+            {"id": "WD3", "type": "ward", "free_at_min": 300},
+            {"id": "WD4", "type": "ward", "free_at_min": 360},
+            {"id": "WD5", "type": "ward", "free_at_min": 420},
+            {"id": "WD6", "type": "ward", "free_at_min": 480},
+            {"id": "IC1", "type": "icu", "free_at_min": 0},
+            {"id": "IC2", "type": "icu", "free_at_min": 400},
+        ],
+    },
+    {
+        "id": "mixed-cascade",
+        "name": "Mixed cascade",
+        "family": "mixed_cascade",
+        "demo": None,
+        "description": "Slower imaging, a mid-shift surge, late ward beds and a nurse off duty together.",
+        "workload_variant": "Imaging backlog, then a busier spell, a late bed schedule and one nurse away.",
+        "rate_multiplier": 1.0,
+        "surges": [{"start": 90.0, "end": 180.0, "walk_in": 1.8, "ambulance": 1.6}],
+        "test_boosts": [{"kind": "imaging", "start": 30.0, "end": 180.0, "extra_prob": 0.35}],
+        "turnaround_scales": [{"kind": "imaging", "start": 30.0, "end": 240.0, "scale": 1.6}],
+        "disposition_boost": {"start": 0.0, "end": 360.0, "ward": 0.25},
+        "ward_beds": [
+            {"id": "WD1", "type": "ward", "free_at_min": 0},
+            {"id": "WD2", "type": "ward", "free_at_min": 60},
+            {"id": "WD3", "type": "ward", "free_at_min": 240},
+            {"id": "WD4", "type": "ward", "free_at_min": 300},
+            {"id": "WD5", "type": "ward", "free_at_min": 420},
+            {"id": "WD6", "type": "ward", "free_at_min": 480},
+            {"id": "IC1", "type": "icu", "free_at_min": 0},
+            {"id": "IC2", "type": "icu", "free_at_min": 300},
+        ],
+        "staffing": [(100.0, "N3", False), (220.0, "N3", True)],
+    },
+    {
+        "id": "no-effective-action",
+        "name": "Surge that passes before help can land",
+        "family": "no_effective_action",
+        "demo": "no-effective-action case",
+        "description": (
+            "A heavy surge early in the shift followed by a quiet spell. By the time a staff-approved "
+            "action could take effect the queues are already clearing, so an honest comparison should "
+            "show no benefit."
+        ),
+        "workload_variant": "Heavy early surge, then demand well below baseline.",
+        "rate_multiplier": 1.0,
+        "surges": [
+            {"start": 0.0, "end": 45.0, "walk_in": 7.0, "ambulance": 3.5},
+            {"start": 45.0, "end": 600.0, "walk_in": 0.5, "ambulance": 0.5},
+        ],
+    },
+]
+
+
+def _partitions(index: int) -> dict[str, list[int]]:
+    """Development, tuning and test seeds are kept apart (two tuning and four test seeds per family)."""
+    return {
+        "development": [7],
+        "tuning": [1000 + 10 * index + 1, 1000 + 10 * index + 2],
+        "test": [2000 + 10 * index + k for k in (1, 2, 3, 4)],
+    }
+
+
+SCENARIOS: dict[str, dict[str, Any]] = {}
+for _i, _fam in enumerate(_FAMILIES):
+    SCENARIOS[_fam["id"]] = {**_fam, "seed_partitions": _partitions(_i), "warmup_min": WARMUP_MIN, "scored_min": SCORED_MIN}
+
+# Parameters that make up a scenario's workload variant (the hidden future of a run).
+SCENARIO_PARAM_KEYS = (
+    "rate_multiplier", "rate_ceiling", "surges", "test_boosts", "turnaround_scales", "disposition_boost",
+    "ward_beds", "staffing",
+)
+
+
+def seed_partition(scenario: str, seed: int) -> str:
+    parts = SCENARIOS.get(scenario, {}).get("seed_partitions")
+    if not parts:
+        return "fixture" if scenario not in SCENARIOS else "custom"
+    for name, seeds in parts.items():
+        if seed in seeds:
+            return name
+    return "custom"
+
+
+def scenario_catalog() -> list[dict[str, Any]]:
+    """Presenter-facing description of the families. It names the kind of workload variant but not the
+    time windows, which are the replay's hidden future."""
+    return [
+        {
+            "id": s["id"], "name": s["name"], "family": s["family"], "demo": s["demo"],
+            "description": s["description"], "workload_variant": s["workload_variant"],
+            "warmup_min": s["warmup_min"], "scored_min": s["scored_min"],
+            "seed_partitions": s["seed_partitions"],
+        }
+        for s in SCENARIOS.values()
+    ]

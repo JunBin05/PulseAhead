@@ -7,15 +7,22 @@ nothing beyond the current simulated time is ever exposed.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import math
 import threading
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from .engine import QUEUE_SERVICE, EDEngine
 from .feeds import HEARTBEAT_MIN, SERVICE_SOURCE, SOURCES, STALE_AFTER_MIN
 from .pressure import CATEGORY_LABEL, SERVICES
-from .profile import PROFILE, PROFILE_ID, ZONES
+from . import saved
+from .profile import (
+    CATALOG_VERSION, ENGINE_VERSION, PROFILE, PROFILE_ID, SCENARIO_PARAM_KEYS, SCORED_MIN, WARMUP_MIN, ZONES,
+    seed_partition,
+)
 
 MAX_ADVANCE_MIN = 60.0
 
@@ -35,6 +42,8 @@ class ReplaySession:
         self.version = 1
         self.lock = threading.Lock()
         self.engine = EDEngine(seed, scenario)
+        # Set when this run was rebuilt from a saved run; cleared by a reset.
+        self.saved_run: dict[str, Any] | None = None
         self._samples: list[tuple[float, dict[str, Any]]] = []
         if self.engine.gate.has_faults:
             self._sample(0.0)
@@ -65,6 +74,7 @@ class ReplaySession:
             if scenario is not None:
                 self.scenario = scenario
             self.engine = EDEngine(self.seed, self.scenario)
+            self.saved_run = None
             self._samples = []
             if self.engine.gate.has_faults:
                 self._sample(0.0)
@@ -561,7 +571,9 @@ class ReplaySession:
         e.gate.flush(e.now)
         live = self._live_snapshot()
         feeds = e.gate.feeds_view(e.now)
-        return self._observe(live, feeds)
+        out = self._observe(live, feeds)
+        out["saved_run"] = self.saved_run
+        return out
 
     def _observe(self, live: dict[str, Any], feeds: dict[str, dict[str, Any]]) -> dict[str, Any]:
         e = self.engine
@@ -1103,6 +1115,93 @@ class ReplaySession:
                 "feeds": e.gate.feeds_view(e.now),
             }
 
+    def run_record(self) -> dict[str, Any]:
+        """Everything needed to check a run's assumptions later: the fictional profile with its resources,
+        the scenario's workload variant, warm-up and scored duration, seed partition and versions. The
+        workload variant contains the scenario's hidden future, so this belongs in evidence, never in an
+        observation response."""
+        d = self.engine.definition
+        fixture = bool(d.get("fixture"))
+        params = None if fixture else {k: copy.deepcopy(d[k]) for k in SCENARIO_PARAM_KEYS if k in d}
+        return {
+            "profile": PROFILE,
+            "scenario": {
+                "id": self.scenario, "name": d.get("name"), "family": d.get("family"), "fixture": fixture,
+                "parameters": params,
+            },
+            "warmup_min": WARMUP_MIN,
+            "scored_min": SCORED_MIN,
+            "seed": self.seed,
+            "seed_partition": seed_partition(self.scenario, self.seed),
+            "versions": {
+                "api": API_VERSION, "engine": ENGINE_VERSION, "profile": PROFILE_ID, "scenario_catalog": CATALOG_VERSION,
+            },
+        }
+
+    def save(self, ui: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
+        """Builds and stores a saved run: the received events and announcements, choices, settings, the
+        selected zone and camera, and (when the shift is over) the completed results."""
+        with self.lock:
+            e = self.engine
+            e.gate.flush(e.now)
+            snap = self.snapshot()
+            events = list(e.gate.received)
+            completed = e.now >= WARMUP_MIN + SCORED_MIN - 1e-9
+            d = e.definition
+            record = {
+                "format": "pulseahead-saved-run",
+                "format_version": 1,
+                "saved_id": uuid.uuid4().hex[:12],
+                "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "synthetic": True,
+                "completed": completed,
+                "label": "Completed synthetic run" if completed else "Saved in-progress synthetic run",
+                "identity": {
+                    "replay_id": self.id,
+                    "run_number": self.run_number,
+                    "state_version": self.version,
+                    "scenario": self.scenario,
+                    "scenario_name": d.get("name"),
+                    "seed": self.seed,
+                    "profile_id": PROFILE_ID,
+                    "sim_time_min": round(e.now, 3),
+                },
+                "run_record": self.run_record(),
+                "events": events,
+                "event_count": len(events),
+                "event_digest": digest_events(events),
+                "announcements": snap["ambulance_announcements"],
+                # Staff decisions and approvals arrive with the action tickets; none exist yet.
+                "choices": [],
+                "settings": {"simulation": settings, "forecast": None},
+                "ui": ui,
+                "observed": {
+                    "counts": snap["counts"],
+                    "overall_status": snap["overall_status"]["label"],
+                    "zone_states": [z["state"] for z in snap["pressure"]["zones"]],
+                    "patients_in_ed": len(snap["patients"]),
+                },
+                "results": {
+                    "label": "Completed synthetic run" if completed else "In-progress synthetic run: no final outcome yet",
+                    "completed": completed,
+                    "scored_window_min": [WARMUP_MIN, WARMUP_MIN + SCORED_MIN],
+                    "time_summary": self._time_summary(),
+                    "unfinished": [
+                        {"patient_id": p.id, "phase": p.phase, "urgency": p.supplied.urgency,
+                         "accrued_ed_min": p.time_parts(e.now)["total_ed_min"]}
+                        for p in e.patients.values() if p.departure_min is None
+                    ],
+                    "congestion_episodes": list(e.monitor.episodes),
+                    "local_episodes": {sid: list(st.episodes) for sid, st in e.local.services.items()},
+                },
+                "note": (
+                    "Synthetic demo run. This record is evidence: it carries the scenario's workload "
+                    "variant, which is hidden from every observation response of the live replay."
+                ),
+            }
+        saved.put(record)
+        return record
+
     def export(self) -> dict[str, Any]:
         with self.lock:
             e = self.engine
@@ -1114,6 +1213,7 @@ class ReplaySession:
                 "run_number": self.run_number,
                 "version": self.version,
                 "profile": PROFILE,
+                "run_record": self.run_record(),
                 "scenario": self.scenario,
                 "seed": self.seed,
                 "sim_time_min": round(e.now, 3),
@@ -1141,6 +1241,14 @@ class ReplaySession:
             }
 
 
+def digest_events(events: list[dict[str, Any]]) -> str:
+    return hashlib.sha256(json.dumps(events, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+class SavedRunMismatch(Exception):
+    """A saved run no longer reproduces under the current engine or assumptions."""
+
+
 class ReplayStore:
     def __init__(self) -> None:
         self._sessions: dict[str, ReplaySession] = {}
@@ -1155,3 +1263,32 @@ class ReplayStore:
     def get(self, replay_id: str) -> ReplaySession | None:
         with self._lock:
             return self._sessions.get(replay_id)
+
+    def load(self, record: dict[str, Any]) -> ReplaySession:
+        """Rebuilds a saved run as a new replay at its saved time and checks that it reproduces the saved
+        received events exactly. A run that does not reproduce is refused, never approximated."""
+        ident = record["identity"]
+        session = ReplaySession(ident["seed"], ident["scenario"])
+        target = float(ident["sim_time_min"])
+        while session.engine.now < target - 1e-9:
+            session.advance(min(MAX_ADVANCE_MIN, target - session.engine.now))
+        got = list(session.engine.gate.received)
+        if len(got) != record["event_count"] or digest_events(got) != record["event_digest"]:
+            raise SavedRunMismatch(
+                f"saved run {record['saved_id']} does not reproduce: {len(got)} events rebuilt, "
+                f"{record['event_count']} saved"
+            )
+        session.saved_run = {
+            "id": record["saved_id"],
+            "label": record["label"],
+            "completed": record["completed"],
+            "saved_at": record["saved_at"],
+            "ui": record["ui"],
+            "settings": record["settings"],
+            "choices": record["choices"],
+            "results": record["results"],
+            "versions": record["run_record"]["versions"],
+        }
+        with self._lock:
+            self._sessions[session.id] = session
+        return session

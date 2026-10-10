@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import saved
 from .fixtures import FIXTURES
-from .profile import PROFILE, PROFILE_ID, SCENARIOS
-from .replay import API_VERSION, MAX_ADVANCE_MIN, ReplayStore
+from .profile import (
+    CATALOG_VERSION, ENGINE_VERSION, PROFILE, PROFILE_ID, SCENARIOS, SCORED_MIN, WARMUP_MIN, scenario_catalog,
+)
+from .replay import API_VERSION, MAX_ADVANCE_MIN, ReplayStore, SavedRunMismatch
 
 app = FastAPI(title="PulseAhead synthetic ED twin", version=API_VERSION)
 store = ReplayStore()
@@ -35,6 +40,22 @@ class Advance(BaseModel):
 class Reset(BaseModel):
     seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
     scenario: str | None = None
+
+
+class SaveUi(BaseModel):
+    selected_zone: int | None = Field(default=None, ge=1, le=4)
+    camera: Literal["overview", "zone-1", "zone-2", "zone-3", "zone-4"] = "overview"
+    view_mode: Literal["3d"] = "3d"
+
+
+class SaveSettings(BaseModel):
+    speed: Literal[1, 2, 5, 10] = 2
+    step_min: Literal[5] = 5
+
+
+class SaveBody(BaseModel):
+    ui: SaveUi = SaveUi()
+    settings: SaveSettings = SaveSettings()
 
 
 def _session(replay_id: str):
@@ -62,7 +83,22 @@ def profile() -> dict:
         **PROFILE,
         "ward_beds": [{k: v for k, v in b.items() if k != "free_at_min"} for b in PROFILE["ward_beds"]],
     }
-    return {"profile": public, "scenarios": list(SCENARIOS.values())}
+    return {"profile": public, "scenarios": [{k: s[k] for k in ("id", "name", "family", "description")} for s in scenario_catalog()]}
+
+
+@app.get("/api/v1/scenarios")
+def scenarios() -> dict:
+    """The seven scenario families with their warm-up and scored duration, seed partitions and versions.
+    Time windows of a workload variant are the replay's hidden future and appear only in a run record."""
+    return {
+        "api_version": API_VERSION,
+        "catalog_version": CATALOG_VERSION,
+        "synthetic": True,
+        "warmup_min": WARMUP_MIN,
+        "scored_min": SCORED_MIN,
+        "versions": {"api": API_VERSION, "engine": ENGINE_VERSION, "profile": PROFILE_ID, "scenario_catalog": CATALOG_VERSION},
+        "scenarios": scenario_catalog(),
+    }
 
 
 @app.get("/api/v1/fixtures")
@@ -113,6 +149,38 @@ def reset(replay_id: str, body: Reset | None = None) -> dict:
     if body.scenario is not None:
         _check_scenario(body.scenario)
     return s.reset(body.seed, body.scenario)
+
+
+@app.post("/api/v1/replays/{replay_id}/save")
+def save_run(replay_id: str, body: SaveBody | None = None) -> dict:
+    body = body or SaveBody()
+    record = _session(replay_id).save(body.ui.model_dump(), body.settings.model_dump())
+    return saved.summary(record)
+
+
+@app.get("/api/v1/saved")
+def saved_runs() -> dict:
+    return {"api_version": API_VERSION, "saved": saved.list_summaries()}
+
+
+@app.get("/api/v1/saved/{saved_id}")
+def saved_run(saved_id: str) -> dict:
+    record = saved.get(saved_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="unknown saved run")
+    return record
+
+
+@app.post("/api/v1/saved/{saved_id}/load")
+def load_saved(saved_id: str) -> dict:
+    record = saved.get(saved_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="unknown saved run")
+    try:
+        session = store.load(record)
+    except SavedRunMismatch as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return session.snapshot()
 
 
 @app.get("/api/v1/replays/{replay_id}/ingest")

@@ -817,3 +817,38 @@ p {
   margin-bottom: var(--s-3);
   font-size: var(--text-xs);
 }
+
+/* ---- demo and evidence ---------------------------------------------------------------- */
+.select {
+  width: 100%;
+  min-height: var(--target);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.select:focus-visible {
+  outline: 2.4px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.select:disabled {
+  background: var(--surface-sunken);
+  color: var(--ink-faint);
+}
+
+.subhead {
+  margin: var(--s-4) 0 var(--s-2);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.btn-row a.btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

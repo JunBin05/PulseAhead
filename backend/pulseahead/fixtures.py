@@ -362,6 +362,25 @@ FIXTURES: dict[str, dict[str, Any]] = {
         ],
         "injections": _FEED_INJECTIONS,
     },
+    # Two runs with the same seed and the same received history until T+75: only B has a hidden surge and
+    # an imaging backlog after that. Used to show an observation response cannot depend on the future.
+    "fixture-hidden-future-a": {
+        "id": "fixture-hidden-future-a",
+        "name": "Fixture: hidden-future pair A (no later surge)",
+        "fixture": True,
+        "rate_multiplier": 1.0,
+        "rate_ceiling": 5.0,
+        "surges": [],
+    },
+    "fixture-hidden-future-b": {
+        "id": "fixture-hidden-future-b",
+        "name": "Fixture: hidden-future pair B (surge and imaging backlog from T+75)",
+        "fixture": True,
+        "rate_multiplier": 1.0,
+        "rate_ceiling": 5.0,
+        "surges": [{"start": 75.0, "end": 115.0, "walk_in": 5.0, "ambulance": 4.0}],
+        "test_boosts": [{"kind": "imaging", "start": 75.0, "end": 115.0, "extra_prob": 0.9}],
+    },
     "fixture-feed-optional-stop": {
         "id": "fixture-feed-optional-stop",
         "name": "Fixture: ambulance feed stopped T+25 to T+60 and diagnostics feed stopped T+40 to T+80",

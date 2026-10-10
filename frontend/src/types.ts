@@ -373,6 +373,8 @@ export interface Snapshot {
   event_count: number;
   /** Services a fixture declares missing; their figures are null rather than exact. */
   limited_services?: string[];
+  /** Set when this replay was rebuilt from a saved run (labelled as a synthetic run). */
+  saved_run: SavedRunInfo | null;
 }
 
 export const ZONE_NAMES: Record<number, string> = {
@@ -443,4 +445,62 @@ export interface ZoneDetail {
     overall_status_label: string;
     note: string;
   };
+}
+
+/** One scenario family from /api/v1/scenarios. The time windows of its workload are a run's hidden future. */
+export interface ScenarioInfo {
+  id: string;
+  name: string;
+  family: string;
+  demo: string | null;
+  description: string;
+  workload_variant: string;
+  warmup_min: number;
+  scored_min: number;
+  seed_partitions: { development: number[]; tuning: number[]; test: number[] };
+}
+
+export interface ScenarioCatalog {
+  api_version: string;
+  catalog_version: string;
+  warmup_min: number;
+  scored_min: number;
+  versions: Record<string, string>;
+  scenarios: ScenarioInfo[];
+}
+
+export interface SavedUi {
+  selected_zone: number | null;
+  camera: string;
+  view_mode: string;
+}
+
+export interface SavedSettings {
+  simulation: { speed: number; step_min: number };
+  forecast: unknown;
+}
+
+export interface SavedSummary {
+  saved_id: string;
+  label: string;
+  completed: boolean;
+  saved_at: string;
+  scenario: string;
+  scenario_name: string;
+  seed: number;
+  sim_time_min: number;
+  event_count: number;
+  ui: SavedUi;
+}
+
+/** Present on a replay that was rebuilt from a saved run. */
+export interface SavedRunInfo {
+  id: string;
+  label: string;
+  completed: boolean;
+  saved_at: string;
+  ui: SavedUi;
+  settings: SavedSettings;
+  choices: unknown[];
+  versions: Record<string, string>;
 }

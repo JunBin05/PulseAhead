@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import simpy
+from dataclasses import replace as dc_replace
 
 from .feeds import SERVICE_SOURCE, IngestGate
 from .fixtures import FIXTURES
@@ -674,33 +675,87 @@ class EDEngine:
     def _base_walk_in_rate_per_min(self) -> float:
         return PROFILE["assumptions"]["walk_in_rate_per_hour_average"] / 60.0 * self._rate_mult
 
+    def _segment_mult(self, t: float, key: str) -> float:
+        """Scenario arrival-rate multiplier at time t for walk-ins or ambulances (1.0 without segments)."""
+        m = 1.0
+        for s in self.definition.get("surges", ()):
+            if s["start"] <= t < s["end"]:
+                m *= s.get(key, 1.0)
+        return m
+
+    def _rate_ceiling(self, key: str) -> float:
+        """Upper bound the thinning is done against. A scenario can fix it so that two scenarios share a
+        random stream until their hidden futures differ."""
+        d = self.definition
+        if "rate_ceiling" in d:
+            return float(d["rate_ceiling"])
+        ceiling = 1.0
+        for s in d.get("surges", ()):
+            ceiling *= max(1.0, s.get(key, 1.0))
+        return ceiling
+
+    def _adjust(self, key: str, s: SuppliedInputs) -> SuppliedInputs:
+        """Scenario workload variants applied to one patient's supplied inputs when they arrive: extra
+        or slower tests and a heavier admission mix. Every draw is keyed by seed and identity."""
+        d = self.definition
+        boosts, scales, dboost = d.get("test_boosts"), d.get("turnaround_scales"), d.get("disposition_boost")
+        if not (boosts or scales or dboost):
+            return s
+        t = self.now
+        tests = list(s.tests)
+        for b in boosts or ():
+            if b["start"] <= t < b["end"] and all(k != b["kind"] for k, _ in tests):
+                if random.Random(f"{self.seed}:{key}:boost:{b['kind']}").random() < b["extra_prob"]:
+                    spec = PROFILE["assumptions"][f"{b['kind']}_turnaround_minutes"]
+                    rng = random.Random(f"{self.seed}:{key}:boostmin:{b['kind']}")
+                    tests.append((b["kind"], round(rng.triangular(spec["min"], spec["max"], spec["mode"]), 3)))
+        tests.sort(key=lambda x: 0 if x[0] == "lab" else 1)
+        for sc in scales or ():
+            if sc["start"] <= t < sc["end"]:
+                tests = [(k, round(m * sc["scale"], 3)) if k == sc["kind"] else (k, m) for k, m in tests]
+        disposition = s.disposition
+        if dboost and dboost["start"] <= t < dboost["end"] and disposition == "home":
+            if random.Random(f"{self.seed}:{key}:dboost").random() < dboost["ward"]:
+                disposition = "ward"
+        return dc_replace(s, tests=tuple(tests), disposition=disposition)
+
     def _walk_in_rate_per_min(self, t: float) -> float:
         variation = PROFILE["assumptions"]["arrival_rate_variation"]
         # Slow daily wave around the average, peaking mid-shift (demo assumption).
         wave = 1.0 + variation * math.sin(2 * math.pi * (t / 60.0 - 4.0) / 24.0)
-        return self._base_walk_in_rate_per_min() * wave
+        return self._base_walk_in_rate_per_min() * wave * self._segment_mult(t, "walk_in")
 
     def _walk_ins(self):
-        max_rate = self._base_walk_in_rate_per_min() * (1 + PROFILE["assumptions"]["arrival_rate_variation"])
+        max_rate = (
+            self._base_walk_in_rate_per_min()
+            * (1 + PROFILE["assumptions"]["arrival_rate_variation"])
+            * self._rate_ceiling("walk_in")
+        )
         while True:
             yield self.env.timeout(self._walk_in_rng.expovariate(max_rate))
             # Thinning for a time-varying rate.
             if self._walk_in_rng.random() <= self._walk_in_rate_per_min(self.now) / max_rate:
                 self._walk_in_counter += 1
                 pid = f"P{self._walk_in_counter:04d}"
-                self._spawn(pid, walk_in_inputs(self.seed, pid))
+                self._spawn(pid, self._adjust(pid, walk_in_inputs(self.seed, pid)))
 
     def _scripted_walk_in(self, at: float, pid: str, supplied: SuppliedInputs):
         yield self.env.timeout(at)
         self._spawn(pid, supplied)
 
     def _ambulance_stream(self):
-        rate = PROFILE["assumptions"]["ambulance_runs_per_hour_average"] / 60.0 * self._rate_mult
+        d = self.definition
+        thin = "surges" in d or "rate_ceiling" in d
+        ceiling = self._rate_ceiling("ambulance") if thin else 1.0
+        rate = PROFILE["assumptions"]["ambulance_runs_per_hour_average"] / 60.0 * self._rate_mult * ceiling
         counter = 0
         while True:
             yield self.env.timeout(self._ambulance_rng.expovariate(rate))
+            if thin and self._ambulance_rng.random() > self._segment_mult(self.now, "ambulance") / ceiling:
+                continue
             counter += 1
             run = generate_ambulance_run(self.seed, f"A{counter:03d}", self.now)
+            run.patients = [self._adjust(f"{run.id}:{i}", s) for i, s in enumerate(run.patients, start=1)]
             self.env.process(self._ambulance(run))
 
     def _ambulance(self, run: AmbulanceRun):

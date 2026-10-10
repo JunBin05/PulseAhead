@@ -21,6 +21,8 @@ import {
   type Feed,
   type Phase,
   type PressureService,
+  type SavedSummary,
+  type ScenarioInfo,
   type Snapshot,
   type Urgency,
   type ZoneDetail,
@@ -191,6 +193,11 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [slow, setSlow] = useState(false);
   const [, setClock] = useState(0);
+  // Presenter controls: the scenario family used on the next Start or Reset, and saved runs.
+  const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
+  const [scenarioId, setScenarioId] = useState('normal');
+  const [savedList, setSavedList] = useState<SavedSummary[]>([]);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
 
   const idRef = useRef<string | null>(null);
   const versionRef = useRef(0);
@@ -285,8 +292,8 @@ export function App() {
     idRef.current = null;
     versionRef.current = 0;
     clearSelection();
-    void run(() => api.create(TEST_FIXTURE), true);
-  }, [run, clearSelection]);
+    void run(() => api.create(TEST_FIXTURE ?? scenarioId), true);
+  }, [run, clearSelection, scenarioId]);
 
   const advance = useCallback(
     (minutes: number) => {
@@ -315,8 +322,74 @@ export function App() {
     setPlaying(false);
     clearSelection();
     epochRef.current += 1;
-    void run(() => api.reset(id), true);
-  }, [run, clearSelection]);
+    void run(() => api.reset(id, TEST_FIXTURE ? undefined : scenarioId), true);
+  }, [run, clearSelection, scenarioId]);
+
+  const refreshSaved = useCallback(() => {
+    api
+      .saved()
+      .then((r) => setSavedList(r.saved))
+      .catch(() => {
+        /* the list keeps what it had; saving and loading report their own errors */
+      });
+  }, []);
+
+  useEffect(() => {
+    api
+      .scenarios()
+      .then((c) => setScenarios(c.scenarios))
+      .catch(() => {
+        /* the selector stays on the default scenario */
+      });
+    refreshSaved();
+  }, [refreshSaved]);
+
+  // Save the run as it is now: its received events, announcements, settings and what is on screen.
+  const save = useCallback(() => {
+    const id = idRef.current;
+    if (!id) return;
+    setSaveNote(null);
+    api
+      .save(id, {
+        ui: {
+          selected_zone: selectedRef.current,
+          camera: focusZone === null ? 'overview' : `zone-${focusZone}`,
+        },
+        settings: { speed, step_min: STEP_MINUTES },
+      })
+      .then((s) => {
+        setSaveNote(`Saved ${s.saved_id}: ${s.label} at ${formatClock(s.sim_time_min)}.`);
+        refreshSaved();
+      })
+      .catch((e) => setSaveNote(e instanceof ApiError ? `Could not save: ${e.message}` : 'Could not save.'));
+  }, [focusZone, speed, refreshSaved]);
+
+  // Loading rebuilds one consistent run: the old replay, selection, camera and requests are dropped
+  // first, then the saved selection and camera are restored on top of the rebuilt state.
+  const load = useCallback(
+    (savedId: string) => {
+      setPlaying(false);
+      setSaveNote(null);
+      epochRef.current += 1;
+      idRef.current = null;
+      versionRef.current = 0;
+      clearSelection();
+      void run(async () => {
+        const s = await api.load(savedId);
+        const ui = s.saved_run?.ui;
+        if (ui?.selected_zone) {
+          selectedRef.current = ui.selected_zone;
+          setSelectedZone(ui.selected_zone);
+          setFocusZone(ui.camera === `zone-${ui.selected_zone}` ? ui.selected_zone : null);
+        }
+        const sp = s.saved_run?.settings.simulation.speed;
+        if (sp === 1 || sp === 2 || sp === 5 || sp === 10) setSpeed(sp);
+        setScenarioId(s.scenario);
+        return s;
+      }, true);
+    },
+    [run, clearSelection],
+  );
 
   // Playback: each tick asks the backend to advance one simulated minute. Rendering speed never
   // changes simulated time; only these requests do.
@@ -540,6 +613,18 @@ export function App() {
               </>
             )}
           </section>
+
+          <DemoPanel
+            snap={snap}
+            scenarios={scenarios}
+            scenarioId={scenarioId}
+            onScenario={setScenarioId}
+            fixtureLocked={TEST_FIXTURE !== undefined}
+            onSave={save}
+            saveNote={saveNote}
+            saved={savedList}
+            onLoad={load}
+          />
 
           <AmbulancePanel snap={snap} />
 
@@ -1381,6 +1466,138 @@ function AmbulancePanel({ snap }: { snap: Snapshot | null }) {
               </li>
             );
           })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function partitionOf(info: ScenarioInfo | undefined, seed: number): string {
+  if (!info) return 'unknown';
+  for (const [name, seeds] of Object.entries(info.seed_partitions)) if (seeds.includes(seed)) return name;
+  return 'custom';
+}
+
+/** Presenter controls and the evidence record: scenario family, its warm-up and scored duration, the
+ * seed partition, and saved runs. Kept apart from the staff controls above. */
+function DemoPanel({
+  snap,
+  scenarios,
+  scenarioId,
+  onScenario,
+  fixtureLocked,
+  onSave,
+  saveNote,
+  saved,
+  onLoad,
+}: {
+  snap: Snapshot | null;
+  scenarios: ScenarioInfo[];
+  scenarioId: string;
+  onScenario: (id: string) => void;
+  fixtureLocked: boolean;
+  onSave: () => void;
+  saveNote: string | null;
+  saved: SavedSummary[];
+  onLoad: (savedId: string) => void;
+}) {
+  const info = scenarios.find((s) => s.id === scenarioId);
+  const runInfo = snap ? scenarios.find((s) => s.id === snap.scenario) : undefined;
+  const pending = snap !== null && snap.scenario !== scenarioId;
+  return (
+    <section className="panel" aria-labelledby="demo-h">
+      <h2 id="demo-h">Demo and evidence</h2>
+      <label className="field-label" htmlFor="scenario-select">
+        Scenario
+      </label>
+      <select
+        id="scenario-select"
+        className="select"
+        data-testid="scenario-select"
+        value={scenarioId}
+        disabled={fixtureLocked || scenarios.length === 0}
+        onChange={(e) => onScenario(e.target.value)}
+      >
+        {scenarios.length === 0 && <option value={scenarioId}>Normal shift</option>}
+        {scenarios.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+            {s.demo ? ` (${s.demo})` : ''}
+          </option>
+        ))}
+      </select>
+      {info && (
+        <p className="muted" data-testid="scenario-desc" style={{ marginTop: 'var(--s-2)' }}>
+          {info.description} {info.workload_variant}
+        </p>
+      )}
+      {pending && (
+        <p data-testid="scenario-pending" style={{ marginTop: 'var(--s-2)' }}>
+          The running replay is “{snap?.scenario_name}”. Reset to run {info?.name ?? scenarioId}.
+        </p>
+      )}
+      {snap?.saved_run && (
+        <p className="synthetic-chip" data-testid="loaded-run" style={{ marginTop: 'var(--s-3)' }}>
+          Loaded saved run {snap.saved_run.id}: {snap.saved_run.label}
+        </p>
+      )}
+      {snap && runInfo && (
+        <dl className="kv" style={{ marginTop: 'var(--s-3)' }} data-testid="run-record">
+          <dt>Warm-up / scored</dt>
+          <dd data-testid="run-warmup">
+            {runInfo.warmup_min} min / {runInfo.scored_min} min
+          </dd>
+          <dt>Seed</dt>
+          <dd data-testid="run-seed">
+            {snap.seed} ({partitionOf(runInfo, snap.seed)})
+          </dd>
+          <dt>Versions</dt>
+          <dd data-testid="run-versions">
+            API {snap.api_version} · profile {snap.profile_id}
+          </dd>
+        </dl>
+      )}
+      <div style={{ marginTop: 'var(--s-4)' }}>
+        <button className="btn btn-block" onClick={onSave} disabled={!snap} data-testid="save-run">
+          Save run
+        </button>
+      </div>
+      <div aria-live="polite" role="status">
+        {saveNote && (
+          <p data-testid="save-note" className="muted" style={{ marginTop: 'var(--s-2)' }}>
+            {saveNote}
+          </p>
+        )}
+      </div>
+      <h3 className="subhead">Saved runs</h3>
+      {saved.length === 0 ? (
+        <p className="muted" data-testid="saved-empty">
+          No saved runs yet.
+        </p>
+      ) : (
+        <ul className="feed-list" data-testid="saved-list">
+          {saved.map((s) => (
+            <li key={s.saved_id} data-testid={`saved-${s.saved_id}`} data-completed={s.completed}>
+              <div className="feed-row">
+                <strong>{s.scenario_name}</strong>
+                <span className="feed-status" data-tone={s.completed ? 'normal' : 'unknown'}>
+                  {s.completed ? <IconCheck /> : <IconClock />}
+                  {s.completed ? 'Completed' : 'In progress'}
+                </span>
+              </div>
+              <div className="muted">
+                {s.label} · seed {s.seed} · {formatClock(s.sim_time_min)} · {s.event_count} events
+              </div>
+              <div className="btn-row">
+                <button className="btn" onClick={() => onLoad(s.saved_id)} data-testid={`saved-load-${s.saved_id}`}>
+                  Load
+                </button>
+                <a className="btn" href={`/api/v1/saved/${s.saved_id}`} target="_blank" rel="noreferrer">
+                  Open record
+                </a>
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </section>
