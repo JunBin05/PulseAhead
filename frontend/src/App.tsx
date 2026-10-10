@@ -4,6 +4,7 @@ import { buildScene } from './layout';
 import { Scene } from './Scene';
 import {
   IconCheck,
+  IconClock,
   IconOctagon,
   IconPause,
   IconPlay,
@@ -15,10 +16,15 @@ import {
 import { ZONE_NAMES, type CongestionState, type Phase, type Snapshot, type Urgency } from './types';
 
 const SPEEDS = [1, 2, 5, 10] as const;
+
+/** Test-only: `?fixture=<id>` starts a controlled fixture scenario for Playwright MCP checks.
+ * It is not linked or shown anywhere in the staff workflow. */
+const TEST_FIXTURE = new URLSearchParams(window.location.search).get('fixture') ?? undefined;
 const STEP_MINUTES = 5;
 
 const PHASE_LABEL: Record<Phase, string> = {
-  arrival: 'Registration and triage',
+  awaiting_triage: 'Waiting for triage',
+  in_triage: 'At the triage desk',
   awaiting_space: 'Waiting for an ED space',
   awaiting_clinician: 'In a space, waiting for a clinician',
   assessment_active: 'With a clinician',
@@ -160,7 +166,7 @@ export function App() {
     idRef.current = null;
     versionRef.current = 0;
     setSelectedZone(null);
-    void run(() => api.create(), true);
+    void run(() => api.create(TEST_FIXTURE), true);
   }, [run]);
 
   const advance = useCallback(
@@ -378,18 +384,7 @@ export function App() {
             )}
           </section>
 
-          <section className="panel" aria-labelledby="amb-h">
-            <h2 id="amb-h">Inbound ambulances</h2>
-            <dl className="kv">
-              <dt>Ambulances en route</dt>
-              <dd data-testid="amb-count">{snap ? snap.inbound_ambulances.length : 0}</dd>
-              <dt>Announced patients</dt>
-              <dd>0</dd>
-            </dl>
-            <p className="muted" style={{ marginTop: 'var(--s-3)' }}>
-              No ambulance announcements have been received.
-            </p>
-          </section>
+          <AmbulancePanel snap={snap} />
 
           {snap && (
             <section className="panel" aria-labelledby="res-h">
@@ -403,6 +398,14 @@ export function App() {
                 <dd data-testid="occupied-spaces">{snap.resources.ed_spaces.occupied}</dd>
                 <dt>Awaiting a space</dt>
                 <dd data-testid="awaiting-space">{snap.resources.ed_spaces.awaiting_space}</dd>
+                <dt>Resuscitation spaces free</dt>
+                <dd data-testid="resus-available">
+                  {snap.resources.resus_spaces.available} of {snap.resources.resus_spaces.total}
+                </dd>
+                <dt>Triage desk busy</dt>
+                <dd data-testid="triage-busy">
+                  {snap.resources.triage_desk.busy} of {snap.resources.triage_desk.total}
+                </dd>
                 <dt>Clinician slots busy</dt>
                 <dd>
                   {snap.resources.clinician_slots.busy} of {snap.resources.clinician_slots.total}
@@ -503,6 +506,7 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
   const zone = snap.zones.find((z) => z.id === zoneId)!;
   const patients = snap.patients.filter((p) => zone.patient_ids.includes(p.id));
   const sp = snap.resources.ed_spaces;
+  const rs = snap.resources.resus_spaces;
   return (
     <div data-testid="zone-drawer" data-zone={zone.id} data-version={snap.version}>
       <h2 id="drawer-h">
@@ -523,8 +527,14 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
         )}
         {zone.id === 1 && (
           <>
-            <dt>In registration and triage</dt>
-            <dd>{zone.queue}</dd>
+            <dt>Waiting for triage</dt>
+            <dd data-testid="drawer-triage-queue">{zone.queue}</dd>
+            <dt>At the triage desk</dt>
+            <dd>
+              {snap.resources.triage_desk.busy} of {snap.resources.triage_desk.total}
+            </dd>
+            <dt>Reserve triage team</dt>
+            <dd>{snap.resources.triage_desk.reserve_team.active ? 'Active' : 'Declared, not active'}</dd>
           </>
         )}
         {zone.id === 4 && (
@@ -537,7 +547,7 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
       <p style={{ marginBottom: 'var(--s-4)' }}>
         {zone.id === 1 && 'No treatment beds here. Patients wait for registration and triage.'}
         {(zone.id === 2 || zone.id === 3) &&
-          `ED spaces are one shared pool for zones 2 and 3: ${sp.occupied} of ${sp.total} occupied, ${sp.available_staffed} available.`}
+          `ED spaces are one shared pool for zones 2 and 3: ${sp.occupied} of ${sp.total} occupied, ${sp.available_staffed} general spaces free. ${rs.available} of ${rs.total} resuscitation spaces (held for supplied critical bypass) free${rs.awaiting ? `, ${rs.awaiting} critical patient${rs.awaiting === 1 ? '' : 's'} waiting` : ''}.`}
         {zone.id === 4 &&
           `These patients still occupy their ED space until they physically leave (${sp.occupied} of ${sp.total} spaces occupied).`}
       </p>
@@ -552,16 +562,85 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
               <li key={p.id}>
                 <strong>{p.id}</strong>
                 <span>
-                  {PHASE_LABEL[p.phase]}
+                  {p.critical_bypass && p.phase === 'awaiting_space'
+                    ? 'Critical bypass, waiting for a resuscitation space'
+                    : PHASE_LABEL[p.phase]}
                   {p.space_id && ` · Space ${p.space_id}`}
+                  {p.triage_id && ` · Desk ${p.triage_id}`}
                   {p.clinician_id && ` · Clinician slot ${p.clinician_id}`}
+                  {` · ${p.acuity_system} ${p.acuity_score} (supplied)`}
+                  {p.ambulance_id && ` · Ambulance ${p.ambulance_id}`}
                 </span>
-                <span className="tag">{URGENCY_LABEL[p.urgency]}</span>
+                <span className="tag">
+                  {p.critical_bypass ? 'Critical bypass' : URGENCY_LABEL[p.urgency]}
+                </span>
               </li>
             ))}
           </ul>
         </>
       )}
     </div>
+  );
+}
+
+const AMB_STATUS: Record<'en_route' | 'delayed', string> = {
+  en_route: 'En route',
+  delayed: 'Delayed, ETA overdue',
+};
+
+function AmbulancePanel({ snap }: { snap: Snapshot | null }) {
+  const inbound = snap?.inbound_ambulances ?? [];
+  const summary = snap?.inbound_summary;
+  return (
+    <section className="panel" aria-labelledby="amb-h">
+      <h2 id="amb-h">Inbound ambulances</h2>
+      <dl className="kv">
+        <dt>Ambulances en route</dt>
+        <dd data-testid="amb-count">{summary ? summary.ambulances : '—'}</dd>
+        <dt>Announced inbound patients</dt>
+        <dd data-testid="amb-patients">{summary ? summary.patients : '—'}</dd>
+      </dl>
+      {!snap ? (
+        <p className="muted" style={{ marginTop: 'var(--s-3)' }}>
+          Announcements appear once the simulation has started.
+        </p>
+      ) : inbound.length === 0 ? (
+        <p className="muted" style={{ marginTop: 'var(--s-3)' }} data-testid="amb-empty">
+          No ambulances are currently announced.
+          {summary?.feed_last_update_min != null &&
+            ` Last ambulance update at ${formatClock(summary.feed_last_update_min)}.`}
+        </p>
+      ) : (
+        <ul className="amb-list" data-testid="amb-list">
+          {inbound.map((a) => {
+            const critical = a.acuity?.filter((x) => x.critical_bypass).length ?? 0;
+            return (
+              <li key={a.id} data-testid={`amb-${a.id}`} data-status={a.status}>
+                <div className="amb-row">
+                  <strong>{a.id}</strong>
+                  <span className="amb-status" data-tone={a.status === 'delayed' ? 'pressure' : 'unknown'}>
+                    {a.status === 'delayed' ? <IconTriangle /> : <IconClock />}
+                    {AMB_STATUS[a.status as 'en_route' | 'delayed']}
+                  </span>
+                </div>
+                <div className="muted">
+                  ETA {formatClock(a.eta_min)} ±{a.eta_uncertainty_min} min ·{' '}
+                  {patientCount(a.patient_count)}
+                  {a.minutes_overdue !== null && ` · ${Math.round(a.minutes_overdue)} min overdue`}
+                </div>
+                <div className="muted">
+                  {a.acuity
+                    ? `Supplied acuity: ${a.acuity.map((x) => x.acuity).join(', ')}${
+                        critical ? ` · ${critical} critical bypass` : ''
+                      }`
+                    : 'Acuity not yet reported'}
+                  {` · updated ${formatClock(a.source_updated_min)}`}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

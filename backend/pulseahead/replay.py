@@ -11,7 +11,7 @@ import uuid
 from typing import Any
 
 from .engine import EDEngine
-from .profile import PROFILE, PROFILE_ID, SCENARIOS, ZONES
+from .profile import PROFILE, PROFILE_ID, ZONES
 
 MAX_ADVANCE_MIN = 60.0
 API_VERSION = "v1"
@@ -57,19 +57,14 @@ class ReplaySession:
         def in_phase(*phases: str) -> list[str]:
             return [p["id"] for p in patients if p["phase"] in phases]
 
-        occupied = e.occupied_spaces()
-        total_spaces = PROFILE["regular_spaces"]
-        awaiting = e.awaiting_space()
-        clin_busy = e.clinicians.count
-        clin_total = PROFILE["clinician_slots"]
-
         zone_defs = {z["id"]: z for z in ZONES}
         zones = []
         for zid in (1, 2, 3, 4):
             if zid == 1:
-                ids = in_phase("arrival")
-                detail = {"queue": len(ids), "active": 0}
-                capacity = None
+                ids = in_phase("awaiting_triage", "in_triage")
+                detail = {"queue": len(in_phase("awaiting_triage")), "active": len(in_phase("in_triage"))}
+                # No treatment-bed pool in zone 1.
+                capacity = {"kind": "triage_desk", "treatment_beds": None}
             elif zid == 2:
                 ids = in_phase("awaiting_space", "awaiting_clinician", "assessment_active")
                 detail = {
@@ -106,6 +101,14 @@ class ReplaySession:
             "confirmed": "Congested",
         }[mon.state]
 
+        announcements = [a.public(now) for a in sorted(e.announcements.values(), key=lambda a: a.id)]
+        inbound = [a for a in announcements if a["status"] in ("en_route", "delayed")]
+        inbound_patients = sum(a["patient_count"] for a in inbound)
+        feed_times = [a["source_updated_min"] for a in announcements]
+        background = e.definition.get("background_arrivals", True)
+        rate_mult = e.definition.get("rate_multiplier", 1.0) if background else 0.0
+        assumptions = PROFILE["assumptions"]
+
         return {
             "api_version": API_VERSION,
             "replay_id": self.id,
@@ -113,7 +116,7 @@ class ReplaySession:
             "version": self.version,
             "profile_id": PROFILE_ID,
             "scenario": self.scenario,
-            "scenario_name": SCENARIOS[self.scenario]["name"],
+            "scenario_name": e.definition["name"],
             "seed": self.seed,
             "synthetic": True,
             "sim_time_min": round(now, 3),
@@ -131,17 +134,39 @@ class ReplaySession:
             },
             "resources": {
                 "ed_spaces": {
-                    "total": total_spaces,
-                    "occupied": occupied,
-                    "available_staffed": total_spaces - occupied,
-                    "awaiting_space": awaiting,
+                    "total": PROFILE["regular_spaces"],
+                    "occupied": e.occupied_spaces(),
+                    # Spaces a waiting general patient could take now; resuscitation spaces are
+                    # held for critical bypass and reported separately.
+                    "available_staffed": e.available_general_spaces(),
+                    "awaiting_space": e.awaiting_space(),
+                    "general_total": e.general_spaces.capacity,
+                    "general_occupied": e.general_spaces.count,
+                    "owner": PROFILE["owners"]["ed_spaces"],
+                },
+                "resus_spaces": {
+                    "total": e.resus_spaces.capacity,
+                    "occupied": e.resus_spaces.count,
+                    "available": e.resus_spaces.capacity - e.resus_spaces.count,
+                    "awaiting": len(e.resus_spaces.queue),
+                    "within_ed_spaces": True,
                     "owner": PROFILE["owners"]["ed_spaces"],
                 },
                 "clinician_slots": {
-                    "total": clin_total,
-                    "busy": clin_busy,
+                    "total": e.clinicians.capacity,
+                    "busy": e.clinicians.count,
                     "waiting": len(e.clinicians.queue),
                     "owner": PROFILE["owners"]["clinician_slots"],
+                },
+                "triage_desk": {
+                    "total": e.triage.capacity,
+                    "busy": e.triage.count,
+                    "waiting": len(e.triage.queue),
+                    "owner": PROFILE["owners"]["triage_desk"],
+                    "reserve_team": {
+                        **PROFILE["reserve_triage_team"],
+                        "owner": PROFILE["owners"]["reserve_triage_team"],
+                    },
                 },
             },
             "counts": {
@@ -151,7 +176,39 @@ class ReplaySession:
             },
             "zones": zones,
             "patients": patients,
-            "inbound_ambulances": [],
+            "inbound_ambulances": inbound,
+            "inbound_summary": {
+                "ambulances": len(inbound),
+                "patients": inbound_patients,
+                "delayed": sum(1 for a in inbound if a["status"] == "delayed"),
+                "feed_last_update_min": max(feed_times) if feed_times else None,
+            },
+            "ambulance_announcements": announcements,
+            # Forecast inputs for later tickets. Known demand comes only from received
+            # announcements; background demand is the disclosed unannounced-arrival assumption.
+            "incoming_demand": {
+                "known": {
+                    "source": "received ambulance announcements",
+                    "ambulances": len(inbound),
+                    "patients": inbound_patients,
+                    "arrivals": [
+                        {
+                            "ambulance_id": a["id"],
+                            "eta_min": a["eta_min"],
+                            "eta_uncertainty_min": a["eta_uncertainty_min"],
+                            "patient_count": a["patient_count"],
+                            "status": a["status"],
+                        }
+                        for a in inbound
+                    ],
+                },
+                "background": {
+                    "source": "disclosed profile assumption (unannounced arrivals)",
+                    "walk_ins_per_hour_average": assumptions["walk_in_rate_per_hour_average"] * rate_mult,
+                    "unannounced_ambulance_runs_per_hour_average": assumptions["ambulance_runs_per_hour_average"] * rate_mult,
+                    "note": "Announced ambulances are counted only under known demand.",
+                },
+            },
             "event_count": len(e.events),
         }
 

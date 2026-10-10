@@ -23,9 +23,9 @@ interface Area {
   step: number;
 }
 
-// Each area reserves a label row above its first dot row so labels never sit under dots.
 const AREAS: Record<Phase, Area> = {
-  arrival: { zone: 1, origin: [-2.1, -1.0], cols: 5, step: 0.85 },
+  in_triage: { zone: 1, origin: [-2.1, -1.9], cols: 1, step: 0.7 },
+  awaiting_triage: { zone: 1, origin: [-2.1, 0.4], cols: 5, step: 0.7 },
   awaiting_space: { zone: 2, origin: [-2.1, -1.9], cols: 5, step: 0.7 },
   awaiting_clinician: { zone: 2, origin: [-2.1, 0.4], cols: 5, step: 0.7 },
   assessment_active: { zone: 2, origin: [-1.8, 2.6], cols: 4, step: 1.2 },
@@ -33,7 +33,8 @@ const AREAS: Record<Phase, Area> = {
 };
 
 const AREA_TEXT: Record<Phase, string> = {
-  arrival: 'Triage queue',
+  in_triage: 'At triage desk',
+  awaiting_triage: 'Triage queue',
   awaiting_space: 'Awaiting space',
   awaiting_clinician: 'Awaiting clinician',
   assessment_active: 'With clinician',

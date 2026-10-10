@@ -133,7 +133,7 @@ No alpha or beta packages; drei `Html` is not used.
 | Duplicated helpers, unclear names, double cast | Single `lastValid`, `_base_rate_per_min`; renamed `_triangular` and the Dot prop `instant`; `as T` | tsc passes |
 
 **Deferred to the ticket that owns them** (not ticked as done anywhere):
-- **Ticket 02 (next):** the inbound ambulance panel still shows the static "0 / No announcements" placeholder rather than API values.
+- **Ticket 02:** the static "0 / No announcements" ambulance placeholder. **Resolved in ticket 02**: the panel now shows API values (see evidence/02-triage-and-ambulance-feed.md).
 - **Ticket 06:**
   - Wait-area rows overflow into the next area above 15 waiting patients ("Queues cluster in distinct waiting areas"); this needs a congestion fixture to verify.
   - Recovery is not labelled separately from Congested.

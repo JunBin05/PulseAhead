@@ -7,8 +7,9 @@ from typing import Any
 PROFILE_ID = "fictional-ed-24"
 
 URGENCY_GROUPS = ("urgent", "medium", "lower")
-URGENCY_MIX = {"urgent": 0.10, "medium": 0.40, "lower": 0.50}
 URGENCY_RANK = {"urgent": 0, "medium": 1, "lower": 2}
+# Critical-bypass patients are served before every reporting group.
+CRITICAL_RANK = -1
 
 ZONES = (
     {"id": 1, "key": "arrival", "name": "Arrival and triage"},
@@ -22,22 +23,51 @@ PROFILE: dict[str, Any] = {
     "name": "Fictional ED (synthetic)",
     "synthetic": True,
     "regular_spaces": 24,
+    # Of the 24 regular spaces, these are resuscitation spaces held for supplied critical-bypass
+    # arrivals (see OPEN_QUESTIONS.md, Q1). No extra beds exist beyond the 24.
+    "resus_spaces": 2,
     "clinician_slots": 4,
+    "triage_slots": 1,
+    "reserve_triage_team": {
+        "size": 1,
+        "active": False,
+        "note": "Declared reserve; activating it is a staff-approved action in a later ticket.",
+    },
     "owners": {
         "ed_spaces": "ED attending lead",
         "clinician_slots": "ED attending lead",
+        "triage_desk": "Triage charge nurse",
+        "reserve_triage_team": "Triage charge nurse",
     },
+    "acuity_system": "ESI",
     "assumptions": {
-        "arrival_rate_per_hour_average": 6.0,
+        "walk_in_rate_per_hour_average": 4.8,
         "arrival_rate_variation": 0.30,
+        "ambulance_runs_per_hour_average": 1.0,
+        "ambulance_patients_per_run": {"1": 0.85, "2": 0.15},
+        "ambulance_announce_lead_minutes": {"min": 10, "max": 25},
+        "ambulance_eta_uncertainty_minutes": 5,
+        "ambulance_eta_update_probability": 0.40,
+        "ambulance_cancel_probability": 0.07,
         "triage_dwell_minutes": {"min": 3, "mode": 5, "max": 8},
         "active_assessment_minutes": {"min": 5, "mode": 10, "max": 20},
         "disposition_processing_minutes": {"min": 6, "mode": 10, "max": 16},
-        "urgency_mix": URGENCY_MIX,
+        "walk_in_urgency_mix": {"urgent": 0.08, "medium": 0.40, "lower": 0.52},
+        "ambulance_urgency_mix": {"urgent": 0.30, "medium": 0.50, "lower": 0.20},
+        "ambulance_critical_given_urgent": 0.35,
+        "ambulance_acuity_known_at_announcement": 0.70,
+        "acuity_by_group": {
+            "critical": "ESI 1",
+            "urgent": "ESI 2",
+            "medium": "ESI 3",
+            "lower": "ESI 4 or 5 (even split)",
+        },
         "note": (
             "Fictional operational assumptions for the demo. They are not hospital staffing "
-            "ratios or validated clinical thresholds. Triage and discharge have no finite "
-            "resource yet; later tickets add them."
+            "ratios or validated clinical thresholds. Acuity, urgency group and critical bypass "
+            "are supplied inputs generated with the synthetic scenario; the flow model never "
+            "assigns them. The ESI-to-group relationship above is a synthetic demo assumption. "
+            "Walk-ins plus ambulance patients average about six arrivals per hour."
         ),
     },
     "congestion_rule": {
@@ -49,6 +79,6 @@ PROFILE: dict[str, Any] = {
     },
 }
 
-SCENARIOS = {
+SCENARIOS: dict[str, dict[str, Any]] = {
     "normal": {"id": "normal", "name": "Normal shift", "rate_multiplier": 1.0},
 }

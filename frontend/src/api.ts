@@ -34,10 +34,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  create: (seed?: number) =>
+  /** `scenario` is only set by the test-only `?fixture=` URL parameter; staff use the default. */
+  create: (scenario?: string) =>
     request<Snapshot>('/replays', {
       method: 'POST',
-      body: JSON.stringify(seed === undefined ? {} : { seed }),
+      body: JSON.stringify(scenario === undefined ? {} : { scenario }),
     }),
   state: (id: string) => request<Snapshot>(`/replays/${id}/state`),
   /** Applies only at `expectedVersion`; a 409 means the replay moved on and the caller should reload. */

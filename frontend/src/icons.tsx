@@ -64,3 +64,9 @@ export const IconReset = () => (
     <path d="M4 4v4.5h4.5" />
   </Svg>
 );
+export const IconClock = () => (
+  <Svg size={16}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7.5V12l3 2" />
+  </Svg>
+);

@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .fixtures import FIXTURES
 from .profile import PROFILE, PROFILE_ID, SCENARIOS
 from .replay import API_VERSION, MAX_ADVANCE_MIN, ReplayStore
 
@@ -44,7 +45,7 @@ def _session(replay_id: str):
 
 
 def _check_scenario(scenario: str) -> None:
-    if scenario not in SCENARIOS:
+    if scenario not in SCENARIOS and scenario not in FIXTURES:
         raise HTTPException(status_code=422, detail=f"unknown scenario {scenario!r}")
 
 
@@ -55,7 +56,14 @@ def health() -> dict:
 
 @app.get("/api/v1/profile")
 def profile() -> dict:
+    # Staff-facing scenarios only; test fixtures are listed separately.
     return {"profile": PROFILE, "scenarios": list(SCENARIOS.values())}
+
+
+@app.get("/api/v1/fixtures")
+def fixtures() -> dict:
+    """Test-only: controlled scenarios for Playwright MCP checks. Not shown in the staff UI."""
+    return {"fixtures": [{"id": f["id"], "name": f["name"]} for f in FIXTURES.values()]}
 
 
 @app.post("/api/v1/replays")
