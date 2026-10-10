@@ -1,5 +1,12 @@
 # HANDOFF: PulseAhead build
 
+## Functional demo + dark control-room redesign (latest)
+
+- **Engine flow-5:** new staff-approved action "Staffed surge space" (reserve space X1 with reserve nurse XN, owner ED nurse in charge, review 5 / setup 20 / active 60). No change without an approved action: seed 7 normal still 705 / 59. Smoke: `evidence/surge-smoke.mjs` (all pass).
+- **Demo case now qualifies** under the frozen model: mixed-cascade demo seed 3052, staffed-space overload, forecast-risk alert T+04:45 (66%), counts onset T+05:46 (61 min lead), drivers boarding + diagnostics; best action imaging reserve slot, surge space supported #2; unresolved bed constraint shown. The scan now measures lead to the FIRST counts onset after the alert (this rejected seed 3031, whose first onset was only 25 min after its alert).
+- **UI:** dark control-room theme (`theme.css`, `tokens.css`), KPI row, story stage with stepper, stats and charts (onset range, queue band, action savings, capacity timeline, evaluation bars), "Start guided demo" on the first screen, collapsible zone drawer sections, glowing map. Screenshots: `evidence/shots/redesign-*.png`.
+- **Verified:** demo, surge, robustness, 11, 14, 17, waits smokes pass; full A-F demo in Playwright with no errors; 375/768/1024 no horizontal scroll, no button under 44 px. **Not re-run after the redesign:** regression 01 and 18-smoke; the held-out evaluation numbers are from flow-4 (before the new action) and the demo-partition evaluation was not re-run.
+
 ## Review-gate fixes (latest)
 
 /code-review (medium) on 8c583ce..HEAD: fixed that held-out evaluations are limited to test seed index 1 (index 0 and the reserve seeds are refused, repeats are labelled REPEAT), that /evaluations/latest serves only stamped test-partition runs exactly as saved (no filled-in text), the demo-scan alert time is carried from the matched warning (no float reconstruction), the case label names the real partition, and seed-count validation reads the profile. Added a drift check (frozen settings = tuning-results.json). Not changed: catalog version 2 (load does not compare it), the demo-drivers forecast reuse (cached at the same version). The gates for tickets 11 and 17 were not re-run.

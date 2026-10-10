@@ -31,11 +31,16 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
         "effect": "One extra slot of the chosen service. Tests are never shortened and results never manufactured.",
     },
+    "staffed_surge_space": {
+        "name": "Staffed surge space",
+        "summary": "Open the declared reserve ED space X1 with its reserve nurse.",
+        "targets": {"space": {"reserve": "ed_surge_space", "zone": 2, "setup_min": 20.0}},
+        "effect": "One extra staffed general ED space. It never creates a ward bed, a doctor or a clinical clearance.",
+    },
 }
 
 NOT_MODELED: list[dict[str, str]] = [
     {"id": "cleared_discharge", "name": "Cleared discharge support", "reason": NOT_MODELED_REASON},
-    {"id": "staffed_surge_spaces", "name": "Staffed surge spaces", "reason": NOT_MODELED_REASON},
     {"id": "surge_triage_desk", "name": "Surge triage desk", "reason": NOT_MODELED_REASON},
     {"id": "reserve_physician", "name": "Reserve physician assessment capacity", "reason": NOT_MODELED_REASON},
     {"id": "diagnostic_reallocation", "name": "Diagnostic reallocation from another service", "reason": NOT_MODELED_REASON},
@@ -90,6 +95,13 @@ def eligibility(snapshot: dict[str, Any], s: dict[str, Any], in_flight: bool) ->
                 )
             else:
                 reasons.append("No decided Ward/ICU patient is waiting for allocation work.")
+    elif s["service"] == "space":
+        # A preventive action: opening the reserve space is possible whenever the reserve exists and the
+        # space and staffing feeds are current. Whether it helps is decided by the paired comparison
+        # (its saving and urgent-delay checks), never by this feasibility test.
+        sp = snapshot["resources"]["ed_spaces"]
+        if sp.get("available_staffed") is None:
+            reasons.append("The space or staffing feed is not current; the space queue cannot be assessed.")
     else:
         d = snapshot["resources"]["diagnostics"][s["service"]]
         waiting = d.get("waiting")

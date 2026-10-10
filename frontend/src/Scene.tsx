@@ -19,26 +19,28 @@ import { ZONE_NAMES, type Urgency } from './types';
 // from the received queues and resources, never from how many dots are drawn.
 // 'idle' (nothing received yet) is drawn gray, never as Normal.
 const STATE_FILL: Record<ZoneDisplay, string> = {
-  normal: '#e0f1e7',
-  building: '#fdf0cc',
-  overloaded: '#fce6e3',
-  unknown: '#e6eaee',
-  idle: '#e6eaee',
+  normal: '#0f2a26',
+  building: '#33270b',
+  overloaded: '#3a1418',
+  unknown: '#172235',
+  idle: '#172235',
 };
 const STATE_EDGE: Record<ZoneDisplay, string> = {
-  normal: '#14663e',
-  building: '#7a4d00',
-  overloaded: '#a4231a',
-  unknown: '#44505b',
-  idle: '#44505b',
+  normal: '#4ade80',
+  building: '#fbbf24',
+  overloaded: '#f87171',
+  unknown: '#64748b',
+  idle: '#475569',
 };
+// A soft glow of the state colour under each platform (presentation only).
+const STATE_GLOW: Record<ZoneDisplay, number> = { normal: 0.18, building: 0.35, overloaded: 0.55, unknown: 0.06, idle: 0.04 };
 
 // three.js materials need literal colours; these mirror the urgency, accent and scene tokens in
 // tokens.css (see DESIGN.md).
 const URGENCY_COLOR: Record<Urgency, string> = {
-  urgent: '#b4281f',
-  medium: '#b8700a',
-  lower: '#1f6f8f',
+  urgent: '#f87171',
+  medium: '#fbbf24',
+  lower: '#38bdf8',
 };
 const URGENCY_RADIUS: Record<Urgency, number> = { urgent: 0.36, medium: 0.28, lower: 0.24 };
 
@@ -267,11 +269,19 @@ function Platform({
         onPointerOut={() => (document.body.style.cursor = '')}
       >
         <boxGeometry args={[PLATFORM_SIZE, 0.5, PLATFORM_DEPTH]} />
-        <meshStandardMaterial color={STATE_FILL[state]} />
+        <meshStandardMaterial
+          color={STATE_FILL[state]}
+          emissive={STATE_EDGE[state]}
+          emissiveIntensity={STATE_GLOW[state] * 0.35}
+        />
+      </mesh>
+      <mesh position={[0, -0.3, 0]}>
+        <boxGeometry args={[PLATFORM_SIZE + 0.6, 0.05, PLATFORM_DEPTH + 0.6]} />
+        <meshBasicMaterial color={STATE_EDGE[state]} transparent opacity={STATE_GLOW[state] * 0.5} />
       </mesh>
       <lineSegments position={[0, 0.251, 0]}>
         <edgesGeometry args={[new THREE.BoxGeometry(PLATFORM_SIZE, 0.001, PLATFORM_DEPTH)]} />
-        <lineBasicMaterial color={selected ? '#0a6680' : STATE_EDGE[state]} />
+        <lineBasicMaterial color={selected ? '#22d3ee' : STATE_EDGE[state]} />
       </lineSegments>
     </group>
   );
@@ -282,7 +292,7 @@ function ExitPad({ center }: { center: [number, number] }) {
     <group position={[center[0], 0, center[1]]}>
       <mesh position={[0, 0.08, 0]}>
         <boxGeometry args={[3.2, 0.16, 3.2]} />
-        <meshStandardMaterial color="#e9eef2" />
+        <meshStandardMaterial color="#1a2742" emissive="#22d3ee" emissiveIntensity={0.05} />
       </mesh>
     </group>
   );
@@ -304,7 +314,11 @@ function Dot({ dot, instant }: { dot: DotTarget; instant: boolean }) {
   return (
     <mesh ref={ref} position={dot.position} userData={{ patientId: dot.id }}>
       <sphereGeometry args={[URGENCY_RADIUS[dot.urgency], 20, 14]} />
-      <meshStandardMaterial color={URGENCY_COLOR[dot.urgency]} />
+      <meshStandardMaterial
+        color={URGENCY_COLOR[dot.urgency]}
+        emissive={URGENCY_COLOR[dot.urgency]}
+        emissiveIntensity={dot.urgency === 'urgent' ? 0.75 : 0.45}
+      />
     </mesh>
   );
 }
@@ -358,8 +372,9 @@ function World({ scene, selectedZone, zoneStates, onSelectZone, view }: ScenePro
     <>
       <CameraRig view={view} />
       <MeshCounter />
-      <ambientLight intensity={1.7} />
-      <directionalLight position={[8, 14, 6]} intensity={1.5} />
+      <ambientLight intensity={1.1} />
+      <directionalLight position={[8, 14, 6]} intensity={1.4} />
+      <pointLight position={[0, 9, 0]} intensity={30} distance={40} color="#22d3ee" />
       {[1, 2, 3, 4].map((z) => (
         <Platform key={z} zone={z} selected={selectedZone === z} state={zoneStates[z]} onSelect={onSelectZone} />
       ))}

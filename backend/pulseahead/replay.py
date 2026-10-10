@@ -293,7 +293,7 @@ class ReplaySession:
             },
             "resources": {
                 "ed_spaces": {
-                    "total": PROFILE["regular_spaces"],
+                    "total": gp.capacity + rp.capacity,  # 24, plus an open reserve space
                     "occupied": e.occupied_spaces(),
                     # Spaces a waiting general patient could take now; resuscitation spaces are
                     # held for critical bypass and reported separately.

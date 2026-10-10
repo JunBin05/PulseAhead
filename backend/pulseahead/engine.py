@@ -456,6 +456,10 @@ class SpacePool:
         self.held: set[str] = set()
         self.waiting: list[tuple[int, int, simpy.Event]] = []
         self._seq = 0
+        # Reserve spaces whose active window has closed while a patient still holds them: they take no
+        # new patient and leave the pool when that patient departs (see EDEngine surge-space actions).
+        self.closing: set[str] = set()
+        self.on_closed = None  # callback(space_id) when a closing space is released
 
     @property
     def capacity(self) -> int:
@@ -469,7 +473,7 @@ class SpacePool:
         return self.coverage[space_id] in self.on_duty
 
     def free_staffed(self) -> list[str]:
-        return [s for s in self.ids if s not in self.held and self.is_staffed(s)]
+        return [s for s in self.ids if s not in self.held and s not in self.closing and self.is_staffed(s)]
 
     def free_unstaffed(self) -> list[str]:
         return [s for s in self.ids if s not in self.held and not self.is_staffed(s)]
@@ -484,6 +488,11 @@ class SpacePool:
 
     def release(self, space_id: str) -> None:
         self.held.discard(space_id)
+        if space_id in self.closing:
+            self.closing.discard(space_id)
+            self.ids.remove(space_id)
+            if self.on_closed is not None:
+                self.on_closed(space_id)
         self.dispatch()
 
     def dispatch(self) -> None:
@@ -543,6 +552,7 @@ class EDEngine:
         self.resus_pool = SpacePool(
             self.env, [f"R{i}" for i in range(1, n_resus + 1)], coverage, self.on_duty
         )
+        self.general_pool.on_closed = self._surge_space_closed
         # Named units so events and state say which unit a patient holds. Always the lowest free
         # id, so allocation is deterministic for a seed.
         self.free_triage = [f"T{i}" for i in range(1, PROFILE["triage_slots"] + 1)]
@@ -639,6 +649,37 @@ class EDEngine:
             "imaging": (self.imaging, self.free_imaging),
         }[service]
 
+    # -- staffed surge space (one declared reserve space with its reserve nurse) -----------------
+    def _open_surge_space(self, unit: str) -> None:
+        reserve = next(r for r in PROFILE["reserves"].values() if r["unit"] == unit)
+        nurse = reserve["nurse"]
+        pool = self.general_pool
+        pool.coverage[unit] = nurse
+        self.on_duty.add(nurse)
+        pool.ids.append(unit)
+        pool.dispatch()
+
+    def _close_surge_space(self, rec: dict[str, Any]) -> None:
+        unit = rec["unit"]
+        pool = self.general_pool
+        if unit in pool.held:
+            pool.closing.add(unit)  # completes when its patient departs
+            return
+        pool.ids.remove(unit)
+        self._surge_nurse_off(unit)
+        self._finish_action(rec, "completed")
+
+    def _surge_nurse_off(self, unit: str) -> None:
+        nurse = self.general_pool.coverage.get(unit)
+        if nurse and nurse not in self.nurses:
+            self.on_duty.discard(nurse)
+
+    def _surge_space_closed(self, unit: str) -> None:
+        self._surge_nurse_off(unit)
+        for rec in self.actions.values():
+            if rec["unit"] == unit and rec["stage"] == "draining":
+                self._finish_action(rec, "completed")
+
     def _give_back(self, free: list[str], unit: str) -> None:
         """Return a named unit to its pool. A reserve unit whose active window has closed is not
         returned: the work it was doing has now finished, so the slot is gone (completed)."""
@@ -693,6 +734,15 @@ class EDEngine:
         yield self.env.timeout(rec["setup_min"])
         if self._reserve_gone(rec["unit"]):
             self._finish_action(rec, "blocked", "The declared reserve is no longer available at activation.")
+            return
+        if rec["service"] == "space":
+            self._open_surge_space(rec["unit"])
+            rec["stage"], rec["stage_since_min"] = "active", round(self.now, 3)
+            self._emit("action_active", None, self.action_public(rec))
+            yield self.env.timeout(rec["active_min"])
+            rec["stage"], rec["stage_since_min"] = "draining", round(self.now, 3)
+            self._emit("action_draining", None, self.action_public(rec))
+            self._close_surge_space(rec)
             return
         res, free = self._resource(rec["service"])
         # Adding a slot: SimPy resources take their capacity at construction, so the extra slot is added

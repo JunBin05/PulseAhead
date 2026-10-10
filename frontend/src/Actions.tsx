@@ -312,7 +312,7 @@ function RequestCard({
     <section className="request-card" data-testid="request-card" data-status={req.status} aria-label="Action request">
       <h4>
         Request {req.id}: {req.name}
-        {req.target !== 'allocation' ? ` (${req.target})` : ''}
+        {req.target !== 'allocation' && req.target !== 'space' ? ` (${req.target})` : ''}
       </h4>
       <dl className="kv">
         <dt>Status</dt>

@@ -248,7 +248,6 @@ export function ForecastStrip({
           </dd>
         </div>
       </dl>
-      <SourceLine snap={snap} view={view} />
       {f && f.status === 'ok' && (
         <p data-testid="fc-next">
           <strong>Next step:</strong> {f.next_step.text}
@@ -259,7 +258,11 @@ export function ForecastStrip({
           <strong>Next step:</strong> {f.next_step.text} {f.reasons.join(' ')}
         </p>
       )}
-      {f && f.status === 'ok' && f.waits && <PredictedWaits f={f} />}
+      <details className="fc-details" data-testid="fc-more">
+        <summary>Predicted waits and forecast source</summary>
+        <SourceLine snap={snap} view={view} />
+        {f && f.status === 'ok' && f.waits && <PredictedWaits f={f} />}
+      </details>
       {view.status === 'error' && (
         <button className="btn" onClick={onRetry} data-testid="fc-retry">
           Retry forecast

@@ -1,6 +1,6 @@
 PASS  no-action seed 7 normal: 705 events, 59 patients  -- events 705, patients 59
 PASS  no action_* event without a request
-PASS  engine version bumped  -- flow-4
+PASS  engine version bumped  -- flow-5
 case: busy-recovers seed 7, backlog found at T+220
 PASS  allocation backlog exists with a decided Ward/ICU patient
 PASS  ward coordination is feasible from received state

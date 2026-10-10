@@ -71,6 +71,13 @@ PROFILE: dict[str, Any] = {
             "name": "Reserve imaging slot", "active": False,
             "note": "One extra imaging slot. Turnaround per test is unchanged; results are never manufactured.",
         },
+        # Declared reserve space X1 (a staffed cubicle kept closed) and its reserve nurse XN. Opening it adds
+        # one staffed general ED space; it is never a ward bed and never clears a patient.
+        "ed_surge_space": {
+            "unit": "X1", "service": "space", "owner_key": "nurse_coverage", "nurse": "XN",
+            "name": "Reserve staffed ED space (X1) with reserve nurse", "active": False,
+            "note": "One extra staffed general ED space with its declared reserve nurse. It never creates a ward bed or a clinical clearance.",
+        },
     },
     # Fictional named staff (OPEN_QUESTIONS Q3). Doctors D1-D4 each hold one clinician-work slot;
     # nurses each cover a fixed block of spaces, and an empty space is staffed only while its
@@ -200,7 +207,7 @@ PROFILE: dict[str, Any] = {
 WARMUP_MIN = 120
 SCORED_MIN = 480
 
-ENGINE_VERSION = "flow-4"
+ENGINE_VERSION = "flow-5"  # flow-5: staffed surge space action (no change without an approved action)
 CATALOG_VERSION = "2"  # 2: adds the non-test "demo" seed partition (demo-case selection only)
 
 # Seven retained scenario families (spec: normal shifts, busy shifts that recover, arrival surges,

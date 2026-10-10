@@ -1,0 +1,18 @@
+NOTE  2 patients wait for a general space at T+455
+PASS  catalog lists the staffed surge space, feasible, owner ED nurse in charge  -- Staffed surge space; setup 20 min; zone 2
+PASS  it is no longer listed as not modeled
+PASS  compare ranks it from paired futures (a label from its own rule, no forced winner)  -- needs_review, saving 599.228 (lb 470.591)
+PASS  request routed to the ED nurse in charge
+PASS  a different owner is refused (403)
+PASS  the owner approves
+PASS  review: no space added yet
+PASS  active exactly review + setup after approval, one more staffed general space (X1)  -- general 22 -> 23, total 24 -> 25 at T+480
+PASS  a patient was placed in the reserve space while it was open
+PASS  the space closes after its window (and its patient leaves first)  -- general 22
+PASS  every lifecycle event is in /events  -- action_requested action_decision action_approved action_review action_setup action_active action_draining action_completed
+PASS  no bed, doctor or clearance is created: ward beds and doctors unchanged
+PASS  save then load reproduces the run with the decision
+PASS  reserve gone at activation: blocked, no space added  -- The declared reserve is no longer available at activation.
+PASS  no-action seed 7 normal: 705 events, 59 patients
+
+ALL PASS

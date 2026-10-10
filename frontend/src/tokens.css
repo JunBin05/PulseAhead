@@ -1,55 +1,64 @@
-/* PulseAhead design tokens.
-   Scene: a coordinator at a ward workstation under bright, even lighting, scanning for the
-   one place flow is stuck. Light, cool-neutral surfaces; one accent; status always carries
-   text and an icon in addition to colour. */
+/* PulseAhead design tokens: dark control room.
+   Scene: a coordinator's command screen in a dim operations room, scanning for the one place flow
+   is about to stick. Deep navy ground, slate surfaces, one cyan accent; status always carries text
+   and an icon in addition to colour, and every status ink is >= 4.5:1 on its tint. */
 :root {
-  /* Neutrals, tinted toward the accent hue */
-  --ground: #f2f5f7;
-  --surface: #ffffff;
-  --surface-sunken: #e9eef2;
-  --line: #d3dae1;
-  --line-strong: #b4bfca;
-  --ink: #15202b;
-  --ink-muted: #46535f;
-  --ink-faint: #5c6874;
+  color-scheme: dark;
+
+  /* Neutrals */
+  --ground: #070d18;
+  --ground-glow: radial-gradient(1200px 600px at 70% -10%, rgba(34, 211, 238, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(129, 140, 248, 0.07), transparent 60%);
+  --surface: #0f1829;
+  --surface-raised: #142036;
+  --surface-sunken: #0b1322;
+  --line: #22314a;
+  --line-strong: #33476a;
+  --ink: #e6edf7;
+  --ink-muted: #a3b1c6;
+  --ink-faint: #8796ad;
 
   /* Accent: primary actions and current selection only */
-  --accent: #0a6680;
-  --accent-hover: #085469;
-  --accent-pressed: #064557;
-  --accent-ink: #ffffff;
-  --accent-soft: #dcecf1;
-  --focus: #0a6680;
+  --accent: #22d3ee;
+  --accent-hover: #67e8f9;
+  --accent-pressed: #06b6d4;
+  --accent-ink: #04212a;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent-glow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 24px rgba(34, 211, 238, 0.18);
+  --focus: #67e8f9;
 
-  /* Status: each pairs a text colour (>=4.5:1 on its tint) with a tint and a fixed icon */
-  --status-normal-ink: #14663e;
-  --status-normal-tint: #e0f1e7;
-  --status-pressure-ink: #7a4d00;
-  --status-pressure-tint: #fdf0cc;
-  --status-overload-ink: #a4231a;
-  --status-overload-tint: #fce6e3;
-  --status-unknown-ink: #44505b;
-  --status-unknown-tint: #e6eaee;
+  /* Status: text colour on its tint (all >= 4.5:1), and a glow for emphasis */
+  --status-normal-ink: #4ade80;
+  --status-normal-tint: rgba(34, 197, 94, 0.14);
+  --status-pressure-ink: #fbbf24;
+  --status-pressure-tint: rgba(245, 158, 11, 0.15);
+  --status-overload-ink: #f87171;
+  --status-overload-tint: rgba(239, 68, 68, 0.16);
+  --status-unknown-ink: #b6c2d4;
+  --status-unknown-tint: rgba(148, 163, 184, 0.14);
 
   /* Patient urgency groups (also distinguished by dot size and the legend text) */
-  --urgency-urgent: #b4281f;
-  --urgency-medium: #b8700a;
-  --urgency-lower: #1f6f8f;
+  --urgency-urgent: #f87171;
+  --urgency-medium: #fbbf24;
+  --urgency-lower: #38bdf8;
 
   /* Scene */
-  --scene-ground: #e4eaef;
-  --scene-platform: #f8fafb;
-  --scene-platform-edge: #b3bec8;
-  --scene-selected: #0a6680;
+  --scene-ground: #0a1220;
+  --scene-platform: #13213a;
+  --scene-platform-edge: #2b4064;
+  --scene-selected: #22d3ee;
 
-  /* Type: system stack, fixed rem scale (ratio ~1.15) */
-  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  /* Type */
+  --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-md: 1rem;
   --text-lg: 1.125rem;
-  --text-xl: 1.3125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
 
   /* Spacing, 4px base */
   --s-1: 0.25rem;
@@ -59,9 +68,9 @@
   --s-5: 1.5rem;
   --s-6: 2rem;
 
-  --radius: 8px;
-  --radius-sm: 6px;
-  --shadow-panel: 0 1px 2px rgba(21, 32, 43, 0.06), 0 4px 14px rgba(21, 32, 43, 0.06);
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 30px rgba(0, 0, 0, 0.35);
   --target: 44px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --dur: 180ms;

@@ -165,6 +165,9 @@ def percentile(values: list[float], p: float) -> float:
 
 
 # -- the plain observed input ----------------------------------------------------------------------
+SURGE_NURSE = "XN"  # declared reserve nurse of the reserve space (profile reserves "ed_surge_space")
+
+
 def build_input(snapshot: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
     """Plain data for one forecast: the received snapshot's relevant parts and the received history
     the model is allowed to use. Nothing here comes from the engine."""
@@ -221,6 +224,12 @@ def build_input(snapshot: dict[str, Any], events: list[dict[str, Any]]) -> dict[
             "service": fl["service"], "stage": fl["stage"], "unit": fl["unit"],
             "activate_rel": float(fl["setup_end_min"]) - t0, "retire_rel": float(fl["active_end_min"]) - t0,
         }
+    # An active surge space is part of the general pool now (its patient may hold it).
+    surge = None
+    if fl and fl["service"] == "space" and fl["stage"] in ("active", "draining"):
+        surge = fl["unit"]
+        coverage[surge] = SURGE_NURSE
+        on_duty.add(SURGE_NURSE)
     om = snapshot["overall_status"]
     local = {
         sid: {
@@ -249,7 +258,7 @@ def build_input(snapshot: dict[str, Any], events: list[dict[str, Any]]) -> dict[
             "allocation": res["disposition"]["allocation"]["servers"],
             "transport": res["disposition"]["transport"]["servers"],
         },
-        "general_ids": sorted(s for s in coverage if s.startswith("S")),
+        "general_ids": sorted(s for s in coverage if s.startswith("S") or s == surge),
         "resus_ids": sorted(s for s in coverage if s.startswith("R")),
         "coverage": coverage,
         "on_duty": sorted(on_duty),
@@ -401,6 +410,21 @@ class Future:
     # -- action capacity and the cohort stop ----------------------------------------------------
     def _capacity_change(self, service: str, at: float, delta: int):
         yield self.env.timeout(max(0.0, at))
+        if service == "space":
+            # The reserve space with its reserve nurse, as in EDEngine._open_surge_space / _close_surge_space.
+            pool, sid = self.general, "X1"
+            if delta > 0:
+                if sid not in pool.ids:
+                    pool.coverage[sid] = SURGE_NURSE
+                    pool.on_duty.add(SURGE_NURSE)
+                    pool.ids.append(sid)
+                pool.dispatch()
+            elif sid in pool.ids:
+                if sid in pool.held:
+                    pool.closing.add(sid)
+                else:
+                    pool.ids.remove(sid)
+            return
         res = self._res[service]
         res._capacity += delta  # same mechanism as EDEngine._action_lifecycle (pinned simpy)
         if delta > 0:

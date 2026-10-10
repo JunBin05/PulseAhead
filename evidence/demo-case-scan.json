@@ -1,6 +1,6 @@
 {
  "kind": "demo_case_scan",
- "engine_version": "flow-4",
+ "engine_version": "flow-5",
  "forecast_model": "mc-flow-2",
  "warning_threshold": 0.6,
  "partitions": [
@@ -101,22 +101,6 @@
      "reason": "lead 21.0 min is under 30"
     },
     {
-     "key": "lab",
-     "onset_min": 312.0,
-     "confirmed_min": 322.0,
-     "alert_time_min": 240.0,
-     "lead_min": 72.0,
-     "qualifies": false,
-     "reason": "fewer than two supported drivers",
-     "drivers": [
-      "diagnostics"
-     ],
-     "driver_count": 1,
-     "overall_label": "Stable",
-     "chance": null,
-     "onset": null
-    },
-    {
      "key": "imaging",
      "onset_min": 359.0,
      "confirmed_min": 369.0,
@@ -188,20 +172,6 @@
      "lead_min": 9.0,
      "qualifies": false,
      "reason": "lead 9.0 min is under 30"
-    },
-    {
-     "key": "ward_beds",
-     "onset_min": 433.0,
-     "confirmed_min": 443.0,
-     "alert_time_min": 360.0,
-     "lead_min": 73.0,
-     "qualifies": false,
-     "reason": "fewer than two supported drivers",
-     "drivers": [],
-     "driver_count": 0,
-     "overall_label": "Stable",
-     "chance": null,
-     "onset": null
     }
    ]
   },
@@ -275,34 +245,11 @@
      "reason": "lead 3.0 min is under 30"
     },
     {
-     "key": "imaging",
-     "onset_min": 174.0,
-     "confirmed_min": 184.0,
-     "alert_time_min": 150.0,
-     "lead_min": 24.0,
-     "qualifies": false,
-     "reason": "lead 24.0 min is under 30"
-    },
-    {
      "key": "ward_beds",
      "onset_min": 368.0,
      "confirmed_min": 378.0,
      "alert_time_min": 285.0,
      "lead_min": 83.0,
-     "qualifies": false,
-     "reason": "fewer than two supported drivers",
-     "drivers": [],
-     "driver_count": 0,
-     "overall_label": "Stable",
-     "chance": null,
-     "onset": null
-    },
-    {
-     "key": "ward_beds",
-     "onset_min": 429.0,
-     "confirmed_min": 439.0,
-     "alert_time_min": 345.0,
-     "lead_min": 84.0,
      "qualifies": false,
      "reason": "fewer than two supported drivers",
      "drivers": [],
@@ -899,22 +846,6 @@
      "reason": "lead 16.0 min is under 30"
     },
     {
-     "key": "lab",
-     "onset_min": 257.0,
-     "confirmed_min": 267.0,
-     "alert_time_min": 180.0,
-     "lead_min": 77.0,
-     "qualifies": false,
-     "reason": "fewer than two supported drivers",
-     "drivers": [
-      "diagnostics"
-     ],
-     "driver_count": 1,
-     "overall_label": "Stable",
-     "chance": null,
-     "onset": null
-    },
-    {
      "key": "ward_beds",
      "onset_min": 255.0,
      "confirmed_min": 265.0,
@@ -1221,46 +1152,6 @@
      "reason": "lead 25.0 min is under 30"
     },
     {
-     "key": "space",
-     "onset_min": 424.0,
-     "confirmed_min": 434.0,
-     "alert_time_min": 345.0,
-     "lead_min": 79.0,
-     "qualifies": false,
-     "reason": "no feasible, supported action for the alerted zone",
-     "drivers": [
-      "diagnostics",
-      "arrivals"
-     ],
-     "driver_count": 2,
-     "overall_label": "Stable",
-     "chance": 0.82,
-     "onset": {
-      "low_min": 366.0,
-      "median_min": 376.0,
-      "high_min": 427.0,
-      "expected_in_min": 31.0,
-      "low_in_min": 21.0,
-      "high_in_min": 82.0
-     }
-    },
-    {
-     "key": "space",
-     "onset_min": 504.0,
-     "confirmed_min": 514.0,
-     "alert_time_min": 420.0,
-     "lead_min": 84.0,
-     "qualifies": false,
-     "reason": "fewer than two supported drivers",
-     "drivers": [
-      "diagnostics"
-     ],
-     "driver_count": 1,
-     "overall_label": "Stable",
-     "chance": null,
-     "onset": null
-    },
-    {
      "key": "ward_beds",
      "onset_min": 535.0,
      "confirmed_min": 545.0,
@@ -1385,20 +1276,6 @@
      "lead_min": 15.0,
      "qualifies": false,
      "reason": "lead 15.0 min is under 30"
-    },
-    {
-     "key": "imaging",
-     "onset_min": 195.0,
-     "confirmed_min": 205.0,
-     "alert_time_min": 120.0,
-     "lead_min": 75.0,
-     "qualifies": false,
-     "reason": "fewer than two supported drivers",
-     "drivers": [],
-     "driver_count": 0,
-     "overall_label": "Stable",
-     "chance": null,
-     "onset": null
     },
     {
      "key": "ward_beds",
@@ -1957,30 +1834,6 @@
      "reason": "lead 4.0 min is under 30"
     },
     {
-     "key": "space",
-     "onset_min": 548.0,
-     "confirmed_min": 558.0,
-     "alert_time_min": 480.0,
-     "lead_min": 68.0,
-     "qualifies": false,
-     "reason": "no feasible, supported action for the alerted zone",
-     "drivers": [
-      "boarding",
-      "diagnostics"
-     ],
-     "driver_count": 2,
-     "overall_label": "Stable",
-     "chance": 0.94,
-     "onset": {
-      "low_min": 483.0,
-      "median_min": 484.0,
-      "high_min": 486.0,
-      "expected_in_min": 4.0,
-      "low_in_min": 3.0,
-      "high_in_min": 6.0
-     }
-    },
-    {
      "key": "imaging",
      "onset_min": 123.0,
      "confirmed_min": 133.0,
@@ -2052,8 +1905,8 @@
      "confirmed_min": 356.0,
      "alert_time_min": 285.0,
      "lead_min": 61.0,
-     "qualifies": false,
-     "reason": "no feasible, supported action for the alerted zone",
+     "qualifies": true,
+     "reason": "qualifies",
      "drivers": [
       "boarding",
       "diagnostics"
@@ -2068,6 +1921,19 @@
       "expected_in_min": 47.0,
       "low_in_min": 28.0,
       "high_in_min": 84.0
+     },
+     "top_action": {
+      "id": "staffed_surge_space:space",
+      "preset": "staffed_surge_space",
+      "target": "space",
+      "zone": 2,
+      "service": "space",
+      "feasible": true,
+      "label": "supported_not_top",
+      "order": 2,
+      "owner": "ED nurse in charge",
+      "saving_mean": 186.647,
+      "saving_lower_90": 108.258
      }
     }
    ]
@@ -2184,30 +2050,6 @@
       "expected_in_min": 29.0,
       "low_in_min": 19.0,
       "high_in_min": 53.0
-     }
-    },
-    {
-     "key": "space",
-     "onset_min": 444.0,
-     "confirmed_min": 454.0,
-     "alert_time_min": 360.0,
-     "lead_min": 84.0,
-     "qualifies": false,
-     "reason": "no feasible, supported action for the alerted zone",
-     "drivers": [
-      "boarding",
-      "diagnostics"
-     ],
-     "driver_count": 2,
-     "overall_label": "Stable",
-     "chance": 0.84,
-     "onset": {
-      "low_min": 377.0,
-      "median_min": 387.0,
-      "high_min": 437.0,
-      "expected_in_min": 27.0,
-      "low_in_min": 17.0,
-      "high_in_min": 77.0
      }
     }
    ]
@@ -2342,6 +2184,47 @@
    ]
   }
  ],
- "qualifying": [],
- "elapsed_s": 241.6
+ "qualifying": [
+  {
+   "key": "space",
+   "onset_min": 346.0,
+   "confirmed_min": 356.0,
+   "alert_time_min": 285.0,
+   "lead_min": 61.0,
+   "qualifies": true,
+   "reason": "qualifies",
+   "drivers": [
+    "boarding",
+    "diagnostics"
+   ],
+   "driver_count": 2,
+   "overall_label": "Stable",
+   "chance": 0.66,
+   "onset": {
+    "low_min": 313.0,
+    "median_min": 332.0,
+    "high_min": 369.0,
+    "expected_in_min": 47.0,
+    "low_in_min": 28.0,
+    "high_in_min": 84.0
+   },
+   "top_action": {
+    "id": "staffed_surge_space:space",
+    "preset": "staffed_surge_space",
+    "target": "space",
+    "zone": 2,
+    "service": "space",
+    "feasible": true,
+    "label": "supported_not_top",
+    "order": 2,
+    "owner": "ED nurse in charge",
+    "saving_mean": 186.647,
+    "saving_lower_90": 108.258
+   },
+   "family": "mixed-cascade",
+   "seed": 3052,
+   "partition": "demo"
+  }
+ ],
+ "elapsed_s": 291.1
 }

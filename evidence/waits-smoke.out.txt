@@ -1,4 +1,4 @@
-﻿PASS  forecast carries predicted waits with unit and basis
+PASS  forecast carries predicted waits with unit and basis
 PASS  every listed patient is waiting in the received state at this version  -- 1 first-assessment, 4 test waits
 PASS  summary counts equal the received waiting patients
 PASS  a patient already in assessment or later is not listed

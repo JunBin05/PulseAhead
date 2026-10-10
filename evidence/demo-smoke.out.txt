@@ -1,4 +1,32 @@
-PASS  case: unavailable is stated with its reason (no invented early warning)  -- No demo case qualified under the frozen settings (forecast model mc-flow-2, warning thresh
+PASS  case: available, a non-test seed, labelled a demo case  -- mixed-cascade seed 3052 (demo), service space, alert T+285
+PASS  case: the baseline is labelled retrospective and was read from a no-action replay  -- onset T+346, confirmed T+356
+PASS  beat A: replay is at the recorded alert time on the recorded seed
+PASS  beat A: counts and status come from /state (in ED, staffed spaces, overall label)  -- 23 in ED, 1/24 staffed spaces free, status "Stable"
+PASS  beat B: forecast, drivers and state share one version  -- v11
+PASS  beat B: the supported drivers match the scan (and two are not relabelled as three)  -- boarding, diagnostics
+PASS  beat B: boarding evidence equals /state
+PASS  beat B: diagnostics evidence equals /state and names the real service  -- Imaging queue 12
+PASS  beat C: a forecast-risk alert (not Building, not Overloaded) exists for the case service at the alert time  -- Staffed ED space 66% (threshold 0.6)
+PASS  beat C: onset range is ordered and expected-in matches  -- 47 min (28 to 84)
+PASS  beat C: scope is local; overall status is whatever was received  -- overall "Stable", overall chance 6%
+PASS  beat C: predicted wait rows are forecasts (forecast minutes, p90 >= median where both exist), not elapsed waits  -- 0 patient(s) waiting for space: 
+PASS  beat C: the counts-based onset equals an independent no-action replay episode  -- onset T+346
+PASS  beat C: the forecast-risk alert preceded the counts onset by at least 30 min  -- lead 61 min (alert T+285, onset T+346)
+PASS  beat D: comparison is for the same version
+PASS  beat D: priority list ordered, every row labelled with its rule inputs and an impact per reserve unit-hour  -- #1 diagnostic_reserve:imaging best_action; #2 staffed_surge_space:space supported_not_top
+PASS  beat D: top action is supported by its own lower bound (no forced winner)  -- diagnostic_reserve:imaging lb 665.855 (alert service space)
+PASS  beat D: a feasible, supported action exists for the alerted zone (the scan rule)  -- staffed_surge_space:space supported_not_top
+PASS  beat D: deadline, owner and setup timing are present  -- recovery, latest start null, owner Radiology manager, review 5 + setup 15
+PASS  beat D: what-if A vs B is paired on the same futures  -- Doing Diagnostic reserve slot (imaging) first instead of Staffed surge space (space) changes the tot
+NOTE  ward coordination: 3 decided Ward/ICU patient(s) are waiting for a suitable bed, not for allocation work: another allocation slot cannot help them and never creates a bed.
+PASS  beat E: request routed to the resource owner  -- Radiology manager
+PASS  beat E: a wrong owner is refused (403)  -- ED attending lead
+PASS  beat E: the owner approves
+PASS  beat E: review stage, capacity unchanged  -- capacity 1
+PASS  beat E: capacity +1 only when active, exactly review + setup after approval  -- 1 -> 2 at T+305; queue 12 -> 12
+PASS  beat E: capacity back after the window  -- 1
+PASS  beat E: every action event is in /events  -- action_requested action_decision action_approved action_review action_setup action_active action_draining action_completed
+NOTE  reserve unit I2 completed 1 test(s); observed imaging queue 12 at approval, 12 at the end; model saving 750.8 (lb 665.855)
 PASS  beat F: /evaluations/latest is the newest saved file, complete  -- 73ec843aaf 2026-10-10T20:01:56+00:00
 PASS  beat F: episodes = early + late + missed; targets stated  -- 29 = 12+11+6; false warnings 0.29/shift
 PASS  beat F: the latest evaluation is the frozen-settings held-out run on test seed index 1  -- threshold 0.6, reactive trigger building, seeds 2002,2012,2022,2032,2042,2052,2062

@@ -53,11 +53,24 @@ interface Card {
   title: string;
   text: string;
 }
+/** A small chart drawn from numbers already in an API response (never a new number). */
+export type Chart =
+  | { kind: 'onset'; label: string; low: number; expected: number; high: number; horizon: number; marker?: { at: number; label: string } }
+  | { kind: 'band'; label: string; points: { p10: number; p50: number; p90: number }[]; stepMin: number; unit: string }
+  | { kind: 'steps'; label: string; points: { label: string; value: number }[]; unit: string }
+  | { kind: 'bars'; label: string; items: { name: string; value: number; tone: string; text: string }[] };
+interface Stat {
+  value: string;
+  label: string;
+  tone?: 'normal' | 'pressure' | 'overload' | 'unknown' | 'accent';
+}
 interface BeatView {
   id: string;
   title: string;
   at: string;
   lines: Line[];
+  stats?: Stat[];
+  charts?: Chart[];
   cards?: Card[];
   close?: string;
   /** The story cannot continue honestly: the remaining story beats are skipped, the evidence beat stays. */
@@ -91,11 +104,20 @@ const emptyCtx = (): Ctx => ({
 });
 
 const serversOf = (s: Snapshot, svc: string): number =>
-  svc === 'allocation' ? s.resources.disposition.allocation.servers : s.resources.diagnostics[svc as 'lab' | 'imaging'].servers;
+  svc === 'allocation'
+    ? s.resources.disposition.allocation.servers
+    : svc === 'space'
+      ? s.resources.ed_spaces.general_total
+      : s.resources.diagnostics[svc as 'lab' | 'imaging'].servers;
 const queueOf = (s: Snapshot, svc: string): number | null =>
   svc === 'allocation'
     ? s.resources.disposition.allocation.waiting
-    : s.resources.diagnostics[svc as 'lab' | 'imaging'].waiting;
+    : svc === 'space'
+      ? s.resources.ed_spaces.awaiting_space
+      : s.resources.diagnostics[svc as 'lab' | 'imaging'].waiting;
+/** Plain words for a service in captions (never relabels imaging as lab). */
+const svcWord = (svc: string): string =>
+  svc === 'space' ? 'staffed general spaces' : svc === 'allocation' ? 'ward allocation' : svc;
 
 function deadlineText(r: ComparisonRow): string {
   const d = r.deadline;
@@ -112,12 +134,14 @@ function waitLines(f: Forecast, service: string): Line[] {
   const w = f.waits;
   if (!w) return [{ tag: 'Predicted', text: 'No wait forecast is available for this state.' }];
   const run = w.run_min;
-  const phase = service === 'lab' ? 'awaiting_lab' : service === 'imaging' ? 'awaiting_imaging' : null;
+  const phase =
+    service === 'lab' ? 'awaiting_lab' : service === 'imaging' ? 'awaiting_imaging' : service === 'space' ? 'awaiting_space' : null;
   const out: Line[] = [];
   if (phase) {
-    const rows = w.diagnostic.filter((r) => r.phase === phase);
+    const rows = (service === 'space' ? w.first_assessment : w.diagnostic).filter((r) => r.phase === phase);
+    const what = service === 'space' ? 'a staffed space' : service;
     if (!rows.length) {
-      out.push({ tag: 'Predicted', text: `No patient is waiting to start ${service}, so no ${service} wait is predicted.` });
+      out.push({ tag: 'Predicted', text: `No patient is waiting for ${what} now, so no wait for it is predicted.` });
     }
     for (const g of ['urgent', 'medium', 'lower'] as const) {
       const rs = rows.filter((r) => r.urgency === g);
@@ -128,7 +152,7 @@ function waitLines(f: Forecast, service: string): Line[] {
       out.push({
         tag: 'Predicted',
         text:
-          `${g} group, ${plural(rs.length, 'patient')} waiting for ${service}: predicted wait to test start ` +
+          `${g} group, ${plural(rs.length, 'patient')} waiting for ${what}: predicted wait to ${service === 'space' ? 'first assessment' : 'test start'} ` +
           `${meds.length ? `up to ${num(Math.max(...meds), 0)} min (median)` : 'not reached within the run'}` +
           `${p90s.length ? `, up to ${num(Math.max(...p90s), 0)} min (90th percentile)` : ''}` +
           `${cens ? `; ${cens} not started within the ${run}-min run, so no number is given` : ''}. ` +
@@ -152,7 +176,7 @@ function waitLines(f: Forecast, service: string): Line[] {
   return out;
 }
 
-export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (r: boolean) => void }) {
+export function DemoBar({ ctl, onRunning, kick = 0 }: { ctl: DemoController; onRunning?: (r: boolean) => void; kick?: number }) {
   const [done, setDone] = useState(0); // beats completed
   const [viewIdx, setViewIdx] = useState<number | null>(null);
   const [views, setViews] = useState<BeatView[]>([]);
@@ -162,6 +186,7 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
   const [remaining, setRemaining] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [open, setOpen] = useState(true);
   const ctx = useRef<Ctx>(emptyCtx());
   const busyRef = useRef(false);
   const doneRef = useRef(0);
@@ -234,6 +259,11 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
             id: B.id,
             title: B.name,
             at: clock(s.sim_time_min),
+            stats: [
+              { value: `${s.counts.in_ed}`, label: 'patients in the ED', tone: 'accent' },
+              { value: `${sp.available_staffed ?? 'n/a'} / ${sp.staffed_total}`, label: 'staffed spaces free', tone: 'normal' },
+              { value: s.overall_status.label, label: 'overall status, as received', tone: s.overall_status.state === 'stable' ? 'normal' : 'pressure' },
+            ],
             lines: [
               { tag: 'Observed', text: `${plural(s.counts.in_ed, 'patient')} in the ED; ${sp.awaiting_space ?? 'n/a'} waiting for a space.` },
               { tag: 'Observed', text: `${sp.available_staffed ?? 'n/a'} of ${sp.staffed_total} staffed spaces are free.` },
@@ -301,7 +331,16 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
             tag: 'Note',
             text: `Rules: ${d.drivers.map((x) => x.rule).join(' ')}`,
           });
-          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines };
+          const stats: Stat[] = d.drivers.map((dr): Stat => {
+            const e = dr.evidence as Record<string, unknown>;
+            if (dr.id === 'boarding') return { value: `${e.boarding_patients}`, label: 'boarding, no suitable bed', tone: 'overload' };
+            if (dr.id === 'diagnostics') {
+              const sv = (e.services as { name: string; queue: number }[])[0];
+              return { value: `${sv.queue}`, label: `waiting for ${sv.name.toLowerCase()}`, tone: 'pressure' };
+            }
+            return { value: `${e.patients}`, label: `announced arrivals in ${e.window_min} min`, tone: 'pressure' };
+          });
+          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines, stats };
         }
         case 2: {
           const s = c.snap!;
@@ -348,7 +387,26 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
               text: 'No counts-based onset was found in the no-action replay of this seed, so there is no baseline time to compare. A Building or already-overloaded alert is not early detection.',
             });
           }
-          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines };
+          const charts: Chart[] = [];
+          if (a.onset && a.onset.low_in_min !== undefined && a.onset.high_in_min !== undefined) {
+            charts.push({
+              kind: 'onset', label: `When the ${a.name.toLowerCase()} overload may start (minutes from now)`,
+              low: a.onset.low_in_min, expected: a.onset.expected_in_min, high: a.onset.high_in_min,
+              horizon: f.model.settings.horizon_min,
+              marker: retro && retro.onset_min !== null ? { at: retro.onset_min - s.sim_time_min, label: 'counts alarm (retrospective)' } : undefined,
+            });
+          }
+          const band = f.series?.bands?.[a.service];
+          if (band && band.length > 2) {
+            charts.push({ kind: 'band', label: `${a.name} queue across ${a.samples} futures (10th-90th percentile, median line)`, points: band, stepMin: 5, unit: 'patients' });
+          }
+          const leadMin = retro && retro.onset_min !== null ? retro.onset_min - s.sim_time_min : null;
+          const stats: Stat[] = [
+            { value: pct(a.chance), label: `chance of ${a.name.toLowerCase()} overload in 90 min`, tone: 'overload' },
+            { value: a.onset ? `~${num(a.onset.expected_in_min, 0)} min` : 'n/a', label: a.onset ? `time left (range ${num(a.onset.low_in_min, 0)}-${num(a.onset.high_in_min, 0)})` : 'no onset range', tone: 'pressure' },
+            { value: leadMin !== null ? `${num(leadMin, 0)} min` : 'n/a', label: 'before the counts alarm (retrospective)', tone: 'accent' },
+          ];
+          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines, stats, charts };
         }
         case 3: {
           const s = c.snap!;
@@ -395,7 +453,25 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
           for (const x of r.not_modeled.slice(0, 1)) {
             lines.push({ tag: 'Note', text: `${r.not_modeled.length} further interventions are not modeled in this build (for example ${x.name}).` });
           }
-          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines };
+          const best = listed[0];
+          const stats: Stat[] = best
+            ? [
+                { value: rowName(best), label: labelText(best.rank?.label), tone: best.rank?.label === 'best_action' ? 'normal' : 'unknown' },
+                { value: `${num(best.comparison?.total_saving_patient_min.mean, 0)}`, label: `patient-min saved, model (90% lower bound ${num(best.comparison?.total_saving_patient_min.lower_90, 0)})`, tone: 'accent' },
+                { value: best.owners[0], label: `approves it · capacity in ${best.review_min + best.setup_min} min`, tone: 'accent' },
+              ]
+            : [];
+          const charts: Chart[] = listed.length
+            ? [{
+                kind: 'bars', label: 'Modeled total ED time saved per action (patient-min, paired futures)',
+                items: listed.map((x) => ({
+                  name: rowName(x), value: Math.max(0, x.comparison?.total_saving_patient_min.mean ?? 0),
+                  tone: x.rank?.label === 'best_action' ? 'normal' : x.rank?.label === 'supported_not_top' ? 'accent' : 'unknown',
+                  text: `${num(x.comparison?.total_saving_patient_min.mean, 0)} (lb ${num(x.comparison?.total_saving_patient_min.lower_90, 0)}) · ${labelText(x.rank?.label)}`,
+                })),
+              }]
+            : [];
+          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines, stats, charts };
         }
         case 4: {
           const top = c.top;
@@ -430,11 +506,13 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
           await api.decide(s.replay_id, rq.request.id, owner, 'approve', `demo-${rq.request.id}`, rq.state_version);
           s = await refresh();
           const approved = s.sim_time_min;
+          const timeline: { label: string; value: number }[] = [{ label: `approved ${clock(approved)}`, value: c.servers0 ?? 0 }];
+          const queues: { label: string; value: number }[] = [{ label: `approved ${clock(approved)}`, value: c.queue0 ?? 0 }];
           push({
             tag: 'Outcome',
             text:
               `${clock(approved)}: ${owner} approved ${rowName(top)} (the owner of the resource, not the clicked zone). ` +
-              `Review ${top.review_min} min, then setup ${top.setup_min} min. Capacity is still ${c.servers0}, ${top.service} queue ${c.queue0 ?? 'n/a'}.`,
+              `Review ${top.review_min} min, then setup ${top.setup_min} min. Capacity is still ${c.servers0}, ${svcWord(top.service)} queue ${c.queue0 ?? 'n/a'}.`,
           });
           await pause();
           let guard = 0;
@@ -443,11 +521,13 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
             push({ tag: 'Outcome', text: 'The action was blocked at activation: no capacity was added.' });
             return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines };
           }
+          timeline.push({ label: `active ${clock(s.sim_time_min)}`, value: serversOf(s, top.service) });
+          queues.push({ label: `active ${clock(s.sim_time_min)}`, value: queueOf(s, top.service) ?? 0 });
           push({
             tag: 'Outcome',
             text:
-              `${clock(s.sim_time_min)}: capacity added after review and setup: ${top.service} ${c.servers0} to ${serversOf(s, top.service)}. ` +
-              `Observed ${top.service} queue ${c.queue0 ?? 'n/a'} at approval, ${queueOf(s, top.service) ?? 'n/a'} now.`,
+              `${clock(s.sim_time_min)}: capacity added after review and setup: ${svcWord(top.service)} ${c.servers0} to ${serversOf(s, top.service)}. ` +
+              `Observed ${svcWord(top.service)} queue ${c.queue0 ?? 'n/a'} at approval, ${queueOf(s, top.service) ?? 'n/a'} now.`,
           });
           await pause();
           guard = 0;
@@ -458,8 +538,10 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
             tag: 'Outcome',
             text:
               `${clock(s.sim_time_min)}: the slot closed after its work; capacity back to ${serversOf(s, top.service)}` +
-              `${used ? `, and ${c.unit} completed ${plural(used, 'test')}` : ''}. Observed ${top.service} queue now ${queueOf(s, top.service) ?? 'n/a'}.`,
+              `${used ? `, and ${c.unit} completed ${plural(used, 'test')}` : ''}. Observed ${svcWord(top.service)} queue now ${queueOf(s, top.service) ?? 'n/a'}.`,
           });
+          timeline.push({ label: `end ${clock(s.sim_time_min)}`, value: serversOf(s, top.service) });
+          queues.push({ label: `end ${clock(s.sim_time_min)}`, value: queueOf(s, top.service) ?? 0 });
           push({
             tag: 'Model estimate',
             text:
@@ -467,7 +549,16 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
               `(90% lower bound ${num(sv.lower_90)}), ${supported ? 'a supported saving' : 'not a supported saving'}. ` +
               'It is a model estimate. The queue above is one observed replay and does not prove it.',
           });
-          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines };
+          const stats: Stat[] = [
+            { value: timeline.map((x) => x.value).join(' → '), label: `${svcWord(top.service)}, observed`, tone: 'accent' },
+            { value: queues.map((x) => x.value).join(' → '), label: `${svcWord(top.service)} queue, observed`, tone: 'normal' },
+            { value: `${num(sv.mean, 0)}`, label: `patient-min saved, model estimate (lb ${num(sv.lower_90, 0)})`, tone: 'accent' },
+          ];
+          const charts: Chart[] = [
+            { kind: 'steps', label: `Observed ${svcWord(top.service)} capacity`, points: timeline, unit: 'slots' },
+            { kind: 'steps', label: `Observed ${svcWord(top.service)} queue`, points: queues, unit: 'waiting' },
+          ];
+          return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines, stats, charts };
         }
         default: {
           const s = c.snap;
@@ -523,8 +614,38 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
               tag: 'Limit',
               text:
                 'Synthetic fictional hospital, one shift per family: no clinical outcome, ROI or validated hospital performance is claimed. ' +
-                '2 of 6 interventions are modeled. Not deployed; no timed rehearsal yet.',
+                `${c.cmp ? c.cmp.actions.length : 'Four'} reserve actions are modeled, ${c.cmp ? c.cmp.not_modeled.length : 'four'} interventions are not. Not deployed; no timed rehearsal yet.`,
             });
+          }
+          const stats: Stat[] = [];
+          const charts: Chart[] = [];
+          if (ev) {
+            const g = ev.results.aggregate;
+            const tgt = g.target_false_warnings_per_shift ?? 1;
+            stats.push(
+              { value: `${g.early_warned}/${g.episodes}`, label: 'episodes warned early (held-out run)', tone: 'normal' },
+              { value: `${g.false_warnings_per_shift}`, label: `false warnings per shift (target at most ${tgt})`, tone: (g.false_warnings_per_shift ?? 0) <= tgt ? 'normal' : 'overload' },
+              { value: g.lead_min ? `${g.lead_min.median} min` : 'n/a', label: 'median warning lead', tone: 'accent' },
+            );
+            charts.push({
+              kind: 'bars', label: 'Confirmed episodes in the held-out run',
+              items: [
+                { name: 'Warned early', value: g.early_warned ?? 0, tone: 'normal', text: `${g.early_warned}` },
+                { name: 'Late only', value: g.late_only ?? 0, tone: 'pressure', text: `${g.late_only}` },
+                { name: 'Missed', value: g.missed ?? 0, tone: 'overload', text: `${g.missed}` },
+              ],
+            });
+            const pol = g.policies ?? {};
+            if (pol.no_action && pol.reactive && pol.pulseahead) {
+              charts.push({
+                kind: 'bars', label: 'Total ED patient-min on the same shifts (lower is better)',
+                items: [
+                  { name: 'No action', value: pol.no_action.total_ed_patient_min, tone: 'unknown', text: num(pol.no_action.total_ed_patient_min, 0) },
+                  { name: 'Reactive baseline', value: pol.reactive.total_ed_patient_min, tone: 'pressure', text: num(pol.reactive.total_ed_patient_min, 0) },
+                  { name: 'PulseAhead', value: pol.pulseahead.total_ed_patient_min, tone: 'accent', text: num(pol.pulseahead.total_ed_patient_min, 0) },
+                ],
+              });
+            }
           }
           const a = c.alert;
           const cards: Card[] = [
@@ -549,7 +670,7 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
                   : 'No action was started: the story stopped before the decision beat.',
             },
           ];
-          return { id: BEATS[5].id, title: BEATS[5].name, at: s ? clock(s.sim_time_min) : '', lines, cards, close: 'Act before the queue.' };
+          return { id: BEATS[5].id, title: BEATS[5].name, at: s ? clock(s.sim_time_min) : '', lines, cards, stats, charts, close: 'Act before the queue.' };
         }
       }
     },
@@ -635,6 +756,11 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
     setError(null);
   }, []);
 
+  // "Start guided demo" in the run bar runs the first beat (only from a fresh story).
+  useEffect(() => {
+    if (kick > 0 && doneRef.current === 0) void next();
+  }, [kick, next]);
+
   // Auto-play: the next beat starts after the pace interval, with a visible text countdown.
   useEffect(() => {
     if (!auto || finished || busy) {
@@ -659,59 +785,90 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
       ? `Pitch pace: ${PACE_MS.pitch / 1000} s per beat, about ${Math.floor((PACE_MS.pitch * BEATS.length) / 60000)}:${String(Math.round(((PACE_MS.pitch * BEATS.length) / 1000) % 60)).padStart(2, '0')} for six beats plus compute time.`
       : `Quick pace: about ${PACE_MS.quick / 1000} s per beat.`;
 
+  const progress = Math.round((done / BEATS.length) * 100);
   return (
-    <section className="panel demo-bar" aria-labelledby="demo-h" data-testid="demo-bar">
-      <h2 id="demo-h">Guided demo</h2>
-      <p className="muted" data-testid="demo-progress">
-        {finished
-          ? 'Demo finished'
-          : `Next: beat ${nextBeat!.id} of ${BEATS.length}, ${nextBeat!.name}`}
-        {' · '}Synthetic data, live backend. A demo case is a non-test seed chosen by scan, not held-out evidence.
-      </p>
-      <nav className="demo-beats" aria-label="Demo beats">
+    <section className="story-stage" aria-labelledby="demo-h" data-testid="demo-bar" data-open={open}>
+      <header className="story-head">
+        <div className="story-title">
+          <h2 id="demo-h">Guided demo</h2>
+          <p className="muted" data-testid="demo-progress">
+            {finished ? 'Demo finished' : `Next: beat ${nextBeat!.id} of ${BEATS.length}, ${nextBeat!.name}`}
+            {' · '}live backend, synthetic data, demo case from a non-test seed (not held-out evidence)
+          </p>
+        </div>
+        <button className="btn btn-ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="demo-toggle">
+          {open ? 'Minimise' : 'Show story'}
+        </button>
+      </header>
+      <div className="story-progress" aria-hidden="true">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <nav className="story-steps" aria-label="Demo beats">
         {BEATS.map((b, i) => (
           <button
             key={b.id}
-            className="btn demo-beat-chip"
+            className="story-step"
+            data-state={viewIdx === i ? 'current' : i < done ? 'done' : 'todo'}
             aria-current={viewIdx === i ? 'step' : undefined}
             aria-label={`Beat ${b.id}: ${b.name}${i < done ? '' : ' (not reached)'}`}
             disabled={i >= done}
             onClick={() => setViewIdx(i)}
             data-testid={`demo-beat-${b.id}`}
           >
-            {b.id}
+            <span className="story-step-id">{b.id}</span>
+            <span className="story-step-name">{b.name}</span>
           </button>
         ))}
       </nav>
-      <div className="demo-caption" data-testid="demo-caption" aria-busy={busy}>
-        {busy && !shown && <p>Working…</p>}
+      <div className="story-body" hidden={!open} data-testid="demo-caption" aria-busy={busy}>
+        {busy && !shown && <p className="story-empty">Working…</p>}
         {!busy && !shown && (
-          <p>
-            Six beats of the real simulation: the current condition, the received pressures, the prediction and its
-            explanation, the fix to start first, the owner's approval and its delayed effect, then the measured
-            evidence and its limits. Press Next, or Auto-play.
+          <p className="story-empty">
+            Six beats of the real simulation: the current condition, the pressures the feeds report, the prediction
+            and its explanation, the fix to start first, the owner's approval and its delayed effect, then the
+            measured evidence and its limits. Press <strong>Next</strong>, or <strong>Auto-play</strong>.
           </p>
         )}
         {shown && (
-          <div data-testid="demo-beat" data-beat={shown.id}>
-            <p className="demo-beat-title" role="status" aria-live="polite" data-testid="demo-beat-title">
-              Beat {shown.id}: {shown.title}
-              {shown.at ? ` at ${shown.at}` : ''}
-              {busy ? ' (working…)' : ''}
+          <div className="story-beat" data-testid="demo-beat" data-beat={shown.id}>
+            <p className="story-beat-title" role="status" aria-live="polite" data-testid="demo-beat-title">
+              <span className="story-beat-id">{shown.id}</span>
+              {shown.title}
+              {shown.at ? <span className="story-beat-at"> at {shown.at}</span> : null}
+              {busy ? <span className="story-beat-at"> (working…)</span> : null}
             </p>
-            <ul className="demo-lines">
-              {shown.lines.map((l, i) => (
-                <li key={i} data-tag={l.tag}>
-                  <span className="demo-tag">{l.tag}</span> {l.text}
-                </li>
-              ))}
-            </ul>
+            {shown.stats && shown.stats.length > 0 && (
+              <div className="story-stats">
+                {shown.stats.map((st) => (
+                  <div key={st.label} className="story-stat" data-tone={st.tone ?? 'accent'}>
+                    <span className="story-stat-value">{st.value}</span>
+                    <span className="story-stat-label">{st.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="story-grid">
+              {shown.charts && shown.charts.length > 0 && (
+                <div className="story-charts">
+                  {shown.charts.map((ch) => (
+                    <ChartView key={ch.label} chart={ch} />
+                  ))}
+                </div>
+              )}
+              <ul className="demo-lines">
+                {shown.lines.map((l, i) => (
+                  <li key={i} data-tag={l.tag}>
+                    <span className="demo-tag">{l.tag}</span> {l.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
             {shown.cards && (
               <div className="demo-cards" data-testid="demo-cards">
-                {shown.cards.map((c) => (
-                  <div key={c.title} className="demo-card">
-                    <h3>{c.title}</h3>
-                    <p>{c.text}</p>
+                {shown.cards.map((cd) => (
+                  <div key={cd.title} className="demo-card">
+                    <h3>{cd.title}</h3>
+                    <p>{cd.text}</p>
                   </div>
                 ))}
               </div>
@@ -724,49 +881,136 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
           </div>
         )}
       </div>
-      {notice && <p className="muted">{notice}</p>}
-      {remaining !== null && auto && !busy && (
-        <p className="muted" data-testid="demo-countdown">
-          Next beat in {remaining} s
-        </p>
-      )}
+      {notice && <p className="muted story-note">{notice}</p>}
       {error && (
         <p className="request-message" role="alert" data-testid="demo-error">
           {error}
         </p>
       )}
-      <fieldset className="demo-pace">
-        <legend>Pace</legend>
-        <label>
-          <input type="radio" name="demo-pace" checked={pace === 'pitch'} onChange={() => setPace('pitch')} data-testid="demo-pace-pitch" />
-          Pitch
-        </label>
-        <label>
-          <input type="radio" name="demo-pace" checked={pace === 'quick'} onChange={() => setPace('quick')} data-testid="demo-pace-quick" />
-          Quick
-        </label>
-      </fieldset>
-      <p className="muted">{paceNote}</p>
-      <div className="btn-row demo-buttons">
-        <button className="btn btn-primary" onClick={() => void next()} disabled={busy || finished} data-testid="demo-next">
-          <IconStep /> Next
-        </button>
-        <button
-          className="btn"
-          aria-pressed={auto}
-          onClick={() => setAuto((a) => !a)}
-          disabled={finished && !auto}
-          data-testid="demo-auto"
-        >
-          <IconPlay /> Auto-play {auto ? 'on' : 'off'}
-        </button>
-        <button className="btn" onClick={() => void skip()} disabled={busy || finished} data-testid="demo-skip">
-          Skip to result
-        </button>
-        <button className="btn" onClick={reset} data-testid="demo-reset">
-          <IconReset /> Reset demo
-        </button>
-      </div>
+      <footer className="story-controls">
+        <div className="btn-row demo-buttons">
+          <button className="btn btn-primary" onClick={() => void next()} disabled={busy || finished} data-testid="demo-next">
+            <IconStep /> Next
+          </button>
+          <button className="btn" aria-pressed={auto} onClick={() => setAuto((a) => !a)} disabled={finished && !auto} data-testid="demo-auto">
+            <IconPlay /> Auto-play {auto ? 'on' : 'off'}
+          </button>
+          <button className="btn" onClick={() => void skip()} disabled={busy || finished} data-testid="demo-skip">
+            Skip to result
+          </button>
+          <button className="btn" onClick={reset} data-testid="demo-reset">
+            <IconReset /> Reset demo
+          </button>
+        </div>
+        <fieldset className="demo-pace">
+          <legend>Pace</legend>
+          <label>
+            <input type="radio" name="demo-pace" checked={pace === 'pitch'} onChange={() => setPace('pitch')} data-testid="demo-pace-pitch" />
+            Pitch
+          </label>
+          <label>
+            <input type="radio" name="demo-pace" checked={pace === 'quick'} onChange={() => setPace('quick')} data-testid="demo-pace-quick" />
+            Quick
+          </label>
+        </fieldset>
+        <span className="muted story-pace-note">
+          {remaining !== null && auto && !busy ? (
+            <span data-testid="demo-countdown">Next beat in {remaining} s · </span>
+          ) : null}
+          {paceNote}
+        </span>
+      </footer>
     </section>
+  );
+}
+
+/** Inline SVG charts. Every coordinate comes from the numbers in the chart object. */
+function ChartView({ chart }: { chart: Chart }) {
+  const W = 360;
+  if (chart.kind === 'onset') {
+    const H = 64;
+    const x = (m: number) => 12 + (Math.max(0, Math.min(chart.horizon, m)) / chart.horizon) * (W - 24);
+    return (
+      <figure className="chart">
+        <figcaption>{chart.label}</figcaption>
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.label}: ${Math.round(chart.low)} to ${Math.round(chart.high)}, expected ${Math.round(chart.expected)}`}>
+          <line x1={12} x2={W - 12} y1={30} y2={30} className="chart-axis" />
+          <rect x={x(chart.low)} y={20} width={Math.max(3, x(chart.high) - x(chart.low))} height={20} rx={6} className="chart-range" />
+          <circle cx={x(chart.expected)} cy={30} r={7} className="chart-dot" />
+          {chart.marker && chart.marker.at <= chart.horizon && (
+            <g>
+              <line x1={x(chart.marker.at)} x2={x(chart.marker.at)} y1={10} y2={50} className="chart-marker" />
+              <text x={Math.min(W - 70, x(chart.marker.at) + 4)} y={12} className="chart-note">{chart.marker.label}</text>
+            </g>
+          )}
+          <text x={12} y={60} className="chart-tick">now</text>
+          <text x={x(chart.expected) - 14} y={60} className="chart-tick">~{Math.round(chart.expected)} min</text>
+          <text x={W - 44} y={60} className="chart-tick">{chart.horizon} min</text>
+        </svg>
+      </figure>
+    );
+  }
+  if (chart.kind === 'band') {
+    const H = 96;
+    const n = chart.points.length;
+    const max = Math.max(1, ...chart.points.map((p) => p.p90));
+    const x = (i: number) => 12 + (i / Math.max(1, n - 1)) * (W - 24);
+    const y = (v: number) => H - 16 - (v / max) * (H - 30);
+    const upper = chart.points.map((p, i) => `${x(i)},${y(p.p90)}`).join(' ');
+    const lower = chart.points.map((p, i) => `${x(i)},${y(p.p10)}`).reverse().join(' ');
+    const mid = chart.points.map((p, i) => `${x(i)},${y(p.p50)}`).join(' ');
+    return (
+      <figure className="chart">
+        <figcaption>{chart.label}</figcaption>
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.label}, peak 90th percentile ${max} ${chart.unit}`}>
+          <polygon points={`${upper} ${lower}`} className="chart-band" />
+          <polyline points={mid} className="chart-line" />
+          <line x1={12} x2={W - 12} y1={H - 16} y2={H - 16} className="chart-axis" />
+          <text x={12} y={H - 3} className="chart-tick">now</text>
+          <text x={W - 70} y={H - 3} className="chart-tick">+{(n - 1) * chart.stepMin} min</text>
+          <text x={14} y={12} className="chart-tick">{max} {chart.unit}</text>
+        </svg>
+      </figure>
+    );
+  }
+  if (chart.kind === 'steps') {
+    const H = 84;
+    const n = chart.points.length;
+    const max = Math.max(1, ...chart.points.map((p) => p.value));
+    const bw = (W - 24) / n;
+    return (
+      <figure className="chart">
+        <figcaption>{chart.label}</figcaption>
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.label}: ${chart.points.map((p) => `${p.label} ${p.value}`).join(', ')}`}>
+          {chart.points.map((p, i) => {
+            const h = (p.value / max) * (H - 36);
+            return (
+              <g key={p.label}>
+                <rect x={12 + i * bw + 6} y={H - 20 - h} width={bw - 12} height={Math.max(2, h)} rx={5} className="chart-bar" data-tone={i === 1 ? 'accent' : 'unknown'} />
+                <text x={12 + i * bw + bw / 2} y={H - 24 - h} textAnchor="middle" className="chart-value">{p.value}</text>
+                <text x={12 + i * bw + bw / 2} y={H - 6} textAnchor="middle" className="chart-tick">{p.label}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </figure>
+    );
+  }
+  const max = Math.max(1, ...chart.items.map((it) => it.value));
+  return (
+    <figure className="chart">
+      <figcaption>{chart.label}</figcaption>
+      <div className="hbars" role="img" aria-label={`${chart.label}: ${chart.items.map((it) => `${it.name} ${it.text}`).join('; ')}`}>
+        {chart.items.map((it) => (
+          <div key={it.name} className="hbar">
+            <span className="hbar-name">{it.name}</span>
+            <span className="hbar-track">
+              <span className="hbar-fill" data-tone={it.tone} style={{ width: `${Math.max(2, (it.value / max) * 100)}%` }} />
+            </span>
+            <span className="hbar-text">{it.text}</span>
+          </div>
+        ))}
+      </div>
+    </figure>
   );
 }

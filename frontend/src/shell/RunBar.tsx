@@ -10,6 +10,7 @@ export function RunBar({
   speeds,
   stepMinutes,
   onStart,
+  onStartDemo,
   onTogglePlay,
   onStep,
   onSpeed,
@@ -22,6 +23,7 @@ export function RunBar({
   speeds: readonly number[];
   stepMinutes: number;
   onStart: () => void;
+  onStartDemo: () => void;
   onTogglePlay: () => void;
   onStep: () => void;
   onSpeed: (s: number) => void;
@@ -35,7 +37,10 @@ export function RunBar({
           PulseAhead shows where patients wait in a fictional emergency department and how long until congestion
           sets in. Start the simulation to watch synthetic patients move through four zones.
         </p>
-        <button className="btn btn-primary" onClick={onStart} data-testid="start">
+        <button className="btn btn-primary btn-hero" onClick={onStartDemo} data-testid="start-demo">
+          <IconPlay /> Start guided demo
+        </button>
+        <button className="btn" onClick={onStart} data-testid="start">
           <IconPlay /> Start simulation
         </button>
       </section>

@@ -1,5 +1,5 @@
-﻿PASS  priority list: both feasible actions compared, infeasible one listed with a reason  -- diagnostic_reserve:imaging,diagnostic_reserve:lab
-PASS  every compared label matches the rule recomputed from its numbers  -- diagnostic_reserve:imaging=best_action diagnostic_reserve:lab=supported_not_top
+PASS  priority list: every feasible action compared (incl. the surge space), infeasible one listed with a reason  -- diagnostic_reserve:imaging,diagnostic_reserve:lab,staffed_surge_space:space
+PASS  every compared label matches the rule recomputed from its numbers  -- diagnostic_reserve:imaging=best_action diagnostic_reserve:lab=supported_not_top staffed_surge_space:space=no_action_shown_to_help
 PASS  order: top row is the supported action with the larger lower bound; at most one Best  -- diagnostic_reserve:imaging lb 362.736 vs diagnostic_reserve:lab lb 28.865
 PASS  infeasible actions sort last and read Not feasible
 PASS  not-modeled presets are listed apart
@@ -10,7 +10,7 @@ PASS  deadline = onset low bound - review - setup - 5 margin (lab, from the same
 PASS  already-overloaded service has no start deadline (recovery)
 PASS  request records the rank it was made under  -- "best_action"
 PASS  an approval made after time moved on is refused (an old ranking cannot be approved)  -- this request's comparison is from T+100 and time is now T+105: refresh the comparison and 
-PASS  no-help case: label is No action shown to help and matches the rule  -- ward_coordination:allocation at T+120: saving 0.048, lower bound -0.011
+PASS  no-help case: label is No action shown to help and matches the rule  -- staffed_surge_space:space at T+10: saving 0, lower bound 0
 PASS  no-help action is never labelled Best and is not first among supported ones
 PASS  needs-review case: fewer than 20 futures with a complete urgent outcome  -- diagnostic_reserve:lab at T+420: 18 futures
 PASS  cannot-assess case: status cannot_assess and every action reads Cannot assess, no numbers  -- T+45, reasons ["Staff on duty and coverage: no valid update since T+30.0. The figures shown ar

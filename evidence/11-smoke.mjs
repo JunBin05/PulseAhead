@@ -23,7 +23,7 @@ const OWNER = 'Ward supervisor / bed manager';
   check('no-action seed 7 normal: 705 events, 59 patients', ex.events.length === 705 && ex.patients.length === 59,
     `events ${ex.events.length}, patients ${ex.patients.length}`);
   check('no action_* event without a request', !ex.events.some((e) => e.type.startsWith('action_')));
-  check('engine version bumped', ex.run_record.versions.engine === 'flow-4', ex.run_record.versions.engine);
+  check('engine version bumped', ex.run_record.versions.engine === 'flow-5', ex.run_record.versions.engine);
 }
 
 // 1. A real ward-allocation backlog: busy-recovers, development seed 7.
@@ -40,7 +40,7 @@ check('ward coordination is feasible from received state', st.actions.catalog[0]
 check('approvers come from ownership: Ward supervisor / bed manager (zone 4 service)',
   st.actions.catalog[0].owners.length === 1 && st.actions.catalog[0].owners[0] === OWNER);
 check('not-modeled presets are listed and cannot be requested',
-  st.actions.not_modeled.length === 5 && (await j(`/replays/${id}/requests`, { preset: 'staffed_surge_spaces' })).s === 422);
+  st.actions.not_modeled.length === 4 && (await j(`/replays/${id}/requests`, { preset: 'reserve_physician' })).s === 422);
 
 // 2. Paired comparison.
 const cmp = await j(`/replays/${id}/compare`, { samples: 50, expected_version: st.version });

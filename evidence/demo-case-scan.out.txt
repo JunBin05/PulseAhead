@@ -19,3 +19,76 @@ shift busy-recovers demo seed 3012
 shift busy-recovers demo seed 3013
 shift busy-recovers demo seed 3014
 shift arrival-surge development seed 7
+shift arrival-surge tuning seed 1021
+shift arrival-surge tuning seed 1022
+  arrival-surge/1022 T+540: alerts ['triage'] drivers 2
+shift arrival-surge demo seed 3021
+shift arrival-surge demo seed 3022
+shift arrival-surge demo seed 3023
+shift arrival-surge demo seed 3024
+shift diagnostic-delay development seed 7
+  diagnostic-delay/7 T+390: alerts ['space'] drivers 2
+shift diagnostic-delay tuning seed 1031
+shift diagnostic-delay tuning seed 1032
+shift diagnostic-delay demo seed 3031
+  diagnostic-delay/3031 T+345: alerts ['space'] drivers 2
+  diagnostic-delay/3031 T+405: alerts ['space'] drivers 2
+shift diagnostic-delay demo seed 3032
+  diagnostic-delay/3032 T+405: alerts ['lab'] drivers 2
+  diagnostic-delay/3032 T+420: alerts ['lab'] drivers 2
+shift diagnostic-delay demo seed 3033
+shift diagnostic-delay demo seed 3034
+shift boarding-blockage development seed 7
+shift boarding-blockage tuning seed 1041
+shift boarding-blockage tuning seed 1042
+  boarding-blockage/1042 T+540: alerts ['triage'] drivers 2
+  boarding-blockage/1042 T+555: alerts ['lab', 'imaging', 'space'] drivers 2
+  boarding-blockage/1042 T+570: alerts ['lab', 'imaging', 'space'] drivers 2
+  boarding-blockage/1042 T+585: alerts ['imaging', 'space'] drivers 2
+  boarding-blockage/1042 T+600: alerts ['space'] drivers 2
+shift boarding-blockage demo seed 3041
+shift boarding-blockage demo seed 3042
+  boarding-blockage/3042 T+540: alerts ['space'] drivers 2
+  boarding-blockage/3042 T+570: alerts ['space'] drivers 2
+shift boarding-blockage demo seed 3043
+shift boarding-blockage demo seed 3044
+  boarding-blockage/3044 T+390: alerts ['triage'] drivers 2
+  boarding-blockage/3044 T+555: alerts ['space'] drivers 2
+shift mixed-cascade development seed 7
+shift mixed-cascade tuning seed 1051
+shift mixed-cascade tuning seed 1052
+  mixed-cascade/1052 T+570: alerts ['space'] drivers 2
+shift mixed-cascade demo seed 3051
+  mixed-cascade/3051 T+480: alerts ['space'] drivers 2
+shift mixed-cascade demo seed 3052
+  mixed-cascade/3052 T+120: alerts ['triage'] drivers 2
+  mixed-cascade/3052 T+210: alerts ['space'] drivers 2
+  mixed-cascade/3052 T+285: alerts ['space'] drivers 2
+  mixed-cascade/3052 T+300: alerts ['space'] drivers 2
+  mixed-cascade/3052 T+315: alerts ['space'] drivers 2
+  mixed-cascade/3052 T+345: alerts ['space'] drivers 2
+shift mixed-cascade demo seed 3053
+  mixed-cascade/3053 T+495: alerts ['triage'] drivers 3
+  mixed-cascade/3053 T+525: alerts ['lab'] drivers 2
+  mixed-cascade/3053 T+555: alerts ['space'] drivers 2
+  mixed-cascade/3053 T+570: alerts ['space'] drivers 2
+  mixed-cascade/3053 T+585: alerts ['space'] drivers 2
+  mixed-cascade/3053 T+600: alerts ['space'] drivers 2
+shift mixed-cascade demo seed 3054
+  mixed-cascade/3054 T+180: alerts ['lab'] drivers 2
+  mixed-cascade/3054 T+285: alerts ['space'] drivers 2
+  mixed-cascade/3054 T+345: alerts ['space'] drivers 3
+  mixed-cascade/3054 T+360: alerts ['space'] drivers 2
+  mixed-cascade/3054 T+375: alerts ['space'] drivers 2
+  mixed-cascade/3054 T+390: alerts ['space'] drivers 2
+  mixed-cascade/3054 T+405: alerts ['space'] drivers 2
+  mixed-cascade/3054 T+420: alerts ['space'] drivers 2
+shift no-effective-action development seed 7
+shift no-effective-action tuning seed 1061
+shift no-effective-action tuning seed 1062
+shift no-effective-action demo seed 3061
+shift no-effective-action demo seed 3062
+shift no-effective-action demo seed 3063
+shift no-effective-action demo seed 3064
+  no-effective-action/3064 T+120: alerts ['imaging'] drivers 2
+Chosen from 1 qualifying early-warned episodes on non-test seeds (development, tuning, demo) (49 shifts scanned): 2 supported drivers (boarding, diagnostics), a forecast-risk alert 61 min before onset, and a supported not top for zone 2. A demo case, not held-out evidence.

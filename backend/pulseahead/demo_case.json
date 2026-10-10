@@ -1,0 +1,38 @@
+{
+ "scenario": "mixed-cascade",
+ "seed": 3052,
+ "partition": "demo",
+ "service": "space",
+ "service_name": "Staffed ED space",
+ "alert_time_min": 285.0,
+ "why": "Chosen from 1 qualifying early-warned episodes on non-test seeds (development, tuning, demo) (49 shifts scanned): 2 supported drivers (boarding, diagnostics), a forecast-risk alert 61 min before onset, and a supported not top for zone 2. A demo case, not held-out evidence.",
+ "scan": {
+  "file": "evidence/demo-case-scan.json",
+  "shifts_scanned": 49,
+  "qualifying": 1,
+  "lead_min": 61.0,
+  "onset_min": 346.0,
+  "confirmed_min": 356.0,
+  "chance": 0.66,
+  "drivers": [
+   "boarding",
+   "diagnostics"
+  ],
+  "overall_label": "Stable",
+  "top_action": {
+   "id": "staffed_surge_space:space",
+   "preset": "staffed_surge_space",
+   "target": "space",
+   "zone": 2,
+   "service": "space",
+   "feasible": true,
+   "label": "supported_not_top",
+   "order": 2,
+   "owner": "ED nurse in charge",
+   "saving_mean": 186.647,
+   "saving_lower_90": 108.258
+  },
+  "engine_version": "flow-5",
+  "forecast_model": "mc-flow-2"
+ }
+}

@@ -447,5 +447,5 @@ FIXTURES["fixture-reserve-outage"] = {
     **FIXTURES["fixture-boarding"],
     "id": "fixture-reserve-outage",
     "name": "Fixture: boarding with the reserve ward-allocation coordinator gone at activation",
-    "reserve_outages": [(0.0, 100000.0, "WA2")],
+    "reserve_outages": [(0.0, 100000.0, "WA2"), (0.0, 100000.0, "X1")],
 }

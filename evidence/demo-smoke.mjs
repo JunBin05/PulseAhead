@@ -26,8 +26,8 @@ const queue = (s, svc) => (svc === 'allocation' ? s.resources.disposition.alloca
 // ---- The case ----------------------------------------------------------------------------------
 const demo = await get('/demo/case');
 if (demo.available) {
-  check('case: available, a development/tuning seed, labelled a demo case',
-    ['development', 'tuning'].includes(demo.partition) && /not held-out/i.test(demo.label),
+  check('case: available, a non-test seed, labelled a demo case',
+    ['development', 'tuning', 'demo'].includes(demo.partition) && /not held-out/i.test(demo.label),
     `${demo.scenario} seed ${demo.seed} (${demo.partition}), service ${demo.service}, alert T+${demo.alert_time_min}`);
   check('case: the baseline is labelled retrospective and was read from a no-action replay',
     demo.retrospective.kind === 'retrospective_no_action_replay' && /retrospective/i.test(demo.retrospective.label) &&
@@ -81,7 +81,7 @@ check('beat C: a forecast-risk alert (not Building, not Overloaded) exists for t
   alert ? `${alert.name} ${Math.round(alert.chance * 100)}% (threshold ${f.model.settings.warning_threshold})` : 'none');
 check('beat C: onset range is ordered and expected-in matches', alert.onset.low_in_min <= alert.onset.expected_in_min && alert.onset.expected_in_min <= alert.onset.high_in_min,
   `${alert.onset.expected_in_min} min (${alert.onset.low_in_min} to ${alert.onset.high_in_min})`);
-check('beat C: scope is local; overall status is whatever was received', alert.zone === 3 && f.overall !== null && overallLabel === st.overall_status.label,
+check('beat C: scope is local; overall status is whatever was received', alert.zone === ({ space: 2, lab: 3, imaging: 3, allocation: 4, ward_beds: 4 })[demo.service] && f.overall !== null && overallLabel === st.overall_status.label,
   `overall "${overallLabel}", overall chance ${Math.round((f.overall?.chance ?? 0) * 100)}%`);
 const rows = (f.waits?.diagnostic ?? []).filter((r) => r.phase === `awaiting_${demo.service}`);
 check('beat C: predicted wait rows are forecasts (forecast minutes, p90 >= median where both exist), not elapsed waits',
@@ -104,8 +104,9 @@ check('beat D: priority list ordered, every row labelled with its rule inputs an
   listed.map((x) => `#${x.order} ${x.id} ${x.rank.label}`).join('; '));
 const top = listed[0];
 const supported = top.rank.label === 'best_action' || top.rank.label === 'supported_not_top';
-check('beat D: top action is supported by its own lower bound (no forced winner) and targets the alerted service',
-  supported && top.rank.rule.saving_lower_90 > 0 && top.service === demo.service, `${top.id} lb ${top.rank.rule.saving_lower_90}`);
+check('beat D: top action is supported by its own lower bound (no forced winner)',
+  supported && top.rank.rule.saving_lower_90 > 0, `${top.id} lb ${top.rank.rule.saving_lower_90} (alert service ${demo.service})`);
+check('beat D: a feasible, supported action exists for the alerted zone (the scan rule)', listed.some((x) => x.zone === alert.zone && ['best_action', 'supported_not_top'].includes(x.rank.label)), listed.filter((x) => x.zone === alert.zone).map((x) => x.id + ' ' + x.rank.label).join('; '));
 check('beat D: deadline, owner and setup timing are present', !!top.deadline && top.owners.length === 1 && top.review_min > 0 && top.setup_min > 0,
   `${top.deadline.status}, latest start ${top.deadline.latest_start_min}, owner ${top.owners[0]}, review ${top.review_min} + setup ${top.setup_min}`);
 if (cmp.what_if) check('beat D: what-if A vs B is paired on the same futures', cmp.what_if.difference_patient_min.n === 50, cmp.what_if.text.slice(0, 100));

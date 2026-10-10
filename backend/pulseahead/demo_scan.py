@@ -84,14 +84,20 @@ def scan_shift(family: str, seed: int, partition: str, log) -> dict[str, Any]:
             if w["key"] == ep["key"] and w["kind"] == "forecast_risk" and w["t"] < ep["onset"] <= w["t"] + fcast.HORIZON_MIN
         )
         info = at_alert.get((t_alert, ep["key"]))
+        # The demo compares the alert with the FIRST counts-based onset of that service after it (what an
+        # operator watching counts would have seen first), so lead is measured to that onset, not to a later
+        # episode the same warning also matched.
+        first_after = min(e["onset"] for e in eps if e["key"] == ep["key"] and e["onset"] > t_alert)
+        if first_after < ep["onset"] - 1e-9:
+            continue  # an earlier episode follows this alert; that episode is the one the demo would show
         row = {"key": ep["key"], "onset_min": ep["onset"], "confirmed_min": ep["confirmed"], "alert_time_min": t_alert,
-               "lead_min": ep["lead_min"], "qualifies": False, "reason": None}
+               "lead_min": round(first_after - t_alert, 1), "qualifies": False, "reason": None}
         if ep["key"] == "overall":
             row["reason"] = "overall-ED episode: the demo case is a local service alert"
         elif info is None:
             row["reason"] = "no alert record at the matched time"
-        elif ep["lead_min"] < MIN_LEAD_MIN:
-            row["reason"] = f"lead {ep['lead_min']} min is under {MIN_LEAD_MIN:.0f}"
+        elif row["lead_min"] < MIN_LEAD_MIN:
+            row["reason"] = f"lead {row['lead_min']} min is under {MIN_LEAD_MIN:.0f}"
         else:
             row.update(
                 drivers=[d["id"] for d in info["drivers"]["drivers"]], driver_count=info["drivers"]["supported_count"],
@@ -175,7 +181,7 @@ def main() -> int:
         "scenario": best["family"], "seed": best["seed"], "partition": best["partition"], "service": best["key"],
         "service_name": SERVICES[best["key"]]["name"], "alert_time_min": best["alert_time_min"],
         "why": (
-            f"Chosen from {len(cands)} qualifying early-warned episodes on development/tuning seeds "
+            f"Chosen from {len(cands)} qualifying early-warned episodes on non-test seeds (development, tuning, demo) "
             f"({len(shifts)} shifts scanned): {best['driver_count']} supported drivers "
             f"({', '.join(best['drivers'])}), a forecast-risk alert {best['lead_min']:.0f} min before onset, and a "
             f"{top['label'].replace('_', ' ')} for zone {top['zone']}. A demo case, not held-out evidence."

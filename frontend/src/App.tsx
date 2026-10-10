@@ -18,6 +18,7 @@ import { AmbulancePanel, DataQualityPanel, FeedsPanel } from './panels/DataPanel
 import { ResourcesPanel, URGENCY_LABEL } from './panels/ResourcesPanel';
 import { RunsPanel } from './panels/RunsPanel';
 import { RunBar } from './shell/RunBar';
+import { KpiRow } from './shell/KpiRow';
 import { Tabs } from './shell/Tabs';
 import {
   AlertList,
@@ -44,7 +45,7 @@ import {
 } from './types';
 
 const SPEEDS = [1, 2, 5, 10] as const;
-type LeftTab = 'story' | 'resources' | 'data' | 'runs';
+type LeftTab = 'resources' | 'data' | 'runs';
 type RightTab = 'zone' | 'act';
 
 /** Test-only: `?fixture=<id>` starts a controlled fixture scenario for Playwright MCP checks.
@@ -176,7 +177,9 @@ export function App() {
   // 2D list view: the same zone status, alerts, comparison and approvals without the 3D scene.
   const [listView, setListView] = useState(false);
   // Which tab each rail shows. Panels in hidden tabs stay mounted, so nothing loses its state.
-  const [leftTab, setLeftTab] = useState<LeftTab>('story');
+  const [leftTab, setLeftTab] = useState<LeftTab>('resources');
+  // Pressing "Start guided demo" in the run bar asks the story stage to run its first beat.
+  const [demoKick, setDemoKick] = useState(0);
   const [rightTab, setRightTab] = useState<RightTab>('zone');
   useEffect(() => {
     setRightTab(compareOpen ? 'act' : 'zone');
@@ -518,8 +521,15 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <h1 className="app-title">
-          Simulation Window
-          <small>PulseAhead ED operational twin</small>
+          <span className="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="28" height="28">
+              <path d="M2 17h7l3-8 5 15 4-11 2 4h7" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span>
+            PulseAhead
+            <small>ED congestion early warning · operational twin</small>
+          </span>
         </h1>
         <div className="meta-row">
           <span className="synthetic-chip" data-testid="synthetic-label">
@@ -536,7 +546,9 @@ export function App() {
         <StatusBadge snap={snap} />
       </header>
 
+      <KpiRow snap={snap} view={fcView} />
       <RunBar
+        onStartDemo={() => setDemoKick((k) => k + 1)}
         snap={snap}
         playing={playing}
         speed={speed}
@@ -592,7 +604,6 @@ export function App() {
             value={leftTab}
             onChange={(v) => setLeftTab(v as LeftTab)}
             tabs={[
-              { id: 'story', label: 'Story', content: <DemoBar ctl={demoCtl} /> },
               {
                 id: 'resources',
                 label: 'Resources',
@@ -636,6 +647,7 @@ export function App() {
         </aside>
 
         <section aria-label="Four-zone ED map">
+          <DemoBar ctl={demoCtl} kick={demoKick} />
           <ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />
           <div
             className="scene-wrap"
@@ -983,8 +995,11 @@ function ZoneDrawer({
           </>
         )}
       </p>
+      <ZoneForecast snap={snap} view={fcView} zone={zone.id} explanation={explanation} />
+      <details className="drawer-section">
+        <summary>Staff assigned here</summary>
       <section data-testid="assigned-staff" aria-labelledby="assigned-h" style={{ marginBottom: 'var(--s-4)' }}>
-        <h3 id="assigned-h" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--s-2)' }}>
+        <h3 id="assigned-h" className="sr-only">
           Assigned here
         </h3>
         {detail.staff.doctors.length > 0 && (
@@ -1017,6 +1032,7 @@ function ZoneDrawer({
           {detail.staff.note}
         </p>
       </section>
+      </details>
       {zone.id === 3 && (
         <p className="muted" data-testid="diag-note" style={{ marginBottom: 'var(--s-4)' }}>
           These patients keep their ED space while they wait for or have tests; no doctor is held
@@ -1025,12 +1041,19 @@ function ZoneDrawer({
           {snap.resources.diagnostics.imaging.median_turnaround_min} min (demo assumptions).
         </p>
       )}
-      <ZoneForecast snap={snap} view={fcView} zone={zone.id} explanation={explanation} />
-      <PressureSection snap={snap} zoneId={zone.id} />
-      {(zone.id === 2 || zone.id === 3) && <StaffingSummary snap={snap} />}
+      <details className="drawer-section">
+        <summary>Local pressure: queues against thresholds</summary>
+        <PressureSection snap={snap} zoneId={zone.id} />
+      </details>
+      {(zone.id === 2 || zone.id === 3) && (
+        <details className="drawer-section">
+          <summary>Shared staffing (zones 2 and 3)</summary>
+          <StaffingSummary snap={snap} />
+        </details>
+      )}
       {patients.length > 0 && (
-        <>
-          <h3 style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--s-2)' }}>Patients</h3>
+        <details className="drawer-section" open>
+          <summary>Patients ({patients.length})</summary>
           <ul className="roster" data-testid="roster">
             {patients.map((p) => (
               <li key={p.id}>
@@ -1058,7 +1081,7 @@ function ZoneDrawer({
               </li>
             ))}
           </ul>
-        </>
+        </details>
       )}
     </div>
   );

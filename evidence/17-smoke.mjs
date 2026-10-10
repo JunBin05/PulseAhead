@@ -33,8 +33,8 @@ let st = await open('diagnostic-delay', 7, 100);
 const id = st.replay_id;
 const c = await j(`/replays/${id}/compare`, { samples: 50, expected_version: st.version });
 const compared = c.actions.filter((a) => a.comparison);
-check('priority list: both feasible actions compared, infeasible one listed with a reason',
-  compared.length === 2 && c.actions.some((a) => !a.feasible && a.reasons.length > 0), compared.map((a) => a.id).join());
+check('priority list: every feasible action compared (incl. the surge space), infeasible one listed with a reason',
+  compared.length >= 2 && c.actions.some((a) => !a.feasible && a.reasons.length > 0), compared.map((a) => a.id).join());
 check('every compared label matches the rule recomputed from its numbers',
   compared.every((a) => norm(a.rank.label) === recompute(a.rank.rule)),
   compared.map((a) => `${a.id}=${a.rank.label}`).join(' '));
@@ -43,7 +43,7 @@ check('order: top row is the supported action with the larger lower bound; at mo
   compared[0].rank.rule.saving_lower_90 >= compared[1].rank.rule.saving_lower_90,
   `${compared[0].id} lb ${compared[0].rank.rule.saving_lower_90} vs ${compared[1].id} lb ${compared[1].rank.rule.saving_lower_90}`);
 check('infeasible actions sort last and read Not feasible', c.actions.at(-1).rank.label === 'not_feasible');
-check('not-modeled presets are listed apart', c.not_modeled.length === 5);
+check('not-modeled presets are listed apart', c.not_modeled.length === 4);
 const [a, b] = compared;
 check('what-if: pair difference equals the difference of the two savings (same paired futures)',
   Math.abs(c.pair_diff[a.id][b.id].mean - (a.comparison.total_saving_patient_min.mean - b.comparison.total_saving_patient_min.mean)) < 0.01,
