@@ -17,7 +17,7 @@ from .profile import (
     CATALOG_VERSION, ENGINE_VERSION, PROFILE, PROFILE_ID, SCENARIOS, SCORED_MIN, WARMUP_MIN, scenario_catalog,
 )
 from . import forecast as fcast
-from .replay import API_VERSION, MAX_ADVANCE_MIN, ReplayStore, SavedRunMismatch
+from .replay import API_VERSION, MAX_ADVANCE_MIN, ActionError, ReplayStore, SavedRunMismatch
 
 app = FastAPI(title="PulseAhead synthetic ED twin", version=API_VERSION)
 store = ReplayStore()
@@ -214,6 +214,62 @@ def forecast_explain(replay_id: str, body: ForecastBody) -> dict:
     if out is None:
         raise HTTPException(status_code=409, detail="no forecast is held for that state version; request a fresh one")
     return out
+
+
+class CompareBody(BaseModel):
+    samples: Literal[50, 100] = 50
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class RequestBody(BaseModel):
+    preset: str
+    target: str | None = None
+    role: str | None = None
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class DecisionBody(BaseModel):
+    role: str
+    decision: Literal["approve", "reject", "defer"]
+    # The decision's identity: a repeat of the same (role, decision_id) returns the stored outcome.
+    decision_id: str = Field(min_length=1, max_length=64)
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+@app.post("/api/v1/replays/{replay_id}/compare")
+def compare_actions(replay_id: str, body: CompareBody | None = None) -> dict:
+    """No action against each feasible action preset on the same keyed futures (see forecast.py)."""
+    body = body or CompareBody()
+    result, cached = _session(replay_id).compare(body.samples, body.expected_version)
+    if result is None:
+        raise HTTPException(status_code=409, detail="state version changed; request a fresh comparison")
+    return {**result, "cached": cached}
+
+
+@app.get("/api/v1/replays/{replay_id}/actions")
+def read_actions(replay_id: str) -> dict:
+    s = _session(replay_id)
+    with s.lock:
+        snap = s.snapshot()
+    return {"api_version": API_VERSION, "source": {"replay_id": snap["replay_id"], "run_number": snap["run_number"],
+                                                    "version": snap["version"], "sim_time_min": snap["sim_time_min"]},
+            **snap["actions"]}
+
+
+@app.post("/api/v1/replays/{replay_id}/requests")
+def create_action_request(replay_id: str, body: RequestBody) -> dict:
+    try:
+        return _session(replay_id).create_request(body.preset, body.target, body.expected_version, body.role)
+    except ActionError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+@app.post("/api/v1/replays/{replay_id}/requests/{request_id}/decision")
+def decide_action_request(replay_id: str, request_id: str, body: DecisionBody) -> dict:
+    try:
+        return _session(replay_id).decide(request_id, body.role, body.decision, body.decision_id, body.expected_version)
+    except ActionError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
 @app.get("/api/v1/replays/{replay_id}/ingest")

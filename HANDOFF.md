@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Next: ticket 11.** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
+Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Ticket 11 is built and smoke-verified (see "Ticket 11 summary"); next: ticket 14 (reduced).** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
 
 ## Goal and rules
 
@@ -29,7 +29,7 @@ Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and 
 | 08 Fresh, noisy, missing and invalid inputs | **done**: 7/7 pass (no review gate due) | `evidence/08-received-data-and-robustness.md`, `evidence/08-feeds.playwright-mcp.js` (PART `A` and `B`), `evidence/shots/08-*.png` |
 | 09 Generate varied shifts and reproduce saved replays | **done**: 7/7 pass (no review gate due); two caveats owned by later tickets (no-effective-action ranking, empty choices/forecast settings) | `evidence/09-synthetic-scenarios-and-save-load.md`, `evidence/09-scenarios.playwright-mcp.js` (PART `A`, `B`), `evidence/09-save-load-ui.playwright-mcp.js`, `evidence/09-saved-persistence.playwright-mcp.js` (PART `A`, `B`), `evidence/09-critical-bypass.playwright-mcp.js`, `evidence/shots/09-diagnostic-zone3-overload.png` |
 | 10 Predict bottlenecks and explain the time remaining | **done**: 9/9 pass (criteria 7 and 9 with caveats); review gate closed (10 findings: 8 fixed, 1 partly, 1 not actionable) | `evidence/10-forecast-and-alert-panel.md` (incl. "Review-gate fixes"), `evidence/10-*.playwright-mcp.js` |
-| 11 Ward coordination + shared action machinery | **next**, not started | n/a |
+| 11 Ward coordination + shared action machinery | **done (smoke-verified)**; UI box open until the ticket 20 journey | `evidence/11-ward-action-and-owner-approval.md`, `evidence/11-smoke.mjs` |
 | 12, 13, 15, 16 | **descoped** (scope amendment) | n/a |
 | 14 Diagnostic reserve slot (reduced) | not started | n/a |
 | 17 Ranking (lite), 18 Evidence (merged with 19), 20 UX (lite) | not started | n/a |
@@ -169,6 +169,16 @@ Tickets 01 to 09 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
 - **Frontend:** zone buttons carry a status chip; the platform tint and ALERT bubble follow `pressure.zones`; the overall badge adds "Local alert"; the zone drawer has a "Zone pressure" section (service cards, alerts, the not-overall-congestion note). `canvas.dataset.meshPositions` is a test hook.
 - **Known limits:** area labels can sit under dots (ticket 20); only the in-progress recovery clock is shown for a local episode; the "Open episode" row for a service with missing inputs is not asserted.
 - **Fixtures added:** `fixture-congestion-boundary`, `fixture-diagnostics-gap`, `fixture-queue-surge`.
+
+## Ticket 11 summary (final build, smoke-verified)
+
+- **Backend:**
+  - `actions.py`: presets, owners from `PROFILE["owners"]`, eligibility from the received snapshot, not-modeled list. `profile.py` `reserves` (`WA2`, `L3`, `I2`), `ENGINE_VERSION` `flow-4`.
+  - `engine.py`: `start_action` lifecycle process (`action_approved/review/setup/active/draining/completed/blocked`), capacity changed via `res._capacity` at activation/retirement, `_give_back` keeps the default path bit-identical. `feeds.py` routes `action_*` to an `actions` source.
+  - `forecast.py`: `Future(..., action=, cohort=True)`, `run_cohort`, `cohort_result`, `compare_actions` (paired, `fc:{seed}:{k}:{patient}`, stats mean/sd/n/90% lower bound), received in-flight action applied in ordinary forecasts.
+  - `replay.py`: `requests`, `choices`, `create_request`, `decide`, `compare`, `snapshot()["actions"]`, Load replays choices then checks the digest. `api.py`: `POST /compare`, `GET /actions`, `POST /requests`, `POST /requests/{id}/decision`. Fixture `fixture-reserve-outage`.
+- **Frontend:** `Actions.tsx` (`RoleSwitcher`, `ComparePanel`, `RequestCard`, `ActionProgress`, `ActionChip`), a Compare button per alert and in the drawer column, role state in `App.tsx`. **Not run in a browser yet** (tsc + build only); the ticket 20 journey covers it.
+- **Skipped on purpose:** the code-review gate after 11 (the amended plan has no time for it).
 
 ## Servers
 

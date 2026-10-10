@@ -4,20 +4,20 @@
 
 **Blocked by:** 10 — Predict bottlenecks and explain the time remaining.
 
-**Status:** ready-for-agent (scope amendment 2026-10-11)
+**Status:** built and smoke-verified (UI box left open until the ticket 20 journey), see `evidence/11-ward-action-and-owner-approval.md`
 
 **Rubric focus:** Complete decision loop; concrete interventions.
 
 ### Criteria (scope amendment, final build)
 
-- [ ] Paired comparison from one received snapshot: no action vs ward coordination on the same keyed futures (`fc:{seed}:{k}:{patient}`); cohort = patients present at the decision plus 90 min of arrivals, background arrivals continue, follow-up capped at 12 h; incomplete outcomes are counted apart, never dropped.
-- [ ] Approvers come from resource ownership in `profile.py`, not from the alert zone: ward coordination routes to "Ward supervisor / bed manager" even when opened from a zone 3 alert.
-- [ ] Eligibility needs a decided Ward/ICU patient that more allocation work can help and the declared reserve coordinator (add it to the profile). Success adds one ward-allocation slot; it never creates a ward bed or a clearance.
-- [ ] Versioned requests with required owners, per-role idempotent decision identities, wrong-role refusal, stale-version 409, approve / reject / defer.
-- [ ] Partial approval reserves nothing. The final grant enters review 5 min → setup 10 min → active 60 min → draining → completed/blocked, recorded as `action_*` events by the backend; one action in flight; activation rechecks the reserve (blocked if it is gone).
+- [x] Paired comparison from one received snapshot: no action vs ward coordination on the same keyed futures (`fc:{seed}:{k}:{patient}`); cohort = patients present at the decision plus 90 min of arrivals, background arrivals continue, follow-up capped at 12 h; incomplete outcomes are counted apart, never dropped.
+- [x] Approvers come from resource ownership in `profile.py`, not from the alert zone: ward coordination routes to "Ward supervisor / bed manager" even when opened from a zone 3 alert.
+- [x] Eligibility needs a decided Ward/ICU patient that more allocation work can help and the declared reserve coordinator (add it to the profile). Success adds one ward-allocation slot; it never creates a ward bed or a clearance.
+- [x] Versioned requests with required owners, per-role idempotent decision identities, wrong-role refusal, stale-version 409, approve / reject / defer.
+- [x] Partial approval reserves nothing. The final grant enters review 5 min → setup 10 min → active 60 min → draining → completed/blocked, recorded as `action_*` events by the backend; one action in flight; activation rechecks the reserve (blocked if it is gone).
 - [ ] UI: comparison panel opened from an alert (pauses the replay, shows its source time, Refresh when stale), demo-role switcher, approve/reject/defer, action progress on the map and in the drawer. No "Best action" label until ticket 17.
-- [ ] Saved runs store decisions in `choices` and reload them; `ENGINE_VERSION` is bumped; the no-action path is unchanged (seed 7 normal still gives 705 events and 59 patients).
-- [ ] API smoke: the right owner approves ward coordination and allocation capacity rises after setup (visible in `/state` and `/events`); a wrong owner is refused; a stale version gets 409; a repeated decision is idempotent; the no-action seed 7 counts are unchanged.
+- [x] Saved runs store decisions in `choices` and reload them; `ENGINE_VERSION` is bumped; the no-action path is unchanged (seed 7 normal still gives 705 events and 59 patients).
+- [x] API smoke: the right owner approves ward coordination and allocation capacity rises after setup (visible in `/state` and `/events`); a wrong owner is refused; a stale version gets 409; a repeated decision is idempotent; the no-action seed 7 counts are unchanged.
 
 Descoped from the original: command-center escalation records, the concurrent-request stress check and per-criterion Playwright MCP evidence.
 

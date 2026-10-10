@@ -148,3 +148,20 @@ Spec §Congestion and forecasting: sample "arrivals, remaining work, and ward av
 - **Evaluation size (predeclared from measured cost).** 50 futures take about 0.25 s and 100 about 0.5 s on the development machine; a complete 12 h shift forecast every 5 minutes at 50 futures took 43 s. A forecast-only evaluation of 14 tuning and 28 test shifts is therefore about 30 minutes. The action-comparison cost does not exist yet (tickets 11 and 17); the size is re-confirmed against the measured comparison cost in ticket 18, with the spec's 7 + 7 fallback if the run budget requires it. No final outcome exists yet, so this choice cannot depend on one.
 
 **Alternative not taken:** read hidden completion times from the replay engine; a time-to-onset countdown from lambda greater than mu; one pooled forecast without separate local and overall summaries.
+## Q11. How do requests, approval and the action lifecycle work? (ticket 11, shared by 14)
+
+Spec §Actions and the scope amendment: one lifecycle, approvers from resource ownership, one action in flight, partial grants reserve nothing.
+
+**Working decision:**
+- **Presets.** Two are built: ward coordination (adds one ward-allocation slot, owner "Ward supervisor / bed manager", setup 10 min) and the diagnostic reserve slot (ticket 14, lab or imaging, owner Lab manager or Radiology manager, setup 15 min). The other presets are listed as not modeled and refused with 422.
+- **Owners.** Required approvers are the owner of the resource the action adds capacity to (`PROFILE["owners"]`), never the zone the alert came from. The ED shift coordinator can request but is not an owner, so a coordinator decision is refused (403).
+- **Declared reserves.** `PROFILE["reserves"]`: coordinator `WA2`, lab slot `L3`, imaging slot `I2`. A fixture may declare `reserve_outages` (hidden future); the reserve is rechecked at activation and an unavailable one blocks the action with no capacity added.
+- **Lifecycle.** Approval by every required owner starts review (5 min), then setup, then active (60 min), then draining (the slot takes no new work; the task on it finishes first), then completed; blocked at activation if the reserve is gone. Capacity changes only at activation and at the end of the active window. All stages are `action_*` events carried by a separate `actions` source, so they never refresh a clinical feed's heartbeat.
+- **Staleness.** A request records the simulated time of the comparison it was made from. Reject and defer work any time; approve is refused with 409 once time has moved on ("an old ranking cannot be approved"). Creating a new request closes an older open one as stale. State version guards concurrent changes (409).
+- **Idempotency.** A decision's identity is (role, decision_id). A repeat returns the stored outcome with no second effect; a second grant by the same role under a new id is 409.
+- **Eligibility.** Ward coordination needs a decided Ward/ICU patient waiting for allocation work (a bed already reserved). If decided patients only lack a suitable bed it is not feasible and says so: more allocation work cannot help and never creates a bed.
+- **Comparison cohort and follow-up.** Patients present now plus arrivals in the next 90 min; background arrivals continue; the run stops when the cohort has departed or at 12 h. Stays that do not finish carry accrued minutes in both branches and are counted apart (never dropped); a stay waiting for a ward bed that is never released in the model therefore shows as unfinished.
+- **Resource-hours.** One reserve unit for its 60-minute active window (setup and review minutes are staff time before it); work on the slot finishes after the window and is not charged.
+- **Saved runs.** `choices` holds each request and decision with the simulated time it was made; Load replays them through the same commands and then checks the event digest.
+
+**Alternative not taken:** forecasts and comparisons that ignore an action in flight; an approval that is valid at any later time; modelling partial grants with several owners (every preset here has one owner, the machinery supports more).

@@ -38,6 +38,10 @@ DEFAULT_SAMPLES = 50
 WARNING_THRESHOLD = 0.4
 REVIEW_MIN = 5.0
 MARGIN_MIN = 5.0
+# Action comparison (paired futures): the follow-up cap and the cohort window (spec: patients present
+# at the decision plus 90 minutes of arrivals; background arrivals continue; follow-up capped at 12 h).
+FOLLOW_UP_MIN = 720.0
+OVERDUE_URGENT_WAIT_MIN = 15.0
 
 # Population-level assumptions used only by the forecast (everything else comes from the profile).
 FORECAST_ASSUMPTIONS = {
@@ -107,6 +111,11 @@ _PHASE_STAGE = {
 _ACTIVE = {"triage_active", "assess_active", "test_active", "review_active", "disch_active", "alloc_active",
            "trans_active"}
 _SERVICE_IDS = tuple(SERVICES)
+# Present patients at these stages have already had their first assessment: it is identical in every branch.
+_PRE_ASSESSED = {
+    "assess_active", "test_wait", "test_active", "review_wait", "review_active", "care_wait", "disch_wait",
+    "disch_active", "bed_wait", "alloc_wait", "alloc_active", "trans_wait", "trans_active",
+}
 
 
 # -- distributions -----------------------------------------------------------------------------
@@ -191,6 +200,7 @@ def build_input(snapshot: dict[str, Any], events: list[dict[str, Any]]) -> dict[
                 "tests_done": list(p["tests_done"]), "tests_status": p["tests_status"],
                 "care_status": p["care_status"], "care_start": care_start.get(p["id"]),
                 "decision": bool(p["decision_received"]), "disposition": p["disposition"],
+                "arrival": p.get("arrival_min"),
             }
         )
     beds = [
@@ -202,6 +212,13 @@ def build_input(snapshot: dict[str, Any], events: list[dict[str, Any]]) -> dict[
          "acuity": a["acuity"], "status": a["status"], "overdue": a["minutes_overdue"]}
         for a in snapshot["inbound_ambulances"]
     ]
+    fl = (snapshot.get("actions") or {}).get("in_flight")
+    in_flight = None
+    if fl and fl["stage"] in ("review", "setup", "active"):
+        in_flight = {
+            "service": fl["service"], "stage": fl["stage"], "unit": fl["unit"],
+            "activate_rel": float(fl["setup_end_min"]) - t0, "retire_rel": float(fl["active_end_min"]) - t0,
+        }
     om = snapshot["overall_status"]
     local = {
         sid: {
@@ -217,6 +234,7 @@ def build_input(snapshot: dict[str, Any], events: list[dict[str, Any]]) -> dict[
             "version": snapshot["version"], "sim_time_min": t0,
         },
         "assessable": bool(om.get("assessable", True)),
+        "in_flight": in_flight,
         "reasons": list(om.get("reasons", [])),
         "overall": {"state": om["state"], "onset": om["onset_min"], "confirmed": om["confirmed_min"],
                     "below": om["recovery_since_min"]},
@@ -284,6 +302,7 @@ class _P:
     __slots__ = (
         "id", "rank", "urgency", "critical", "source", "stage", "arrive", "space", "bed", "disp", "u", "hold",
         "tests", "had_tests", "first_assess", "effective", "depart", "rem", "care", "mode", "known",
+        "cohort", "pre", "test_wait",
     )
 
 
@@ -296,13 +315,20 @@ class Future:
     """One independent future from the received state. `extra` adds capacity: {service: slots}."""
 
     def __init__(self, inp: dict[str, Any], k: int, base: int, adj: dict[str, float], scale: dict[str, float],
-                 extra: dict[str, int] | None = None) -> None:
+                 extra: dict[str, int] | None = None, action: dict[str, Any] | None = None,
+                 cohort: bool = False) -> None:
+        """`action` ({service, start_rel, end_rel}) adds one slot of a service between two times from now;
+        `cohort` runs the comparison variant: arrivals continue to the follow-up cap, no monitors, and the
+        run stops once every cohort patient has departed."""
         self.inp, self.k, self.base = inp, k, base
         self.adj, self.scale = adj, scale
         extra = extra or {}
         self.t0 = inp["t0"]
-        self.end = HORIZON_MIN + TAIL_MIN
+        self.cohort_mode = cohort
+        self.end = FOLLOW_UP_MIN if cohort else HORIZON_MIN + TAIL_MIN
         env = self.env = simpy.Environment()
+        self._open = 0
+        self.done = env.event()
         a = PROFILE["assumptions"]
         self.a = a
         sv = inp["servers"]
@@ -352,9 +378,39 @@ class Future:
         self.ticks: list[tuple[float, int, int, dict[str, int], int, int]] = []
         self._known_cum = 0
         self._bg_cum = 0
+        self._res = {"allocation": self.allocation, "lab": self.lab, "imaging": self.imaging}
+        # An action already in flight (received) and the action being compared both change one service's
+        # capacity at a time from now; occupied work always drains (a slot is never taken from a task).
+        fl = inp.get("in_flight")
+        if fl:
+            if fl["stage"] in ("review", "setup"):
+                env.process(self._capacity_change(fl["service"], fl["activate_rel"], +1))
+            env.process(self._capacity_change(fl["service"], fl["retire_rel"], -1))
+        if action:
+            env.process(self._capacity_change(action["service"], action["start_rel"], +1))
+            env.process(self._capacity_change(action["service"], action["end_rel"], -1))
         self._spawn_present()
         self._spawn_future()
-        env.process(self._monitor())
+        if cohort:
+            env.process(self._cohort_gate())
+        else:
+            env.process(self._monitor())
+
+    # -- action capacity and the cohort stop ----------------------------------------------------
+    def _capacity_change(self, service: str, at: float, delta: int):
+        yield self.env.timeout(max(0.0, at))
+        res = self._res[service]
+        res._capacity += delta  # same mechanism as EDEngine._action_lifecycle (pinned simpy)
+        if delta > 0:
+            res._trigger_put(None)
+
+    def _cohort_gate(self):
+        yield self.env.timeout(HORIZON_MIN)
+        self._check_done()
+
+    def _check_done(self) -> None:
+        if self._open == 0 and self.env.now >= HORIZON_MIN - 1e-9 and not self.done.triggered:
+            self.done.succeed()
 
     # -- set-up --------------------------------------------------------------------------------
     def _seed_monitors(self) -> None:
@@ -389,6 +445,9 @@ class Future:
         p.first_assess = p.effective = p.depart = None
         p.u = _hidden_uniforms(self.base, self.k, pid)
         p.known = known
+        p.cohort = False
+        p.pre = False
+        p.test_wait = 0.0
         p.rem = 0.0
         a = self.a
         group = "critical" if critical else urgency
@@ -427,6 +486,12 @@ class Future:
             stage = _PHASE_STAGE[r["phase"]]
             p = self._make(r["id"], r["urgency"], r["critical"], r["mode"], "present", stage, 0.0, r)
             p.space, p.bed = r["space"], r["bed"]
+            if r.get("arrival") is not None:
+                p.arrive = float(r["arrival"]) - self.t0
+            if self.cohort_mode:
+                p.cohort = True
+                p.pre = _PHASE_STAGE[r["phase"]] in _PRE_ASSESSED
+                self._open += 1
             e = r["in_phase"]
             p.rem = e
             u = p.u
@@ -560,6 +625,9 @@ class Future:
     def _new_patient(self, pid: str, urgency: str, critical: bool, mode: str, source: str) -> None:
         stage = "space_wait" if critical else "triage_wait"
         p = self._make(pid, urgency, critical, mode, source, stage, float(self.env.now))
+        if self.cohort_mode and self.env.now <= HORIZON_MIN + 1e-9:
+            p.cohort = True
+            self._open += 1
         if urgency == "urgent":
             p.care = ("future", total_time(p.u[5], self.a["stabilization_task_minutes"]))
         self.patients.append(p)
@@ -600,7 +668,9 @@ class Future:
             for i, (kind, minutes) in enumerate(p.tests):
                 res = self.lab if kind == "lab" else self.imaging
                 req = res.request(priority=rank)
+                asked = env.now
                 yield req
+                p.test_wait += env.now - asked
                 yield env.timeout(minutes)
                 res.release(req)
         if p.had_tests and st <= S["review_active"]:
@@ -640,6 +710,9 @@ class Future:
         p.depart = env.now
         if p.disp != "home" and p.bed is not None:
             self.beds.occupy(p.bed)
+        if p.cohort:
+            self._open -= 1
+            self._check_done()
 
     # -- per-minute monitors -------------------------------------------------------------------------
     def _readings(self) -> dict[str, dict[str, Any]]:
@@ -680,6 +753,28 @@ class Future:
         self.env.run(until=self.end + 1e-6)
         return self
 
+    def run_cohort(self) -> "Future":
+        """Runs until every cohort patient has departed, or the follow-up cap."""
+        self.env.run(until=self.done | self.env.timeout(self.end))
+        return self
+
+    def cohort_result(self) -> dict[str, Any]:
+        """Per cohort patient: whether the stay finished, total ED minutes (accrued if not), the three parts
+        and the diagnostic wait. Unfinished stays carry accrued minutes and are never dropped."""
+        end = float(self.env.now)
+        pts: dict[str, tuple] = {}
+        for p in self.patients:
+            if not p.cohort:
+                continue
+            complete = p.depart is not None
+            stop = p.depart if complete else end
+            first = p.first_assess if p.first_assess is not None else (0.0 if p.pre else stop)
+            eff = p.effective if p.effective is not None else stop
+            eff = max(eff, first)
+            pts[p.id] = (p.urgency == "urgent", complete, stop - p.arrive, first - p.arrive, eff - first,
+                         stop - eff, p.test_wait, p.pre)
+        return {"pts": pts, "end": end}
+
     # -- extraction ----------------------------------------------------------------------------------
     def outcome(self) -> dict[str, Any]:
         t0 = self.t0
@@ -702,6 +797,127 @@ def run_future(inp: dict[str, Any], k: int, base: int = FORECAST_SEED, extra: di
     adj = adj or _arrival_adjustment(inp)
     scale = scale or _turnaround_scale(inp)
     return Future(inp, k, base, adj, scale, extra).run().outcome()
+
+
+# -- paired action comparison ----------------------------------------------------------------------
+def _stats(vals: list[float]) -> dict[str, Any]:
+    n = len(vals)
+    if n == 0:
+        return {"n": 0, "mean": None, "sd": None, "lower_90": None, "upper_90": None}
+    mean = sum(vals) / n
+    sd = math.sqrt(sum((v - mean) ** 2 for v in vals) / (n - 1)) if n > 1 else 0.0
+    half = 1.645 * sd / math.sqrt(n) if n > 1 else None
+    return {
+        "n": n, "mean": round(mean, 3), "sd": round(sd, 3),
+        "lower_90": None if half is None else round(mean - half, 3),
+        "upper_90": None if half is None else round(mean + half, 3),
+    }
+
+
+def _branch_row(pts: dict[str, tuple]) -> dict[str, Any]:
+    """One branch of one future: cohort sums."""
+    urgent = [v for v in pts.values() if v[0]]
+    return {
+        "cohort": len(pts), "urgent": len(urgent),
+        "incomplete": sum(1 for v in pts.values() if not v[1]),
+        "urgent_incomplete": sum(1 for v in urgent if not v[1]),
+        "total": sum(v[2] for v in pts.values()), "initial": sum(v[3] for v in pts.values()),
+        "care": sum(v[4] for v in pts.values()), "await": sum(v[5] for v in pts.values()),
+        "diag_wait": sum(v[6] for v in pts.values()),
+        "urgent_wait_mean": (sum(v[3] for v in urgent) / len(urgent)) if urgent else None,
+        "overdue": sum(1 for v in urgent if not v[7] and v[3] > OVERDUE_URGENT_WAIT_MIN),
+    }
+
+
+def compare_actions(inp: dict[str, Any], specs: list[dict[str, Any]], samples: int, base: int = FORECAST_SEED,
+                    adj: dict[str, float] | None = None, scale: dict[str, float] | None = None) -> dict[str, Any]:
+    """No action against each spec on the same keyed futures (`fc:{seed}:{k}:{patient}`).
+
+    Differences are paired per future. `saving` is no action minus action (positive helps);
+    `change` is action minus no action (positive is worse). Incomplete stays carry accrued minutes and are
+    counted apart per branch."""
+    t0 = time.perf_counter()
+    adj = adj or _arrival_adjustment(inp)
+    scale = scale or _turnaround_scale(inp)
+    blocked = inp.get("in_flight") is not None
+    rows_base: list[dict[str, Any]] = []
+    rows_act: dict[str, list[dict[str, Any]]] = {s["id"]: [] for s in specs}
+    deltas: dict[str, dict[str, list[float]]] = {
+        s["id"]: {k: [] for k in ("saving", "initial", "care", "await", "diag_wait", "urgent_wait", "overdue")}
+        for s in specs
+    }
+    complete_urgent: dict[str, int] = {s["id"]: 0 for s in specs}
+    incomplete_futures: dict[str, int] = {s["id"]: 0 for s in specs}
+    for k in range(samples):
+        b = Future(inp, k, base, adj, scale, cohort=True).run_cohort().cohort_result()
+        rb = _branch_row(b["pts"])
+        rows_base.append(rb)
+        if blocked:
+            continue
+        for s in specs:
+            act = {"service": s["service"], "start_rel": s["review_min"] + s["setup_min"],
+                   "end_rel": s["review_min"] + s["setup_min"] + s["active_min"]}
+            a = Future(inp, k, base, adj, scale, action=act, cohort=True).run_cohort().cohort_result()
+            ra = _branch_row(a["pts"])
+            rows_act[s["id"]].append(ra)
+            d = deltas[s["id"]]
+            d["saving"].append(rb["total"] - ra["total"])
+            d["initial"].append(rb["initial"] - ra["initial"])
+            d["care"].append(rb["care"] - ra["care"])
+            d["await"].append(rb["await"] - ra["await"])
+            d["diag_wait"].append(rb["diag_wait"] - ra["diag_wait"])
+            if rb["urgent"] > 0:
+                # Mean over the urgent cohort of (action wait - no-action wait); patients whose first
+                # assessment is already past are identical in both branches and contribute zero.
+                d["urgent_wait"].append(ra["urgent_wait_mean"] - rb["urgent_wait_mean"])
+            d["overdue"].append(ra["overdue"] - rb["overdue"])
+            full = rb["incomplete"] == 0 and ra["incomplete"] == 0
+            if not full:
+                incomplete_futures[s["id"]] += 1
+            if rb["urgent"] > 0 and rb["urgent_incomplete"] == 0 and ra["urgent_incomplete"] == 0:
+                complete_urgent[s["id"]] += 1
+
+    def mean(rows: list[dict[str, Any]], key: str) -> float | None:
+        vals = [r[key] for r in rows if r[key] is not None]
+        return round(sum(vals) / len(vals), 3) if vals else None
+
+    def branch(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "cohort_patients_mean": mean(rows, "cohort"), "urgent_patients_mean": mean(rows, "urgent"),
+            "total_ed_patient_min_mean": mean(rows, "total"),
+            "initial_wait_patient_min_mean": mean(rows, "initial"),
+            "care_and_tests_patient_min_mean": mean(rows, "care"),
+            "awaiting_departure_patient_min_mean": mean(rows, "await"),
+            "diagnostic_wait_patient_min_mean": mean(rows, "diag_wait"),
+            "urgent_initial_wait_min_mean": mean(rows, "urgent_wait_mean"),
+            "overdue_urgent_mean": mean(rows, "overdue"),
+            "unfinished_stays_mean": mean(rows, "incomplete"),
+            "futures_with_unfinished": sum(1 for r in rows if r["incomplete"] > 0),
+        }
+
+    out_actions: dict[str, Any] = {}
+    for s in specs:
+        sid = s["id"]
+        d = deltas[sid]
+        out_actions[sid] = {
+            "id": sid, "samples": len(rows_act[sid]),
+            "no_action": branch(rows_base), "action": branch(rows_act[sid]) if rows_act[sid] else None,
+            "total_saving_patient_min": _stats(d["saving"]),
+            "part_saving_patient_min": {
+                "initial_wait": _stats(d["initial"]), "care_and_tests": _stats(d["care"]),
+                "awaiting_departure": _stats(d["await"]), "diagnostic_wait": _stats(d["diag_wait"]),
+            },
+            "urgent_initial_wait_change_min": _stats(d["urgent_wait"]),
+            "overdue_urgent_change": _stats(d["overdue"]),
+            "futures_with_complete_urgent_outcome": complete_urgent[sid],
+            "futures_with_unfinished_stays": incomplete_futures[sid],
+        }
+    return {
+        "samples": samples, "seed": base, "follow_up_cap_min": FOLLOW_UP_MIN, "cohort_window_min": HORIZON_MIN,
+        "overdue_urgent_wait_min": OVERDUE_URGENT_WAIT_MIN,
+        "no_action": branch(rows_base), "actions": out_actions, "blocked_by_in_flight": blocked,
+        "compute_ms": round((time.perf_counter() - t0) * 1000, 1),
+    }
 
 
 # -- aggregation -----------------------------------------------------------------------------------

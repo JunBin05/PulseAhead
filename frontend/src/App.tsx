@@ -15,6 +15,7 @@ import {
   IconUnknown,
 } from './icons';
 import { ZONE_LOOK, type ZoneDisplay } from './status';
+import { ActionChip, ComparePanel, RoleSwitcher } from './Actions';
 import {
   AlertList,
   ForecastStrip,
@@ -211,6 +212,10 @@ export function App() {
   const [saveNote, setSaveNote] = useState<string | null>(null);
   // Development setting: how many independent futures each forecast samples.
   const [fcSamples, setFcSamples] = useState<ForecastSamples>(50);
+  // Demo role (who the screen acts as) and the action comparison panel; opening it pauses the replay.
+  const [role, setRole] = useState('ED shift coordinator');
+  const [compareOpen, setCompareOpen] = useState(false);
+  const compareReturnRef = useRef<HTMLElement | null>(null);
 
   const idRef = useRef<string | null>(null);
   const versionRef = useRef(0);
@@ -305,6 +310,7 @@ export function App() {
     idRef.current = null;
     versionRef.current = 0;
     clearSelection();
+    setCompareOpen(false);
     void run(() => api.create(TEST_FIXTURE ?? scenarioId), true);
   }, [run, clearSelection, scenarioId]);
 
@@ -334,6 +340,7 @@ export function App() {
     if (!id) return;
     setPlaying(false);
     clearSelection();
+    setCompareOpen(false);
     epochRef.current += 1;
     void run(() => api.reset(id, TEST_FIXTURE ? undefined : scenarioId), true);
   }, [run, clearSelection, scenarioId]);
@@ -388,6 +395,7 @@ export function App() {
       idRef.current = null;
       versionRef.current = 0;
       clearSelection();
+      setCompareOpen(false);
       void run(async () => {
         const s = await api.load(savedId);
         const ui = s.saved_run?.ui;
@@ -500,6 +508,16 @@ export function App() {
     setFocusZone(z);
   }, []);
 
+  const openCompare = useCallback(() => {
+    compareReturnRef.current = document.activeElement as HTMLElement | null;
+    setPlaying(false);
+    setCompareOpen(true);
+  }, []);
+  const closeCompare = useCallback(() => {
+    setCompareOpen(false);
+    window.setTimeout(() => compareReturnRef.current?.focus(), 0);
+  }, []);
+
   const scene = useMemo(() => buildScene(snap), [snap]);
   const zoneCounts = scene.perZone;
   const zone = snap && selectedZone ? snap.zones.find((z) => z.id === selectedZone) : undefined;
@@ -524,10 +542,7 @@ export function App() {
               {snap ? formatClock(snap.sim_time_min) : 'T+00:00'}
             </span>
           </div>
-          <div className="meta">
-            <span className="meta-label">Demo role</span>
-            <span className="meta-value">ED shift coordinator</span>
-          </div>
+          <RoleSwitcher roles={snap?.actions.roles ?? ['ED shift coordinator']} value={role} onChange={setRole} />
         </div>
         <StatusBadge snap={snap} />
       </header>
@@ -821,6 +836,7 @@ export function App() {
                     {patientCount(snap ? snap.zones.find((q) => q.id === z)?.patient_count ?? 0 : 0)}
                   </span>
                   <LocalChip state={zoneState(snap, z)} testid={`zone-${z}-status`} />
+                  <ActionChip snap={snap} zone={z} />
                   {snap && (
                     <span className="zone-fc" data-testid={`zone-${z}-forecast`}>
                       {zoneForecastLine(fcView, z)}
@@ -830,10 +846,30 @@ export function App() {
               ))}
             </div>
           </div>
-          {snap && <AlertList snap={snap} view={fcView} onSelect={selectAlert} selectedZone={selectedZone} />}
+          {snap && (
+            <AlertList
+              snap={snap}
+              view={fcView}
+              onSelect={selectAlert}
+              selectedZone={selectedZone}
+              onCompare={(z) => {
+                selectAlert(z);
+                openCompare();
+              }}
+            />
+          )}
         </section>
 
         <aside className="drawer-col" aria-label="Selected zone">
+          {snap && !compareOpen && (
+            <button className="btn btn-block" onClick={openCompare} data-testid="compare-open"
+              style={{ marginBottom: 'var(--s-3)' }}>
+              Compare actions
+            </button>
+          )}
+          {snap && compareOpen && (
+            <ComparePanel snap={snap} role={role} samples={fcSamples} onClose={closeCompare} onChanged={retry} />
+          )}
           <section className="panel" aria-labelledby="drawer-h">
             {!zone ? (
               <>

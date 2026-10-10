@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from . import actions as act
 from . import forecast as fcast
 from .engine import QUEUE_SERVICE, EDEngine
 from .feeds import HEARTBEAT_MIN, SERVICE_SOURCE, SOURCES, STALE_AFTER_MIN
@@ -34,6 +35,19 @@ def _triangular_mean(spec: dict[str, Any]) -> float:
 API_VERSION = "v1"
 
 
+class ActionError(Exception):
+    """A refused action command: `status` is the HTTP status the API answers with."""
+
+    def __init__(self, status: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status = status
+        self.detail = detail
+
+
+def _hours(minutes: float) -> float:
+    return round(minutes / 60.0, 3)
+
+
 class ReplaySession:
     def __init__(self, seed: int, scenario: str) -> None:
         self.id = uuid.uuid4().hex[:12]
@@ -51,6 +65,11 @@ class ReplaySession:
         self._fc: dict[tuple[int, int], tuple[dict[str, Any], dict[str, Any], dict[str, Any],
                                               list[dict[str, Any]]]] = {}
         self._fc_lock = threading.Lock()
+        # Action requests and the staff choices that produced them (replayed by a saved run's Load).
+        self.requests: dict[str, dict[str, Any]] = {}
+        self.choices: list[dict[str, Any]] = []
+        self._cmp: dict[tuple[int, int], dict[str, Any]] = {}
+        self._cmp_lock = threading.Lock()
         if self.engine.gate.has_faults:
             self._sample(0.0)
 
@@ -83,6 +102,9 @@ class ReplaySession:
             self.saved_run = None
             self._samples = []
             self._fc = {}
+            self.requests = {}
+            self.choices = []
+            self._cmp = {}
             if self.engine.gate.has_faults:
                 self._sample(0.0)
             self.run_number += 1
@@ -580,6 +602,7 @@ class ReplaySession:
         feeds = e.gate.feeds_view(e.now)
         out = self._observe(live, feeds)
         out["saved_run"] = self.saved_run
+        out["actions"] = self._actions_view(out)
         return out
 
     def _observe(self, live: dict[str, Any], feeds: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -701,6 +724,258 @@ class ReplaySession:
             "recent": list(reversed(e.gate.log[-20:])),
         }
         return out
+
+    # -- actions: requests, decisions, lifecycle -----------------------------------------------
+    def advance_to(self, t: float) -> None:
+        while self.engine.now < t - 1e-9:
+            self.advance(min(MAX_ADVANCE_MIN, t - self.engine.now))
+
+    def _in_flight(self) -> dict[str, Any] | None:
+        for rec in self.engine.actions.values():
+            if rec["stage"] in ("review", "setup", "active", "draining"):
+                return rec
+        return None
+
+    def _request_public(self, r: dict[str, Any]) -> dict[str, Any]:
+        e = self.engine
+        open_ = r["status"] in ("pending", "deferred")
+        stale = open_ and abs(r["source"]["sim_time_min"] - e.now) > 1e-9
+        if r["status"] in ("pending", "deferred"):
+            waiting = [o for o in r["owners"] if o not in r["grants"]]
+            step = (
+                f"Waiting for {', '.join(waiting)} to approve, reject or defer. Nothing is reserved until every "
+                "required owner has approved."
+                if not stale else
+                f"This request was made at T+{r['source']['sim_time_min']:g} and time has moved on: refresh the "
+                "comparison and request again, or reject it."
+            )
+            if r["status"] == "deferred" and not stale:
+                step = f"Deferred by {', '.join(r['deferred_by'])}. {step}"
+        elif r["status"] == "approved":
+            rec = e.actions.get(r["action_id"])
+            stage = rec["stage"] if rec else "review"
+            step = {
+                "review": "Approved. In review for 5 simulated minutes; no capacity has changed yet.",
+                "setup": "Setup is under way; capacity changes only when setup ends.",
+                "active": "Active: the extra slot is working. It closes after 60 simulated minutes.",
+                "draining": "Draining: the slot takes no new work; the task on it finishes first.",
+                "completed": "Completed: the extra slot has closed.",
+                "blocked": "Blocked: the reserve was no longer available at activation. No capacity was added.",
+            }[stage]
+        elif r["status"] == "rejected":
+            step = "Rejected. Nothing was reserved and no capacity changed."
+        else:
+            step = "Superseded by a newer request."
+        return {
+            **{k: r[k] for k in ("id", "preset", "target", "name", "service", "zone", "owners", "status", "version",
+                                 "created_min", "source", "requested_by", "grants", "decisions", "action_id",
+                                 "closed_min", "comparison")},
+            "is_stale": stale, "next_step": step,
+        }
+
+    def _actions_view(self, snap: dict[str, Any]) -> dict[str, Any]:
+        e = self.engine
+        fl = self._in_flight()
+        catalog = []
+        for s in act.all_specs():
+            elig = act.eligibility(snap, s, fl is not None)
+            catalog.append({
+                "id": f"{s['preset']}:{s['target']}", "preset": s["preset"], "name": s["name"], "target": s["target"],
+                "service": s["service"], "zone": s["zone"], "owners": s["owners"], "review_min": s["review_min"],
+                "setup_min": s["setup_min"], "active_min": s["active_min"], "effect": s["effect"],
+                "reserve": {"id": s["reserve"], "unit": s["unit"],
+                            **{k: PROFILE["reserves"][s["reserve"]][k] for k in ("name", "note")}},
+                **elig,
+            })
+        return {
+            "roles": act.demo_roles(), "coordinator_role": act.DEMO_COORDINATOR, "catalog": catalog,
+            "not_modeled": act.NOT_MODELED,
+            "requests": [self._request_public(r) for r in self.requests.values()],
+            "in_flight": e.action_public(fl) if fl else None,
+            "history": [e.action_public(r) for r in e.actions.values() if r is not fl],
+        }
+
+    def _emit_choice(self, **c: Any) -> None:
+        self.choices.append({"at_min": self.engine.now, **c})
+
+    def create_request(self, preset: str, target: str | None, expected_version: int | None,
+                       role: str | None = None, *, record: bool = True) -> dict[str, Any]:
+        with self.lock:
+            if expected_version is not None and expected_version != self.version:
+                raise ActionError(409, "state version changed; refresh the comparison")
+            if any(n["id"] == preset for n in act.NOT_MODELED):
+                raise ActionError(422, f"{preset}: {act.NOT_MODELED_REASON}")
+            try:
+                s = act.spec(preset, target)
+            except KeyError:
+                raise ActionError(422, f"unknown action preset {preset!r}") from None
+            except ValueError as exc:
+                raise ActionError(422, str(exc)) from None
+            if role is not None and role not in act.demo_roles():
+                raise ActionError(422, f"unknown role {role!r}")
+            e = self.engine
+            if self._in_flight() is not None:
+                raise ActionError(409, "another action is already in flight (one at a time)")
+            for r in self.requests.values():
+                if r["status"] in ("pending", "deferred"):
+                    if abs(r["source"]["sim_time_min"] - e.now) <= 1e-9:
+                        raise ActionError(409, f"request {r['id']} is already open: decide it or reject it first")
+                    r["status"], r["closed_min"] = "stale", round(e.now, 3)
+                    r["version"] += 1
+            snap = self.snapshot()
+            elig = act.eligibility(snap, s, False)
+            if not elig["feasible"]:
+                raise ActionError(422, " ".join(elig["reasons"]))
+            rid = f"R{len(self.requests) + 1:04d}"
+            cached = self._cmp.get((self.version, fcast.DEFAULT_SAMPLES))
+            summary = None
+            if cached:
+                row = next((a for a in cached["actions"] if a["id"] == f"{preset}:{s['target']}"), None)
+                summary = row.get("comparison") and {
+                    "total_saving_patient_min": row["comparison"]["total_saving_patient_min"],
+                    "urgent_initial_wait_change_min": row["comparison"]["urgent_initial_wait_change_min"],
+                    "overdue_urgent_change": row["comparison"]["overdue_urgent_change"],
+                    "samples": row["comparison"]["samples"],
+                }
+            req = {
+                "id": rid, "preset": preset, "target": s["target"], "name": s["name"], "service": s["service"],
+                "zone": s["zone"], "owners": list(s["owners"]), "status": "pending", "version": 1,
+                "created_min": round(e.now, 3),
+                "source": {"replay_id": self.id, "run_number": self.run_number, "version": self.version,
+                           "sim_time_min": e.now},
+                "requested_by": role or act.DEMO_COORDINATOR, "grants": {}, "decisions": [], "deferred_by": [],
+                "action_id": None, "closed_min": None, "comparison": summary, "_seen": {},
+                "_spec": s,
+            }
+            self.requests[rid] = req
+            e._emit("action_requested", None, {
+                "request_id": rid, "preset": preset, "target": s["target"], "service": s["service"],
+                "owners": s["owners"], "requested_by": req["requested_by"],
+            })
+            if record:
+                self._emit_choice(op="request", preset=preset, target=s["target"], role=req["requested_by"])
+            self.version += 1
+            return {"api_version": API_VERSION, "kind": "action_request", "request": self._request_public(req),
+                    "state_version": self.version, "repeat": False}
+
+    def decide(self, request_id: str, role: str, decision: str, decision_id: str,
+               expected_version: int | None, *, record: bool = True) -> dict[str, Any]:
+        with self.lock:
+            req = self.requests.get(request_id)
+            if req is None:
+                raise ActionError(404, "unknown request id")
+            key = f"{role}|{decision_id}"
+            if key in req["_seen"]:
+                # The same decision identity again: the stored outcome, nothing applied twice.
+                return {"api_version": API_VERSION, "kind": "action_decision", "request": req["_seen"][key],
+                        "state_version": self.version, "repeat": True}
+            if expected_version is not None and expected_version != self.version:
+                raise ActionError(409, "state version changed; refresh and decide again")
+            if role not in req["owners"]:
+                raise ActionError(
+                    403, f"{role} cannot decide this request: it needs {' and '.join(req['owners'])}, the owner of "
+                         f"the {req['service']} resource. Approvers come from resource ownership, not the zone.")
+            if req["status"] not in ("pending", "deferred"):
+                raise ActionError(409, f"request {req['id']} is already {req['status']}")
+            if role in req["grants"]:
+                raise ActionError(409, f"{role} has already granted this request")
+            e = self.engine
+            if decision == "approve":
+                if abs(req["source"]["sim_time_min"] - e.now) > 1e-9:
+                    raise ActionError(
+                        409, f"this request's comparison is from T+{req['source']['sim_time_min']:g} and time is now "
+                             f"T+{e.now:g}: refresh the comparison and request again (an old ranking cannot be approved)")
+                if self._in_flight() is not None:
+                    raise ActionError(409, "another action is already in flight (one at a time)")
+                req["grants"][role] = {"decision_id": decision_id, "at_min": round(e.now, 3)}
+            elif decision == "reject":
+                req["status"], req["closed_min"] = "rejected", round(e.now, 3)
+            elif decision == "defer":
+                req["status"] = "deferred"
+                if role not in req["deferred_by"]:
+                    req["deferred_by"].append(role)
+            else:
+                raise ActionError(422, "decision must be approve, reject or defer")
+            req["decisions"].append({"role": role, "decision": decision, "decision_id": decision_id,
+                                     "at_min": round(e.now, 3)})
+            e._emit("action_decision", None, {
+                "request_id": req["id"], "role": role, "decision": decision, "decision_id": decision_id,
+                "granted": sorted(req["grants"]), "required": req["owners"],
+            })
+            if decision == "approve" and all(o in req["grants"] for o in req["owners"]):
+                s = req["_spec"]
+                aid = f"A{len(e.actions) + 1:03d}"
+                req["status"], req["action_id"] = "approved", aid
+                e.start_action(aid, req["id"], s["preset"], s["target"], s["service"], s["unit"], s["owners"],
+                               s["review_min"], s["setup_min"], s["active_min"])
+            req["version"] += 1
+            if record:
+                self._emit_choice(op="decision", request_id=req["id"], role=role, decision=decision,
+                                  decision_id=decision_id)
+            self.version += 1
+            pub = self._request_public(req)
+            req["_seen"][key] = pub
+            return {"api_version": API_VERSION, "kind": "action_decision", "request": pub,
+                    "state_version": self.version, "repeat": False}
+
+    def compare(self, samples: int = fcast.DEFAULT_SAMPLES, expected_version: int | None = None
+                ) -> tuple[dict[str, Any] | None, bool]:
+        """No action against every feasible action preset on the same keyed futures. (None, False) when
+        `expected_version` is stale. Built from the received snapshot and history only, like the forecast."""
+        with self._cmp_lock:
+            with self.lock:
+                if expected_version is not None and expected_version != self.version:
+                    return None, False
+                key = (self.version, samples)
+                hit = self._cmp.get(key)
+                if hit is not None:
+                    return hit, True
+                run = self.run_number
+                snap = self.snapshot()
+                inp = fcast.build_input(snap, list(self.engine.gate.received))
+            catalog = snap["actions"]["catalog"]
+            specs = []
+            for c in catalog:
+                if c["feasible"]:
+                    s = act.spec(c["preset"], c["target"])
+                    specs.append({**s, "id": c["id"]})
+            if not inp["assessable"]:
+                comp = None
+            else:
+                comp = fcast.compare_actions(inp, specs, samples, fcast.FORECAST_SEED)
+            rows = []
+            for c in catalog:
+                row = {**c, "comparison": None}
+                if comp is not None and c["id"] in comp["actions"]:
+                    full = comp["actions"][c["id"]]
+                    full["resource"] = {
+                        "reserve_unit": c["reserve"]["unit"], "service": c["service"],
+                        "active_unit_hours": _hours(c["active_min"]), "setup_min": c["setup_min"],
+                        "review_min": c["review_min"],
+                        "note": "One reserve unit for the 60-minute active window; setup and review minutes are "
+                                "staff time before it. Work already on the slot finishes after the window.",
+                    }
+                    row["comparison"] = full
+                rows.append(row)
+            out = {
+                "api_version": API_VERSION, "kind": "comparison", "synthetic": True, "source": inp["source"],
+                "status": "ok" if inp["assessable"] else "cannot_assess", "reasons": inp["reasons"],
+                "samples": samples, "actions": rows, "not_modeled": act.NOT_MODELED,
+                "no_action": comp["no_action"] if comp else None,
+                "cohort_rule": (
+                    "Cohort: patients present at the decision plus 90 simulated minutes of arrivals; background "
+                    "arrivals continue; follow-up is capped at 12 hours. Unfinished stays carry accrued minutes "
+                    "and are counted apart."),
+                "method": comp and {k: comp[k] for k in ("follow_up_cap_min", "cohort_window_min", "seed",
+                                                         "overdue_urgent_wait_min", "blocked_by_in_flight")},
+                "compute_ms": comp["compute_ms"] if comp else 0.0,
+            }
+            with self.lock:
+                if self.run_number == run:
+                    self._cmp[key] = out
+                    for old in sorted(self._cmp)[:-4]:
+                        del self._cmp[old]
+            return out, False
 
     # -- forecast (received state and received history only) -----------------------------------
     def forecast(self, samples: int = fcast.DEFAULT_SAMPLES, expected_version: int | None = None
@@ -1218,8 +1493,9 @@ class ReplaySession:
                 "event_count": len(events),
                 "event_digest": digest_events(events),
                 "announcements": snap["ambulance_announcements"],
-                # Staff decisions and approvals arrive with the action tickets; none exist yet.
-                "choices": [],
+                # Staff requests and decisions, in order, each at the simulated time it was made. Load
+                # replays them through the same commands and re-checks the event digest.
+                "choices": [dict(c) for c in self.choices],
                 "settings": {"simulation": settings, "forecast": fcast.model_settings(forecast_samples)},
                 "ui": ui,
                 "observed": {
@@ -1328,8 +1604,16 @@ class ReplayStore:
                 )
         session = ReplaySession(ident["seed"], ident["scenario"])
         target = float(ident["sim_time_min"])
-        while session.engine.now < target - 1e-9:
-            session.advance(min(MAX_ADVANCE_MIN, target - session.engine.now))
+        try:
+            for c in record.get("choices") or []:
+                session.advance_to(float(c["at_min"]))
+                if c["op"] == "request":
+                    session.create_request(c["preset"], c.get("target"), None, c.get("role"))
+                else:
+                    session.decide(c["request_id"], c["role"], c["decision"], c["decision_id"], None)
+        except ActionError as exc:
+            raise SavedRunMismatch(f"saved run {record['saved_id']} does not reproduce: {exc.detail}") from exc
+        session.advance_to(target)
         got = list(session.engine.gate.received)
         if len(got) != record["event_count"] or digest_events(got) != record["event_digest"]:
             why = (

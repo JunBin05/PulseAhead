@@ -52,6 +52,26 @@ PROFILE: dict[str, Any] = {
         "active": False,
         "note": "Declared reserve; activating it is a staff-approved action in a later ticket.",
     },
+    # Declared reserve units for the two action presets built in the final build. Each is one extra
+    # slot of an existing finite service, inactive until its owner approves a request; each adds work
+    # capacity only (never a ward bed, a clearance, or a shorter test).
+    "reserves": {
+        "ward_allocation_coordinator": {
+            "unit": "WA2", "service": "allocation", "owner_key": "ward_allocation",
+            "name": "Reserve ward-allocation coordinator", "active": False,
+            "note": "One extra ward-allocation work slot. It never creates a ward bed or a clinical clearance.",
+        },
+        "lab_reserve_slot": {
+            "unit": "L3", "service": "lab", "owner_key": "lab",
+            "name": "Reserve lab slot", "active": False,
+            "note": "One extra lab slot. Turnaround per test is unchanged; results are never manufactured.",
+        },
+        "imaging_reserve_slot": {
+            "unit": "I2", "service": "imaging", "owner_key": "imaging",
+            "name": "Reserve imaging slot", "active": False,
+            "note": "One extra imaging slot. Turnaround per test is unchanged; results are never manufactured.",
+        },
+    },
     # Fictional named staff (OPEN_QUESTIONS Q3). Doctors D1-D4 each hold one clinician-work slot;
     # nurses each cover a fixed block of spaces, and an empty space is staffed only while its
     # covering nurse is on duty. Shared staff are listed once, never as extra capacity per zone.
@@ -180,7 +200,7 @@ PROFILE: dict[str, Any] = {
 WARMUP_MIN = 120
 SCORED_MIN = 480
 
-ENGINE_VERSION = "flow-3"
+ENGINE_VERSION = "flow-4"
 CATALOG_VERSION = "1"
 
 # Seven retained scenario families (spec: normal shifts, busy shifts that recover, arrival surges,

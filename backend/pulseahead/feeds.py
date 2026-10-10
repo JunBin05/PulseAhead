@@ -142,6 +142,8 @@ def event_source(event: dict[str, Any]) -> str:
         return "staffing"
     if t == "ward_bed_available":
         return "disposition"
+    if t.startswith("action_"):
+        return "actions"  # staff decisions: not a clinical feed, so no source heartbeat is refreshed
     if t.startswith("ambulance_"):
         return "ambulance"
     return "queues"  # arrival, decision_received, care_started, care_completed

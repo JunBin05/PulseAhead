@@ -376,6 +376,7 @@ export interface Snapshot {
   limited_services?: string[];
   /** Set when this replay was rebuilt from a saved run (labelled as a synthetic run). */
   saved_run: SavedRunInfo | null;
+  actions: ActionsView;
 }
 
 export const ZONE_NAMES: Record<number, string> = {
@@ -667,4 +668,162 @@ export interface ForecastExplanation {
     turnaround_scale: Record<string, number>;
   };
   compute: { ms: number };
+}
+
+// -- Staff-approved actions (tickets 11, 14, 17) ----------------------------------------------------
+export interface Stat {
+  n: number;
+  mean: number | null;
+  sd: number | null;
+  lower_90: number | null;
+  upper_90: number | null;
+}
+
+export interface BranchSummary {
+  cohort_patients_mean: number | null;
+  urgent_patients_mean: number | null;
+  total_ed_patient_min_mean: number | null;
+  initial_wait_patient_min_mean: number | null;
+  care_and_tests_patient_min_mean: number | null;
+  awaiting_departure_patient_min_mean: number | null;
+  diagnostic_wait_patient_min_mean: number | null;
+  urgent_initial_wait_min_mean: number | null;
+  overdue_urgent_mean: number | null;
+  unfinished_stays_mean: number | null;
+  futures_with_unfinished: number;
+}
+
+export interface ActionComparison {
+  id: string;
+  samples: number;
+  no_action: BranchSummary;
+  action: BranchSummary | null;
+  total_saving_patient_min: Stat;
+  part_saving_patient_min: {
+    initial_wait: Stat;
+    care_and_tests: Stat;
+    awaiting_departure: Stat;
+    diagnostic_wait: Stat;
+  };
+  urgent_initial_wait_change_min: Stat;
+  overdue_urgent_change: Stat;
+  futures_with_complete_urgent_outcome: number;
+  futures_with_unfinished_stays: number;
+  resource: {
+    reserve_unit: string;
+    service: string;
+    active_unit_hours: number;
+    setup_min: number;
+    review_min: number;
+    note: string;
+  };
+}
+
+export type RankLabel =
+  | 'best_action'
+  | 'no_action_shown_to_help'
+  | 'needs_review'
+  | 'urgent_delay_check_failed'
+  | 'cannot_assess'
+  | 'not_feasible';
+
+export interface ActionRank {
+  label: RankLabel;
+  text: string;
+  order: number;
+  rule: Record<string, number | boolean | string | null>;
+  deadline: {
+    latest_start_min: number | null;
+    status: 'open' | 'too_late' | 'recovery' | 'unavailable';
+    basis: string;
+    in_min?: number;
+  } | null;
+}
+
+export interface ActionCatalogItem {
+  id: string;
+  preset: string;
+  name: string;
+  target: string;
+  service: string;
+  zone: number;
+  owners: string[];
+  review_min: number;
+  setup_min: number;
+  active_min: number;
+  effect: string;
+  reserve: { id: string; unit: string; name: string; note: string };
+  feasible: boolean;
+  reasons: string[];
+}
+
+export interface ComparisonRow extends ActionCatalogItem {
+  comparison: ActionComparison | null;
+  rank?: ActionRank;
+}
+
+export interface ComparisonResult {
+  api_version: string;
+  kind: 'comparison';
+  synthetic: boolean;
+  source: { replay_id: string; run_number: number; version: number; sim_time_min: number };
+  status: 'ok' | 'cannot_assess';
+  reasons: string[];
+  samples: number;
+  actions: ComparisonRow[];
+  not_modeled: { id: string; name: string; reason: string }[];
+  no_action: BranchSummary | null;
+  cohort_rule: string;
+  compute_ms: number;
+  cached?: boolean;
+}
+
+export interface ActionRecord {
+  id: string;
+  request_id: string;
+  preset: string;
+  target: string | null;
+  service: string;
+  unit: string;
+  owners: string[];
+  stage: 'review' | 'setup' | 'active' | 'draining' | 'completed' | 'blocked';
+  stage_since_min: number;
+  approved_min: number;
+  review_end_min: number;
+  setup_end_min: number;
+  active_end_min: number;
+  closed_min: number | null;
+  reason: string | null;
+}
+
+export interface ActionRequest {
+  id: string;
+  preset: string;
+  target: string;
+  name: string;
+  service: string;
+  zone: number;
+  owners: string[];
+  status: 'pending' | 'deferred' | 'approved' | 'rejected' | 'stale';
+  version: number;
+  created_min: number;
+  source: { replay_id: string; run_number: number; version: number; sim_time_min: number };
+  requested_by: string;
+  grants: Record<string, { decision_id: string; at_min: number }>;
+  decisions: { role: string; decision: string; decision_id: string; at_min: number }[];
+  action_id: string | null;
+  closed_min: number | null;
+  comparison: unknown;
+  is_stale: boolean;
+  next_step: string;
+}
+
+export interface ActionsView {
+  roles: string[];
+  coordinator_role: string;
+  catalog: ActionCatalogItem[];
+  not_modeled: { id: string; name: string; reason: string }[];
+  requests: ActionRequest[];
+  in_flight: ActionRecord | null;
+  history: ActionRecord[];
 }

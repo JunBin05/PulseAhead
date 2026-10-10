@@ -968,3 +968,115 @@ p {
 .fc-grid dd, .fc-alert span {
   overflow-wrap: anywhere;
 }
+
+/* ---- action comparison, request and progress ----------------------------------------- */
+.role-select {
+  min-height: var(--target);
+  max-width: 100%;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 0 var(--s-3);
+}
+
+.compare-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.compare-panel:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.cmp-action {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.cmp-action h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.cmp-table caption {
+  text-align: left;
+  padding-bottom: var(--s-2);
+}
+
+.cmp-table th,
+.cmp-table td {
+  text-align: left;
+  padding: var(--s-1) var(--s-2);
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.request-card {
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.request-card h4 {
+  margin: 0 0 var(--s-2);
+}
+
+.request-message {
+  display: flex;
+  gap: var(--s-2);
+  align-items: flex-start;
+  color: var(--status-overload-ink);
+  background: var(--status-overload-tint);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius-sm);
+}
+
+.action-progress ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-1);
+}
+
+.action-progress li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  border-left: 4px solid var(--line-strong);
+}
+
+.action-progress li[data-reached='true'] {
+  border-left-color: var(--status-normal-ink);
+}
+
+.action-progress li[data-current='true'] {
+  font-weight: 700;
+  background: var(--accent-soft);
+}
+
+.action-chip {
+  font-size: var(--text-xs);
+  min-height: 0;
+  padding: 0 var(--s-2);
+}

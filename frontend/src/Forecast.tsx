@@ -304,11 +304,13 @@ export function AlertList({
   view,
   onSelect,
   selectedZone,
+  onCompare,
 }: {
   snap: Snapshot;
   view: ForecastView;
   onSelect: (zone: number) => void;
   selectedZone: number | null;
+  onCompare?: (zone: number) => void;
 }) {
   const f = view.data;
   if (!f || f.status !== 'ok') return null;
@@ -353,6 +355,11 @@ export function AlertList({
           Impact: unavailable (no action comparison yet)
         </span>
       </button>
+      {onCompare && (
+        <button className="btn" onClick={() => onCompare(a.zone)} data-testid={`compare-open-${a.service}`}>
+          Compare actions for this alert
+        </button>
+      )}
     </li>
   );
   return (

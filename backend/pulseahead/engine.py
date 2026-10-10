@@ -525,6 +525,10 @@ class EDEngine:
         )
         self.departed_home = 0
         self.departed_ward = 0
+        # Staff-approved actions (see start_action): lifecycle records by action id and the reserve
+        # units whose slot is closing but still held by work that has not finished.
+        self.actions: dict[str, dict[str, Any]] = {}
+        self.retiring: set[str] = set()
         # Test start and finish log (kind, time) for recent work and throughput figures.
         self.test_starts: list[tuple[str, float]] = []
         self.test_log: list[tuple[str, float]] = []
@@ -626,6 +630,88 @@ class EDEngine:
         }
         self.events.append(event)
         self.gate.deliver(event, self.now)
+
+    # -- staff-approved actions ----------------------------------------------------------
+    def _resource(self, service: str) -> tuple[Any, list[str]]:
+        return {
+            "allocation": (self.allocation, self.free_allocation),
+            "lab": (self.lab, self.free_lab),
+            "imaging": (self.imaging, self.free_imaging),
+        }[service]
+
+    def _give_back(self, free: list[str], unit: str) -> None:
+        """Return a named unit to its pool. A reserve unit whose active window has closed is not
+        returned: the work it was doing has now finished, so the slot is gone (completed)."""
+        if unit in self.retiring:
+            self.retiring.discard(unit)
+            for rec in self.actions.values():
+                if rec["unit"] == unit and rec["stage"] == "draining":
+                    self._finish_action(rec, "completed")
+            return
+        free.append(unit)
+
+    def _finish_action(self, rec: dict[str, Any], stage: str, reason: str | None = None) -> None:
+        rec["stage"] = stage
+        rec["stage_since_min"] = round(self.now, 3)
+        rec["closed_min"] = round(self.now, 3)
+        rec["reason"] = reason
+        self._emit(f"action_{stage}", None, self.action_public(rec))
+
+    def action_public(self, rec: dict[str, Any]) -> dict[str, Any]:
+        keys = ("id", "request_id", "preset", "target", "service", "unit", "owners", "stage", "stage_since_min",
+                "approved_min", "review_end_min", "setup_end_min", "active_end_min", "closed_min", "reason")
+        return {k: rec.get(k) for k in keys}
+
+    def start_action(self, aid: str, request_id: str, preset: str, target: str | None, service: str, unit: str,
+                     owners: list[str], review_min: float, setup_min: float, active_min: float) -> dict[str, Any]:
+        """The final valid grant: review, setup, active, draining, completed or blocked. Nothing changes
+        before activation. The reserve is checked again at activation and, if it is gone, the action is
+        blocked and no capacity is added."""
+        now = self.now
+        rec = {
+            "id": aid, "request_id": request_id, "preset": preset, "target": target, "service": service,
+            "unit": unit, "owners": owners, "stage": "review", "stage_since_min": round(now, 3),
+            "approved_min": round(now, 3), "review_end_min": round(now + review_min, 3),
+            "setup_end_min": round(now + review_min + setup_min, 3),
+            "active_end_min": round(now + review_min + setup_min + active_min, 3),
+            "closed_min": None, "reason": None, "review_min": review_min, "setup_min": setup_min,
+            "active_min": active_min,
+        }
+        self.actions[aid] = rec
+        self._emit("action_approved", None, self.action_public(rec))
+        self._emit("action_review", None, self.action_public(rec))
+        self.env.process(self._action_lifecycle(rec))
+        return rec
+
+    def _reserve_gone(self, unit: str) -> bool:
+        return any(start <= self.now < end and u == unit for start, end, u in self.definition.get("reserve_outages", []))
+
+    def _action_lifecycle(self, rec: dict[str, Any]):
+        yield self.env.timeout(rec["review_min"])
+        rec["stage"], rec["stage_since_min"] = "setup", round(self.now, 3)
+        self._emit("action_setup", None, self.action_public(rec))
+        yield self.env.timeout(rec["setup_min"])
+        if self._reserve_gone(rec["unit"]):
+            self._finish_action(rec, "blocked", "The declared reserve is no longer available at activation.")
+            return
+        res, free = self._resource(rec["service"])
+        # Adding a slot: SimPy resources take their capacity at construction, so the extra slot is added
+        # to the pending-request machinery directly (pinned simpy 4.1.2).
+        res._capacity += 1
+        free.append(rec["unit"])
+        res._trigger_put(None)
+        rec["stage"], rec["stage_since_min"] = "active", round(self.now, 3)
+        self._emit("action_active", None, self.action_public(rec))
+        yield self.env.timeout(rec["active_min"])
+        # Draining: the slot closes to new work; a task already running on it finishes first.
+        res._capacity -= 1
+        rec["stage"], rec["stage_since_min"] = "draining", round(self.now, 3)
+        self._emit("action_draining", None, self.action_public(rec))
+        if rec["unit"] in free:
+            free.remove(rec["unit"])
+            self._finish_action(rec, "completed")
+        else:
+            self.retiring.add(rec["unit"])
 
     @staticmethod
     def _take(pool: list[str]) -> str:
@@ -881,7 +967,7 @@ class EDEngine:
             self._set_phase(p, active)
             yield self.env.timeout(minutes)
             res.release(req)
-            free.append(p.test_unit)
+            self._give_back(free, p.test_unit)
             self.test_log.append((kind, self.now))
             p.tests_done.append(kind)
             self._emit(
@@ -994,7 +1080,7 @@ class EDEngine:
             self._set_phase(p, "ward_allocation_active")
             yield self.env.timeout(p.allocation_min)
             self.allocation.release(req)
-            self.free_allocation.append(p.disp_unit)
+            self._give_back(self.free_allocation, p.disp_unit)
             p.disp_unit = None
             self._set_phase(p, "awaiting_transport")
             req = self.transport.request(priority=rank)

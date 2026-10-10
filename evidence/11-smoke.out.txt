@@ -1,0 +1,43 @@
+PASS  no-action seed 7 normal: 705 events, 59 patients  -- events 705, patients 59
+PASS  no action_* event without a request
+PASS  engine version bumped  -- flow-4
+case: busy-recovers seed 7, backlog found at T+220
+PASS  allocation backlog exists with a decided Ward/ICU patient
+PASS  ward coordination is feasible from received state
+PASS  approvers come from ownership: Ward supervisor / bed manager (zone 4 service)
+PASS  not-modeled presets are listed and cannot be requested
+PASS  comparison carries its source version and time
+PASS  50 paired futures; cohort and unfinished stays reported apart  -- cohort 16.1, unfinished futures 24
+PASS  saving has mean, sd, n and a 90% lower bound  -- {"n":50,"mean":0.152,"sd":1.125,"lower_90":-0.11,"upper_90":0.413}
+PASS  no Best-action label before ticket 17 ranking
+PASS  stale version on compare -> 409
+PASS  request created, pending, owner required
+PASS  wrong owner refused (403) and names the real owner  -- Lab manager cannot decide this request: it needs Ward supervisor / bed manager, 
+PASS  the clicking coordinator cannot approve (403)
+PASS  stale version on decision -> 409
+PASS  second request while one is open -> 409
+PASS  defer keeps the request open and changes no capacity
+PASS  allocation capacity unchanged after defer
+PASS  owner approves -> approved with an action id
+PASS  same decision identity again is idempotent
+PASS  a different identity from the same role cannot grant twice -> 409
+PASS  review: capacity not changed at approval
+PASS  one action in flight: another request -> 409
+PASS  setup starts at +5 with no capacity change
+PASS  still setup at +14
+PASS  active at +15 with one more allocation slot  -- servers 2
+PASS  still active at +74
+PASS  closes at +75 (draining or completed) and capacity is back  -- servers 1
+PASS  events record requested, decisions, approved, review, setup, active, draining, completed  -- action_requested action_decision action_decision action_approved action_review action_setup action_active action_draining action_completed
+PASS  event times: setup +5, active +15, draining +75 after approval  -- approved 220, setup 225, active 235, draining 295
+PASS  no ward bed created and no clearance: bed totals unchanged
+PASS  saved run stores the request and decisions as choices  -- 3 choices
+PASS  load replays the decisions and reproduces the event digest  -- status 200
+PASS  loaded run has the same action events
+PASS  reject: nothing reserved, no capacity change, no action in flight
+PASS  a decided request cannot be approved later -> 409
+PASS  bed wait without allocation backlog: ward coordination not feasible, reason names the bed  -- T+115: 1 decided Ward/ICU patient(s) are waiting for a suitable bed, not for allocation work: ano
+PASS  requesting an infeasible action -> 422
+PASS  reserve gone at activation: blocked, no capacity added, no action_active
+
+ALL PASS

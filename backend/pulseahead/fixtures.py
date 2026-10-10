@@ -439,3 +439,13 @@ FIXTURES: dict[str, dict[str, Any]] = {
         ],
     },
 }
+
+
+# The boarding fixture with the declared ward-allocation reserve unavailable from the start. The outage
+# is hidden future: eligibility cannot see it, so an approved request is blocked at activation.
+FIXTURES["fixture-reserve-outage"] = {
+    **FIXTURES["fixture-boarding"],
+    "id": "fixture-reserve-outage",
+    "name": "Fixture: boarding with the reserve ward-allocation coordinator gone at activation",
+    "reserve_outages": [(0.0, 100000.0, "WA2")],
+}

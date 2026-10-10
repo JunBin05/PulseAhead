@@ -1,4 +1,13 @@
-import type { Forecast, ForecastExplanation, SavedSummary, ScenarioCatalog, Snapshot, ZoneDetail } from './types';
+import type {
+  ActionRequest,
+  ComparisonResult,
+  Forecast,
+  ForecastExplanation,
+  SavedSummary,
+  ScenarioCatalog,
+  Snapshot,
+  ZoneDetail,
+} from './types';
 
 const BASE = '/api/v1';
 
@@ -65,6 +74,32 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ zone, samples, expected_version: version }),
     }),
+ /** No action against each feasible action on the same keyed futures, for the state at `version`. */
+  compare: (id: string, samples: number, version: number) =>
+    request<ComparisonResult>(`/replays/${id}/compare`, {
+      method: 'POST',
+      body: JSON.stringify({ samples, expected_version: version }),
+    }),
+  requestAction: (id: string, preset: string, target: string, role: string, version: number) =>
+    request<{ request: ActionRequest; state_version: number }>(`/replays/${id}/requests`, {
+      method: 'POST',
+      body: JSON.stringify({ preset, target, role, expected_version: version }),
+    }),
+  decide: (
+    id: string,
+    requestId: string,
+    role: string,
+    decision: 'approve' | 'reject' | 'defer',
+    decisionId: string,
+    version: number,
+  ) =>
+    request<{ request: ActionRequest; state_version: number; repeat: boolean }>(
+      `/replays/${id}/requests/${requestId}/decision`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ role, decision, decision_id: decisionId, expected_version: version }),
+      },
+    ),
   save: (
     id: string,
     body: {
