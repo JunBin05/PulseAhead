@@ -2,9 +2,11 @@
 
 Updated: 10 October 2026, Asia/Kuala_Lumpur.
 
-The user approved the [project brief](PROJECT_BRIEF.md) and closed the interview. The [16-hour build plan](BUILD_PLAN.md) is complete. No implementation, dataset, measured results, or rehearsal evidence exists yet.
+The concept/interview was approved; latest 3D/rubric steering guides the [active spec](PULSEAHEAD_3D_MVP_SPEC.md), [22 tickets](PULSEAHEAD_3D_TICKET_PLAN.md), and [build checkpoints](PULSEAHEAD_3D_BUILD_PLAN.md). No implementation, dataset, deployment, measured results, or rehearsal evidence exists yet.
 
 **Product status: Not ready — 1 of 13 items verified.** Planning is complete; the remaining items require running evidence. The [supplied checklist](Requirement_skill.md) is requirements context, not proof of organizer acceptance of synthetic data.
+
+The user requires **Playwright MCP for all testing and verification**. Attach process-level results with expected/actual values and browser, response, or exported-artifact evidence before checking an item. A missing Playwright MCP connection or an unrun check is not a pass.
 
 ## Priority 1 — Make the prediction useful
 
@@ -13,7 +15,7 @@ The user approved the [project brief](PROJECT_BRIEF.md) and closed the interview
 - [ ] **Categorize:** Produce boarding, diagnostic, arrival, and capacity explanations in separate and mixed cases; tie them to the actual modeled state.
 - [ ] **Prioritize:** Demonstrate ranking by feasibility, urgent-patient delay checks, total ED time saved, and resource cost. Show that a better average cannot hide material harm to urgent waits.
 - [ ] **Explain:** Show the relevant queues, occupied spaces, delays, and data freshness beside each output. Explain uncertainty and distinguish model effects from proven hospital causes.
-- [ ] **Recommend action:** Run the four constrained action families with approval, rejection, and deferral. Include an ineffective action and a case where nothing feasible passes the checks.
+- [ ] **Recommend action:** Run six constrained presets with correct resource-owner routing, donor grants, approval/rejection/deferral, and delayed execution. Include ineffective and no-help cases; partial approval never creates capacity.
 
 ## Priority 2 — Prove it is dependable and worthwhile
 
@@ -25,8 +27,8 @@ The user approved the [project brief](PROJECT_BRIEF.md) and closed the interview
 
 ## Priority 3 — Be ready to show it
 
-- [ ] **Working demo:** Run stable, developing-congestion, approved-action, and degraded-data cases from input through forecast, explanation, comparison, and staff choice. Numerical outputs must come from the model.
-- [ ] **Pitch and Q&A:** Time a three-minute presentation plus two-minute Q&A using the supplied format, subject to newer organizer instructions. If shortlisted, also prepare the supplied four-minute demo plus three-minute Q&A. Keep saved replays/results as a fallback.
+- [ ] **Working demo:** Run the actual deployment from a fresh session: received ambulance/state → 3D alert → zone focus/details → prediction/cause → comparison → owner approval → delayed effect. Include stable/no-help/degraded-data paths. Playwright MCP checks dot/API counts, camera/back, graphics/2D/keyboard equivalence, responsive behavior, feedback, and real evidence output.
+- [ ] **Pitch and Q&A:** Rehearse the supplied rubric's Phase 1 three-minute pitch/two-minute Q&A and Phase 2 four-minute demo/three-minute Q&A, subject to organizer updates. Map every equal-weight criterion to evidence. Keep actual local/saved-run fallback and evidence-backed answers on validity, false warnings, value/costs, and limits.
 
 **Next implementation step:** follow the first simulator checkpoint in the build plan, including resource accounting and a reproducible ward-blockage case. A learned model is optional after the required simulation, comparisons, and evidence work passes.
 

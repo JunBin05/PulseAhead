@@ -9,7 +9,7 @@ The description of an ED's treatment spaces, staffing, diagnostic services, inpa
 _Avoid_: Validated hospital configuration
 
 **Usable treatment space**:
-A physical ED treatment space with the staff and other resources required to accept a patient. A physically empty space is not necessarily usable.
+An empty physical ED treatment space with staff and required resources available to accept a patient. The interface calls this Available staffed spaces and shows it separately from occupied spaces and total staffed capacity. An empty space alone is not necessarily available.
 _Avoid_: Empty bed alone
 
 **Urgency group**:
@@ -21,7 +21,7 @@ A representation of emergency department patient flow and operational resources 
 _Avoid_: Live hospital evidence
 
 **Operator**:
-The ED shift coordinator working with the bed manager to review congestion forecasts and proposed flow interventions.
+The ED shift coordinator working with department supervisors and the bed manager to review congestion forecasts and proposed flow interventions. Resource owners authorize the actions affecting their services.
 _Avoid_: Everyone in the hospital
 
 **Operational intervention**:
@@ -123,3 +123,35 @@ _Avoid_: Waiting for first assessment
 **Access block**:
 In this project, an admitted patient's transfer from the ED to inpatient care being prevented by unavailable inpatient bed capacity. [Source: ACEM, section 5.1](https://policy.acem.org.au/index.php/policies-menu/p18-responsibility-for-care-in-emergency-departments).
 _Avoid_: Any queue growth, arrivals exceeding departures
+
+**Synthetic operational twin**:
+A model of a fictional ED's patient flow and finite resources, shown through a four-zone 3D map. It is not connected to a real hospital.
+_Avoid_: Validated live hospital replica
+
+**Logical zone**:
+One of the four displayed phases: arrival/triage, doctor assessment, diagnostics, or disposition. A patient's zone describes their current process; a diagnostic patient can still occupy their ED treatment bed.
+_Avoid_: Separate bed pool for every node
+
+**Patient dot**:
+A visual representation of one received synthetic patient identity and logical phase. Movement follows model events; camera motion and rendering cannot move the simulation forward.
+_Avoid_: Decorative particle presented as a patient
+
+**Local overload**:
+A phase's queue or blocked-resource condition that meets its own sustained rule. It is separate from the overall ED congestion rule.
+_Avoid_: Entire ED collapse, red caused by pixel density
+
+**Rate pressure**:
+Received incoming work exceeding the modeled staffed processing capacity in matching units. It is evidence of pressure, not a certain-collapse formula.
+_Avoid_: Guaranteed tipping point when lambda exceeds mu
+
+**Ambulance announcement**:
+A received notice of an inbound ambulance, with patient count, estimated arrival, uncertainty, and updates. It does not establish an actual ED arrival or start ED time.
+_Avoid_: Hidden future replay arrival
+
+**Resource-owner approval**:
+A valid grant from each supervisor whose resources an action requires. Partial grants do not reserve resources or activate an action. Demo roles are not production authentication.
+_Avoid_: Permission from whichever zone was clicked
+
+**Estimated time to congestion**:
+The median new-onset time among sampled futures with congestion, relative to the forecast timestamp. Always shown with chance, conditional range, and no-event information. Building and confirmed episodes use their current state instead.
+_Avoid_: Certain time to permanent collapse

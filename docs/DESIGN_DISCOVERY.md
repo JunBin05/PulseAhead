@@ -2,7 +2,7 @@
 
 Status: interview closed; brief approved and build plan written. Updated 10 October 2026 (Asia/Kuala_Lumpur).
 
-The user approved [PROJECT_BRIEF.md](PROJECT_BRIEF.md) and explicitly closed the interview. [BUILD_PLAN.md](BUILD_PLAN.md) sets out the 16-hour work order, checks, evaluation, and demo preparation. Implementation has not started.
+The user approved the original concept and explicitly closed the interview. This records historical discovery; latest 3D/rubric changes are in [PULSEAHEAD_3D_MVP_SPEC.md](PULSEAHEAD_3D_MVP_SPEC.md) and [PULSEAHEAD_3D_BUILD_PLAN.md](PULSEAHEAD_3D_BUILD_PLAN.md). Implementation has not started.
 
 The user requested the `grill-with-docs` workflow: resolve decisions through interview rounds, sharpen domain language, and record agreed decisions as they emerge. That interview is complete. Round entries below preserve the history; earlier pending details are resolved by the approved brief and plan.
 
@@ -114,6 +114,10 @@ The user requests natural, concise, simple language. Keep subsequent questions s
 The user accepted the recommendations in [PROJECT_BRIEF.md](PROJECT_BRIEF.md): synthetic presets and approval roles; forecast ranges and no-event reporting; fair testing, false-alert limits, and unfinished patients; the web demo; and the implementation stack.
 
 The user added four development priorities: reliable coupled simulation, forecasts using only received information, meaningful action comparisons, and measurable evidence against simpler approaches. Action ranking must also protect urgent patients from materially worse delays even when average time improves. The plan specifies adjustable demo guardrails and keeps them separate from claims of clinical safety.
+
+During spec preparation, the user selected Playwright MCP to test every process and perform all testing and verification. This settles the test-boundary check: browser workflows and numerical checks through Playwright MCP, using the application's shared API and exported evidence underneath.
+
+During ticket review, the user added easy product understanding and good UI/UX as core priorities and requested both frontend and backend in the tickets. The revised spec and 16-ticket breakdown start interface foundations with the real replay, expand synthetic scenarios afterward, and include a dedicated decision-journey usability pass before the demo. Every feature retains frontend, backend, and Playwright evidence; this does not reopen the domain interview.
 
 Do not ask another series of questions about routine settings. The approved plan documents those assumptions. Organizer acceptance of synthetic-only evidence remains an unresolved external check.
 
