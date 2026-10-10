@@ -1,0 +1,23 @@
+PASS  evaluation started as a background job  -- 3aa6146696
+PASS  a second evaluation while one runs -> 409
+
+PASS  job finished  -- done in 90s 
+PASS  unfinished work never looked complete while running
+PASS  7 shifts, one held-out test seed each  -- normal:2001 busy-recovers:2011 arrival-surge:2021 diagnostic-delay:2031 boarding-blockage:2041 mixed-cascade:2051 no-effective-action:2061
+PASS  labelled synthetic, descriptive only, threshold untuned
+PASS  export carries format, settings and every shift
+PASS  diagnostic-delay: no_action total ED patient-min, unfinished stays and urgent wait recompute from records  -- 5776.7 vs 5776.7; unfinished 17
+PASS  diagnostic-delay: reactive total ED patient-min, unfinished stays and urgent wait recompute from records  -- 5182.3 vs 5182.3; unfinished 16
+PASS  diagnostic-delay: pulseahead total ED patient-min, unfinished stays and urgent wait recompute from records  -- 5491.5 vs 5491.5; unfinished 15
+PASS  every record is in the scored window
+PASS  diagnostic-delay: early / late-only / missed episode counts recompute from warnings and episodes  -- 4 episodes: 1 early, 2 late-only, 1 missed
+PASS  diagnostic-delay: warning runs and false-warning runs recompute  -- 4 runs, 2 false
+PASS  aggregate false warnings per shift = total / 7  -- 2.71 (target <= 1)
+PASS  aggregate policy totals equal the sum of shifts
+NOTE  reactive vs no action: better 5, worse 0, same 2; per shift 7.8, 197.3, 50.1, 594.4, 0, 327.7, 0
+NOTE  pulseahead vs no action: better 7, worse 0, same 0; per shift 20.8, 284.4, 56.8, 285.2, 56.5, 322.8, 4.7
+NOTE  episodes 16: early 12, late-only 2, missed 2; lead {"min":6,"median":48,"max":88,"n":12}; false warnings/shift 2.71
+PASS  cancel stops the job and it is not presented as complete  -- cancelled
+PASS  no-action seed 7 normal: 705 events, 59 patients
+
+ALL PASS

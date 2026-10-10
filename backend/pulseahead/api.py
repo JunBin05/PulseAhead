@@ -16,6 +16,7 @@ from .fixtures import FIXTURES
 from .profile import (
     CATALOG_VERSION, ENGINE_VERSION, PROFILE, PROFILE_ID, SCENARIOS, SCORED_MIN, WARMUP_MIN, scenario_catalog,
 )
+from . import evaluation
 from . import forecast as fcast
 from .replay import API_VERSION, MAX_ADVANCE_MIN, ActionError, ReplayStore, SavedRunMismatch
 
@@ -270,6 +271,41 @@ def decide_action_request(replay_id: str, request_id: str, body: DecisionBody) -
         return _session(replay_id).decide(request_id, body.role, body.decision, body.decision_id, body.expected_version)
     except ActionError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+@app.post("/api/v1/evaluations")
+def start_evaluation() -> dict:
+    """One small held-out evaluation, run in the background (see evaluation.py). Progress via GET."""
+    try:
+        job = evaluation.start()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return job.progress()
+
+
+@app.get("/api/v1/evaluations/{eval_id}")
+def read_evaluation(eval_id: str) -> dict:
+    job = evaluation.get(eval_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="unknown evaluation id")
+    return job.progress()
+
+
+@app.post("/api/v1/evaluations/{eval_id}/cancel")
+def cancel_evaluation(eval_id: str) -> dict:
+    job = evaluation.get(eval_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="unknown evaluation id")
+    job.cancel.set()
+    return {"api_version": "v1", "id": job.id, "cancel_requested": True, "status": job.status}
+
+
+@app.get("/api/v1/evaluations/{eval_id}/export")
+def export_evaluation(eval_id: str) -> dict:
+    job = evaluation.get(eval_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="unknown evaluation id")
+    return {**job.progress(), "format": "pulseahead-evaluation", "format_version": 1}
 
 
 @app.get("/api/v1/replays/{replay_id}/ingest")

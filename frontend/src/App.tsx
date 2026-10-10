@@ -17,6 +17,7 @@ import {
 import { ZONE_LOOK, type ZoneDisplay } from './status';
 import { ActionChip, ComparePanel, RoleSwitcher } from './Actions';
 import { DemoBar, type DemoController } from './Demo';
+import { EvaluationPanel } from './Evaluation';
 import {
   AlertList,
   ForecastStrip,
@@ -696,6 +697,8 @@ export function App() {
             fcSamples={fcSamples}
             onFcSamples={setFcSamples}
           />
+
+          <EvaluationPanel />
 
           <AmbulancePanel snap={snap} />
 
