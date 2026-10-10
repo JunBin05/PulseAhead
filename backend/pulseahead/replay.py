@@ -1177,7 +1177,8 @@ class ReplaySession:
             },
         }
 
-    def save(self, ui: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
+    def save(self, ui: dict[str, Any], settings: dict[str, Any],
+             forecast_samples: int = fcast.DEFAULT_SAMPLES) -> dict[str, Any]:
         """Builds and stores a saved run: the received events and announcements, choices, settings, the
         selected zone and camera, and (when the shift is over) the completed results."""
         with self.lock:
@@ -1212,7 +1213,15 @@ class ReplaySession:
                 "announcements": snap["ambulance_announcements"],
                 # Staff decisions and approvals arrive with the action tickets; none exist yet.
                 "choices": [],
-                "settings": {"simulation": settings, "forecast": None},
+                "settings": {
+                    "simulation": settings,
+                    "forecast": {
+                        "samples": forecast_samples, "model_version": fcast.MODEL_VERSION,
+                        "horizon_min": fcast.HORIZON_MIN, "tail_min": fcast.TAIL_MIN,
+                        "refresh_every_min": fcast.REFRESH_MIN, "seed": fcast.FORECAST_SEED,
+                        "warning_threshold": fcast.WARNING_THRESHOLD,
+                    },
+                },
                 "ui": ui,
                 "observed": {
                     "counts": snap["counts"],

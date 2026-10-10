@@ -478,7 +478,15 @@ export interface SavedUi {
 
 export interface SavedSettings {
   simulation: { speed: number; step_min: number };
-  forecast: unknown;
+  forecast: {
+    samples: number;
+    model_version: string;
+    horizon_min: number;
+    tail_min: number;
+    refresh_every_min: number;
+    seed: number;
+    warning_threshold: number;
+  } | null;
 }
 
 export interface SavedSummary {

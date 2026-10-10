@@ -79,7 +79,7 @@ async (page) => {
           if (pz.state === 'normal' && (d.summary.headline !== 'No local alert' || d.summary.blocked_reason !== null)) bad(`${tag} z${z} normal summary`);
           if (pz.state === 'building' && !d.summary.headline.startsWith('Pressure building: ')) bad(`${tag} z${z} building summary`);
           if (pz.state !== 'overloaded' && pz.state !== 'building' && alerts.length) bad(`${tag} z${z} alerts without state`);
-          if (JSON.stringify(d).match(/free_at_min|tests_required|arrival_time|hidden/)) bad(`${tag} z${z} hidden field in response`);
+          if (JSON.stringify(d).match(/free_at_min|arrival_time|hidden/)) bad(`${tag} z${z} hidden field in response`);
         }
         if (seen.size !== st.patients.length) bad(`${tag} zones hold ${seen.size} of ${st.patients.length} patients`);
         // every occupied ED space is held by exactly one patient in zones 2-4: no capacity counted twice

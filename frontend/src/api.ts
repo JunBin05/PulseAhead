@@ -67,7 +67,11 @@ export const api = {
     }),
   save: (
     id: string,
-    body: { ui: { selected_zone: number | null; camera: string }; settings: { speed: number; step_min: number } },
+    body: {
+      ui: { selected_zone: number | null; camera: string };
+      settings: { speed: number; step_min: number };
+      forecast: { samples: number };
+    },
   ) => request<SavedSummary>(`/replays/${id}/save`, { method: 'POST', body: JSON.stringify(body) }),
   saved: () => request<{ saved: SavedSummary[] }>('/saved'),
   load: (savedId: string) =>

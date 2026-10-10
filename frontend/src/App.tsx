@@ -369,13 +369,14 @@ export function App() {
           camera: focusZone === null ? 'overview' : `zone-${focusZone}`,
         },
         settings: { speed, step_min: STEP_MINUTES },
+        forecast: { samples: fcSamples },
       })
       .then((s) => {
         setSaveNote(`Saved ${s.saved_id}: ${s.label} at ${formatClock(s.sim_time_min)}.`);
         refreshSaved();
       })
       .catch((e) => setSaveNote(e instanceof ApiError ? `Could not save: ${e.message}` : 'Could not save.'));
-  }, [focusZone, speed, refreshSaved]);
+  }, [focusZone, speed, fcSamples, refreshSaved]);
 
   // Loading rebuilds one consistent run: the old replay, selection, camera and requests are dropped
   // first, then the saved selection and camera are restored on top of the rebuilt state.
@@ -397,6 +398,8 @@ export function App() {
         }
         const sp = s.saved_run?.settings.simulation.speed;
         if (sp === 1 || sp === 2 || sp === 5 || sp === 10) setSpeed(sp);
+        const fs = s.saved_run?.settings.forecast?.samples;
+        if (fs === 50 || fs === 100) setFcSamples(fs);
         setScenarioId(s.scenario);
         return s;
       }, true);
@@ -487,7 +490,7 @@ export function App() {
   }, [snap?.replay_id, snap?.version, selectedZone, zoneDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { view: fcView, retry: fcRetry } = useForecast(snap, fcSamples);
-  const explanation = useExplanation(fcView.data, selectedZone, fcSamples);
+  const explanation = useExplanation(fcView.data, selectedZone);
 
   // Choosing an alert from the alert list focuses its zone (a zone button keeps the earlier rule:
   // only an Overloaded zone is zoomed).

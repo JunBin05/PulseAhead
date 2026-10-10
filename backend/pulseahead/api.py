@@ -54,9 +54,14 @@ class SaveSettings(BaseModel):
     step_min: Literal[5] = 5
 
 
+class SaveForecastSettings(BaseModel):
+    samples: Literal[50, 100] = 50
+
+
 class SaveBody(BaseModel):
     ui: SaveUi = SaveUi()
     settings: SaveSettings = SaveSettings()
+    forecast: SaveForecastSettings = SaveForecastSettings()
 
 
 class ForecastBody(BaseModel):
@@ -161,7 +166,7 @@ def reset(replay_id: str, body: Reset | None = None) -> dict:
 @app.post("/api/v1/replays/{replay_id}/save")
 def save_run(replay_id: str, body: SaveBody | None = None) -> dict:
     body = body or SaveBody()
-    record = _session(replay_id).save(body.ui.model_dump(), body.settings.model_dump())
+    record = _session(replay_id).save(body.ui.model_dump(), body.settings.model_dump(), body.forecast.samples)
     return saved.summary(record)
 
 

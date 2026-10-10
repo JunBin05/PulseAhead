@@ -97,7 +97,10 @@ export interface ExplanationView {
 
 /** Fetches the explanation of one zone for the forecast on screen; the previous one stays visible,
  * labelled with its own source time, while a new one is computed. */
-export function useExplanation(fc: Forecast | null, zone: number | null, samples: ForecastSamples) {
+export function useExplanation(fc: Forecast | null, zone: number | null) {
+  // The explanation belongs to the forecast on screen, so it uses that forecast's own sample count; the
+  // requested setting can already differ while a new forecast is still being computed.
+  const samples = (fc?.model.settings.samples ?? 50) as ForecastSamples;
   const [exp, setExp] = useState<ExplanationView | null>(null);
   useEffect(() => {
     if (!fc || fc.status !== 'ok' || zone === null) {
