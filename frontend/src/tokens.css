@@ -6,50 +6,49 @@
   color-scheme: dark;
 
   /* Neutrals */
-  --ground: #070d18;
-  --ground-glow: radial-gradient(1200px 600px at 70% -10%, rgba(34, 211, 238, 0.08), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(129, 140, 248, 0.07), transparent 60%);
-  --surface: #0f1829;
-  --surface-raised: #142036;
-  --surface-sunken: #0b1322;
-  --line: #22314a;
-  --line-strong: #33476a;
-  --ink: #e6edf7;
-  --ink-muted: #a3b1c6;
-  --ink-faint: #8796ad;
+  --ground: #081c37;
+  --ground-glow: radial-gradient(1100px 620px at 50% 30%, rgba(20, 56, 106, 0.55), transparent 70%);
+  --surface: #0c2748;
+  --surface-raised: #10325a;
+  --surface-sunken: #0a2240;
+  --line: #1f4573;
+  --line-strong: #33648f;
+  --ink: #f2f8fb;
+  --ink-muted: #b9ccd8;
+  --ink-faint: #93b0c0;
 
   /* Accent: primary actions and current selection only */
-  --accent: #22d3ee;
-  --accent-hover: #67e8f9;
-  --accent-pressed: #06b6d4;
-  --accent-ink: #04212a;
-  --accent-soft: rgba(34, 211, 238, 0.12);
-  --accent-glow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 24px rgba(34, 211, 238, 0.18);
-  --focus: #67e8f9;
+  --accent: #3fbcc2;
+  --accent-hover: #6dd3d6;
+  --accent-pressed: #2c9aa0;
+  --accent-ink: #06223f;
+  --accent-soft: rgba(63, 188, 194, 0.14);
+  --accent-glow: 0 0 0 1px rgba(127, 216, 216, 0.4);
+  --focus: #7fd8d8;
 
   /* Status: text colour on its tint (all >= 4.5:1), and a glow for emphasis */
-  --status-normal-ink: #4ade80;
-  --status-normal-tint: rgba(34, 197, 94, 0.14);
-  --status-pressure-ink: #fbbf24;
-  --status-pressure-tint: rgba(245, 158, 11, 0.15);
-  --status-overload-ink: #f87171;
-  --status-overload-tint: rgba(239, 68, 68, 0.16);
-  --status-unknown-ink: #b6c2d4;
-  --status-unknown-tint: rgba(148, 163, 184, 0.14);
+  --status-normal-ink: #7fd8c9;
+  --status-normal-tint: rgba(127, 216, 201, 0.12);
+  --status-pressure-ink: #f4b740;
+  --status-pressure-tint: rgba(244, 183, 64, 0.14);
+  --status-overload-ink: #ff6b81;
+  --status-overload-tint: rgba(230, 57, 70, 0.18);
+  --status-unknown-ink: #b9ccd8;
+  --status-unknown-tint: rgba(148, 170, 190, 0.14);
 
   /* Patient urgency groups (also distinguished by dot size and the legend text) */
-  --urgency-urgent: #f87171;
-  --urgency-medium: #fbbf24;
-  --urgency-lower: #38bdf8;
+  --urgency-urgent: #ff6b81;
+  --urgency-medium: #f4b740;
+  --urgency-lower: #7fd8d8;
 
   /* Scene */
-  --scene-ground: #0a1220;
-  --scene-platform: #13213a;
-  --scene-platform-edge: #2b4064;
-  --scene-selected: #22d3ee;
+  --scene-ground: #0a2240;
+  --scene-platform: #e3f0f3;
+  --scene-platform-edge: #1c8f96;
+  --scene-selected: #7fd8d8;
 
   /* Type */
-  --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  --font: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, monospace;
   --text-xs: 0.75rem;

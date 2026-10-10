@@ -668,6 +668,8 @@ export function App() {
                 selectedZone={selectedZone}
                 onSelectZone={toggleZone}
                 focusZone={focusZone}
+                ambulances={snap ? snap.inbound_ambulances.map((a) => ({ id: a.id, eta_min: a.eta_min })) : []}
+                simTime={snap?.sim_time_min ?? 0}
               />
             )}
             {focusZone !== null && (

@@ -19,30 +19,29 @@ import type { Urgency } from './types';
 // from the received queues and resources, never from how many dots are drawn.
 // 'idle' (nothing received yet) is drawn gray, never as Normal.
 const STATE_FILL: Record<ZoneDisplay, string> = {
-  normal: '#0f2a26',
-  building: '#33270b',
-  overloaded: '#3a1418',
-  unknown: '#172235',
-  idle: '#172235',
+  normal: '#e3f0f3',
+  building: '#f8e6bd',
+  overloaded: '#f6cdd2',
+  unknown: '#cdd8e0',
+  idle: '#dbe7ec',
 };
 const STATE_EDGE: Record<ZoneDisplay, string> = {
-  normal: '#4ade80',
-  building: '#fbbf24',
-  overloaded: '#f87171',
-  unknown: '#64748b',
-  idle: '#475569',
+  normal: '#1c8f96',
+  building: '#d98a00',
+  overloaded: '#e63946',
+  unknown: '#6b7f90',
+  idle: '#8aa0ad',
 };
-// A soft glow of the state colour under each platform (presentation only).
-const STATE_GLOW: Record<ZoneDisplay, number> = { normal: 0.18, building: 0.35, overloaded: 0.55, unknown: 0.06, idle: 0.04 };
+// A soft tint of the state colour on the platform (presentation only).
+const STATE_GLOW: Record<ZoneDisplay, number> = { normal: 0.1, building: 0.22, overloaded: 0.32, unknown: 0.04, idle: 0.03 };
 
-// three.js materials need literal colours; these mirror the urgency, accent and scene tokens in
-// tokens.css (see DESIGN.md).
+// People are drawn in deeper tones so they read on the pale platforms; size also carries urgency.
 const URGENCY_COLOR: Record<Urgency, string> = {
-  urgent: '#f87171',
-  medium: '#fbbf24',
-  lower: '#38bdf8',
+  urgent: '#e63946',
+  medium: '#e08e0b',
+  lower: '#0f6f8a',
 };
-const URGENCY_RADIUS: Record<Urgency, number> = { urgent: 0.36, medium: 0.28, lower: 0.24 };
+const URGENCY_SCALE: Record<Urgency, number> = { urgent: 1.3, medium: 1.12, lower: 1 };
 
 function usePrefersReducedMotion(): boolean {
   const ref = useRef(false);
@@ -55,6 +54,8 @@ function usePrefersReducedMotion(): boolean {
 // Camera sits on the true isometric diagonal from its target. The target slides along x to focus a
 // zone and the zoom is multiplied by `k`; the overview is { tx: 3, k: 1 }.
 const OVERVIEW_TX = 3;
+/** The camera looks slightly toward the back so the ambulance road above zone 1 stays in frame. */
+const CAM_TZ = -2.2;
 const FOCUS_ZOOM = 1.9;
 const FOCUS_MS = 450;
 export interface CameraView {
@@ -97,15 +98,15 @@ function useCameraView(focusZone: number | null, reduced: boolean): CameraView {
 
 // World is ~34 units along the diagonal; fit horizontally with margin.
 function fitZoom(width: number, height: number): number {
-  return Math.max(6, Math.min(width / 31, height / 17));
+  return Math.max(6, Math.min(width / 31, height / 19.5));
 }
 
 function CameraRig({ view }: { view: CameraView }) {
   const { camera, size } = useThree();
   useEffect(() => {
     const ortho = camera as THREE.OrthographicCamera;
-    ortho.position.set(view.tx + 15, 15, 15);
-    ortho.lookAt(view.tx, 0, 0);
+    ortho.position.set(view.tx + 15, 15, 15 + CAM_TZ);
+    ortho.lookAt(view.tx, 0, CAM_TZ);
     ortho.zoom = fitZoom(size.width, size.height) * view.k;
     ortho.updateProjectionMatrix();
   }, [camera, size.width, size.height, view.tx, view.k]);
@@ -115,8 +116,8 @@ function CameraRig({ view }: { view: CameraView }) {
 /** Same fixed camera as the canvas, so DOM labels can be placed over world positions. */
 function projector(width: number, height: number, view: CameraView) {
   const cam = new THREE.OrthographicCamera(-width / 2, width / 2, height / 2, -height / 2, 0.1, 200);
-  cam.position.set(view.tx + 15, 15, 15);
-  cam.lookAt(view.tx, 0, 0);
+  cam.position.set(view.tx + 15, 15, 15 + CAM_TZ);
+  cam.lookAt(view.tx, 0, CAM_TZ);
   cam.zoom = fitZoom(width, height) * view.k;
   cam.updateProjectionMatrix();
   cam.updateMatrixWorld();
@@ -124,6 +125,11 @@ function projector(width: number, height: number, view: CameraView) {
     const v = new THREE.Vector3(x, y, z).project(cam);
     return { left: ((v.x + 1) / 2) * width, top: ((1 - v.y) / 2) * height };
   };
+}
+
+function formatEta(min: number): string {
+  const t = Math.floor(min);
+  return `T+${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 
 const COMPACT_BELOW_PX = 560;
@@ -139,7 +145,11 @@ function LabelLayer({
   exitCounts,
   view,
   focusZone,
+  ambulances,
+  simTime,
 }: {
+  ambulances: { id: string; eta_min: number }[];
+  simTime: number;
   view: CameraView;
   focusZone: number | null;
   counts: Record<number, number>;
@@ -224,6 +234,15 @@ function LabelLayer({
               </div>
             );
           })}
+          {ambulances.filter((a) => a.eta_min > simTime).map((a) => (
+            <div
+              key={a.id}
+              className="zone-label amb-label"
+              style={place(AMB_X + 1.9, 1.2, ambulanceZ(a.eta_min, simTime), 'start')}
+            >
+              {a.id} · ETA {formatEta(a.eta_min)}
+            </div>
+          ))}
           {[EXITS.home, EXITS.ward].map((e) => (
             <div
               key={e.label}
@@ -342,9 +361,11 @@ function ExitPad({ center }: { center: [number, number] }) {
   );
 }
 
-function Dot({ dot, instant }: { dot: DotTarget; instant: boolean }) {
-  const ref = useRef<THREE.Mesh>(null);
-  const target = useMemo(() => new THREE.Vector3(...dot.position), [dot.position]);
+/** One patient as a small standing figure. Position comes from received state; this only eases. */
+function Person({ dot, instant }: { dot: DotTarget; instant: boolean }) {
+  const ref = useRef<THREE.Group>(null);
+  // Dots are positioned at head-ish height; figures stand on the platform.
+  const target = useMemo(() => new THREE.Vector3(dot.position[0], dot.position[1] - 0.55, dot.position[2]), [dot.position]);
   useFrame((_, dt) => {
     const m = ref.current;
     if (!m) return;
@@ -352,18 +373,98 @@ function Dot({ dot, instant }: { dot: DotTarget; instant: boolean }) {
       m.position.copy(target);
       return;
     }
-    // Presentation-only easing between positions the backend already reported.
     m.position.lerp(target, 1 - Math.exp(-9 * Math.min(dt, 0.1)));
   });
+  const color = URGENCY_COLOR[dot.urgency];
   return (
-    <mesh ref={ref} position={dot.position} userData={{ patientId: dot.id }}>
-      <sphereGeometry args={[URGENCY_RADIUS[dot.urgency], 20, 14]} />
-      <meshStandardMaterial
-        color={URGENCY_COLOR[dot.urgency]}
-        emissive={URGENCY_COLOR[dot.urgency]}
-        emissiveIntensity={dot.urgency === 'urgent' ? 0.75 : 0.45}
-      />
+    <group ref={ref} position={target.toArray()} scale={URGENCY_SCALE[dot.urgency]} userData={{ patientId: dot.id }}>
+      <mesh position={[0, 0.42, 0]}>
+        <capsuleGeometry args={[0.2, 0.42, 4, 10]} />
+        <meshStandardMaterial color={color} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 1.02, 0]}>
+        <sphereGeometry args={[0.21, 16, 12]} />
+        <meshStandardMaterial color={color} roughness={0.55} />
+      </mesh>
+    </group>
+  );
+}
+
+// ---- inbound ambulances -----------------------------------------------------------------
+// A road runs off the back of zone 1. An announced ambulance sits on it at a distance that follows
+// its reported ETA (45 simulated minutes out at the far end, at the door on arrival). It is drawn
+// from the announcement list only; none is ever invented.
+export const AMB_X = -9;
+const AMB_FAR_Z = -15.8;
+const AMB_STOP_Z = -10.7;
+const AMB_WINDOW_MIN = 45;
+export function ambulanceZ(etaMin: number, nowMin: number): number {
+  const left = Math.max(0, etaMin - nowMin);
+  const p = 1 - Math.min(left, AMB_WINDOW_MIN) / AMB_WINDOW_MIN;
+  return AMB_FAR_Z + (AMB_STOP_Z - AMB_FAR_Z) * p;
+}
+
+function Road() {
+  const len = 9.6;
+  const cz = -9.4 - len / 2;
+  return (
+    <group position={[AMB_X, -0.38, cz]}>
+      <mesh>
+        <boxGeometry args={[2.6, 0.04, len]} />
+        <meshStandardMaterial color="#1d3a5f" roughness={1} />
+      </mesh>
+      {Array.from({ length: 6 }, (_, i) => (
+        <mesh key={i} position={[0, 0.03, -len / 2 + 0.9 + i * 1.6]}>
+          <boxGeometry args={[0.12, 0.02, 0.7]} />
+          <meshBasicMaterial color="#7fd8d8" transparent opacity={0.55} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function Ambulance({ z, reduced }: { z: number; reduced: boolean }) {
+  const light = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    if (!light.current) return;
+    const on = reduced ? true : Math.floor(clock.elapsedTime * 3) % 2 === 0;
+    light.current.color.set(on ? '#e63946' : '#9fe3e6');
+  });
+  const wheel = (x: number, zz: number) => (
+    <mesh key={`${x}${zz}`} position={[x, 0, zz]} rotation={[0, 0, Math.PI / 2]}>
+      <cylinderGeometry args={[0.3, 0.3, 0.22, 14]} />
+      <meshStandardMaterial color="#081c37" />
     </mesh>
+  );
+  return (
+    <group position={[AMB_X, -0.08, z]}>
+      <mesh position={[0, 0.72, -0.3]}>
+        <boxGeometry args={[1.5, 1.2, 2.1]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.52, 1.1]}>
+        <boxGeometry args={[1.4, 0.8, 0.9]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.72, 1.56]}>
+        <boxGeometry args={[1.1, 0.36, 0.04]} />
+        <meshStandardMaterial color="#7fd8d8" />
+      </mesh>
+      {[-0.77, 0.77].map((x) => (
+        <group key={x} position={[x, 0.78, -0.3]}>
+          <mesh><boxGeometry args={[0.04, 0.2, 0.7]} /><meshBasicMaterial color="#e63946" /></mesh>
+          <mesh><boxGeometry args={[0.04, 0.7, 0.2]} /><meshBasicMaterial color="#e63946" /></mesh>
+        </group>
+      ))}
+      <mesh position={[0, 1.38, -0.3]}>
+        <boxGeometry args={[0.8, 0.14, 0.3]} />
+        <meshBasicMaterial ref={light} color="#e63946" />
+      </mesh>
+      {wheel(-0.78, -0.9)}
+      {wheel(0.78, -0.9)}
+      {wheel(-0.78, 1.1)}
+      {wheel(0.78, 1.1)}
+    </group>
   );
 }
 
@@ -380,6 +481,9 @@ interface SceneProps {
   onSelectZone: (zone: number) => void;
   /** Zone the camera is focused on, or null for the fixed overview. */
   focusZone: number | null;
+  /** Announced inbound ambulances (id and ETA) and the current simulated time. */
+  ambulances: { id: string; eta_min: number }[];
+  simTime: number;
 }
 
 const TEST_HOOKS = new URLSearchParams(window.location.search).has('fixture');
@@ -410,15 +514,19 @@ function MeshCounter() {
   return null;
 }
 
-function World({ scene, selectedZone, zoneStates, onSelectZone, view }: SceneProps & { view: CameraView }) {
+function World({ scene, selectedZone, zoneStates, onSelectZone, view, ambulances, simTime }: SceneProps & { view: CameraView }) {
   const reduced = usePrefersReducedMotion();
   return (
     <>
       <CameraRig view={view} />
       <MeshCounter />
-      <ambientLight intensity={1.1} />
-      <directionalLight position={[8, 14, 6]} intensity={1.4} />
-      <pointLight position={[0, 9, 0]} intensity={30} distance={40} color="#22d3ee" />
+      <ambientLight intensity={0.95} />
+      <directionalLight position={[8, 14, 6]} intensity={1.0} />
+      <hemisphereLight args={['#ffffff', '#14386a', 0.5]} />
+      <Road />
+      {ambulances.filter((a) => a.eta_min > simTime).map((a) => (
+        <Ambulance key={a.id} z={ambulanceZ(a.eta_min, simTime)} reduced={reduced} />
+      ))}
       <FloorGrid />
       {[1, 2, 3, 4].filter((z) => zoneStates[z] === 'overloaded').map((z) => (
         <Threat key={`t${z}`} center={ZONE_CENTERS[z]} color={STATE_EDGE.overloaded} reduced={reduced} />
@@ -429,7 +537,7 @@ function World({ scene, selectedZone, zoneStates, onSelectZone, view }: ScenePro
       <ExitPad center={EXITS.home.center} />
       <ExitPad center={EXITS.ward.center} />
       {scene.dots.map((d) => (
-        <Dot key={d.id} dot={d} instant={reduced} />
+        <Person key={d.id} dot={d} instant={reduced} />
       ))}
     </>
   );
@@ -476,6 +584,8 @@ export function Scene(props: SceneProps) {
           exitCounts={props.exitCounts}
           view={view}
           focusZone={props.focusZone}
+          ambulances={props.ambulances}
+          simTime={props.simTime}
         />
       </div>
     </SceneBoundary>

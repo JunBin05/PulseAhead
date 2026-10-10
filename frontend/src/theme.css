@@ -36,8 +36,8 @@ body {
 }
 
 .synthetic-chip {
-  background: rgba(251, 191, 36, 0.12);
-  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(244, 183, 64, 0.12);
+  border-color: rgba(244, 183, 64, 0.45);
   color: var(--status-pressure-ink);
 }
 
@@ -67,7 +67,7 @@ body {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
-  box-shadow: 0 0 18px rgba(34, 211, 238, 0.25);
+  box-shadow: 0 0 18px rgba(63, 188, 194, 0.25);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -186,9 +186,9 @@ select {
 .story-stage {
   margin-bottom: var(--s-4);
   border-radius: var(--radius);
-  border: 1px solid rgba(34, 211, 238, 0.35);
+  border: 1px solid rgba(63, 188, 194, 0.35);
   background:
-    radial-gradient(700px 240px at 0% 0%, rgba(34, 211, 238, 0.1), transparent 70%),
+    radial-gradient(700px 240px at 0% 0%, rgba(63, 188, 194, 0.1), transparent 70%),
     linear-gradient(180deg, var(--surface-raised), var(--surface));
   box-shadow: var(--accent-glow), var(--shadow-panel);
   overflow: hidden;
@@ -219,7 +219,7 @@ select {
 .story-progress span {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), #818cf8);
+  background: linear-gradient(90deg, var(--accent), #7fd8d8);
   transition: width 400ms var(--ease);
 }
 
@@ -403,7 +403,7 @@ select {
 .demo-lines li[data-tag='Note'] .demo-tag { color: var(--ink-muted); }
 
 .demo-card {
-  border-color: rgba(34, 211, 238, 0.45);
+  border-color: rgba(63, 188, 194, 0.45);
   background: var(--surface-sunken);
 }
 
@@ -476,7 +476,7 @@ select {
 }
 
 .chart-axis { stroke: var(--line-strong); stroke-width: 1; }
-.chart-range { fill: rgba(251, 191, 36, 0.28); stroke: var(--status-pressure-ink); stroke-width: 1; }
+.chart-range { fill: rgba(244, 183, 64, 0.28); stroke: var(--status-pressure-ink); stroke-width: 1; }
 .chart-dot { fill: var(--status-overload-ink); filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.7)); }
 .chart-marker { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
 .chart-band { fill: rgba(167, 139, 250, 0.22); }
@@ -499,8 +499,8 @@ select {
 .hbar-name { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .hbar-track { height: 12px; border-radius: 99px; background: var(--surface-raised); overflow: hidden; }
 .hbar-fill { display: block; height: 100%; border-radius: 99px; background: var(--line-strong); }
-.hbar-fill[data-tone='normal'] { background: var(--status-normal-ink); box-shadow: 0 0 10px rgba(74, 222, 128, 0.5); }
-.hbar-fill[data-tone='accent'] { background: var(--accent); box-shadow: 0 0 10px rgba(34, 211, 238, 0.5); }
+.hbar-fill[data-tone='normal'] { background: var(--status-normal-ink); box-shadow: 0 0 10px rgba(127, 216, 201, 0.5); }
+.hbar-fill[data-tone='accent'] { background: var(--accent); box-shadow: 0 0 10px rgba(63, 188, 194, 0.5); }
 .hbar-fill[data-tone='pressure'] { background: var(--status-pressure-ink); }
 .hbar-fill[data-tone='overload'] { background: var(--status-overload-ink); }
 .hbar-text { color: var(--ink-muted); white-space: nowrap; }
@@ -512,7 +512,7 @@ select {
 
 /* ---- map and zone bar ------------------------------------------------------------------- */
 .scene-wrap {
-  background: radial-gradient(600px 300px at 50% 30%, rgba(34, 211, 238, 0.07), transparent 70%), var(--scene-ground);
+  background: radial-gradient(600px 300px at 50% 30%, rgba(63, 188, 194, 0.07), transparent 70%), var(--scene-ground);
   border-color: var(--line);
 }
 
