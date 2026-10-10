@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10 (tickets 01-06 done; the code-review gate for tickets 03-06 is closed and its fixes are committed as `review: fixes after ticket 03-06 gate`). Next ticket: 07. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-10 (tickets 01-07 done; the 03-06 review gate is closed and committed as `b4e7f5a review: fixes after ticket 03-06 gate`; ticket 07 is committed on top). Next is ticket 08. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -9,7 +9,7 @@ Updated 2026-10-10 (tickets 01-06 done; the code-review gate for tickets 03-06 i
   - `C:\Users\Vaas\.claude\plans\serene-nibbling-wirth.md` (master plan)
   - `C:\Users\Vaas\.claude\plans\continue-the-pulseahead-build-glistening-seahorse.md` (last session)
 - **How to work:** implement directly in the main session (no `/implement-spec`, few agents). Follow the spec and tickets only, with no extra features.
-- **Review gate:** the `code-review` skill is the only review gate, after tickets 01 (done), 06, 10, 11, 17, 19 and 21.
+- **Review gate:** the `code-review` skill is the only review gate, after tickets 01 (done), 06 (done), 10, 11, 17, 19 and 21. The user allows subagents only for these gates.
 - **Verification:** all verification goes through Playwright MCP. No pytest, Jest or Vitest files and no mocked engine. Tick a checkbox only when its Playwright MCP evidence passed. Record pass, fail or not-run per criterion in `evidence/NN-<slug>.md`.
 - **Stop points:**
   - Ticket 21 needs an authorized hosting target; nothing gets bought or published.
@@ -25,9 +25,10 @@ Updated 2026-10-10 (tickets 01-06 done; the code-review gate for tickets 03-06 i
 | 04 Diagnostic queues and return flow | **done**: 7/7 pass (no review gate due) | `evidence/04-diagnostics-and-return-flow.md`, `evidence/04-diagnostics.playwright-mcp.js`, `evidence/shots/04-diagnostics-t90.png` |
 | 05 Cleared discharge and constrained ward exits | **done**: 7/7 pass (no review gate due) | `evidence/05-disposition-and-exits.md`, `evidence/05-disposition.playwright-mcp.js`, `evidence/shots/05-boarding-t70.png` |
 | 06 Local overload vs ED congestion | **done**: 8/8 pass; review gate for 03-06 closed, fixes re-verified (see "Review gate state") | `evidence/06-zone-pressure-and-ed-congestion.md`, `evidence/06-pressure.playwright-mcp.js`, `evidence/06-ui.playwright-mcp.js`, `evidence/shots/06-*.png` |
-| 07–22 | not started | n/a |
+| 07 Zone drawers and camera | **done**: 7/7 pass (no review gate due) | `evidence/07-zone-drawers-and-camera.md`, `evidence/07-zones.playwright-mcp.js`, `evidence/07-ease.playwright-mcp.js`, `evidence/shots/07-*.png` |
+| 08–22 | not started (08 is next) | n/a |
 
-Tickets 01 to 06 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
+Tickets 01 to 07 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
 
 ## Verified through Playwright MCP (all pass, production build on :8000)
 
@@ -82,18 +83,20 @@ Tickets 01 to 06 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
 
 **Not verified yet (not-run), owned by later tickets:**
 - 200-dot / 30 fps performance (ticket 20)
-- reduced-motion and 2D fallback (ticket 20)
+- reduced-motion and 2D fallback (ticket 20; the camera jumps under reduced motion, checked in ticket 07)
 - forecast-based zone warnings (ticket 10)
+- decisions and active actions surviving Back to overview (ticket 11; none exist yet)
 
 ## Known bugs, deferred findings, open questions
 
 - **Deferred review findings** (full list in `evidence/01-working-3d-replay.md`, "Deferred to the ticket that owns them"):
   - **Ticket 06:** resolved (dots layer instead of overflowing; "Congested, recovering" label; boundaries tested).
   - **Ticket 05:** resolved (exits show destination and counts; bed pool is finite).
-  - **Ticket 08:** per-source freshness; `freshness.age_min` is always 0.
+  - **Ticket 08:** per-source freshness; `freshness.age_min` is always 0 (the zone response restates it, ticket 07 evidence limit).
   - The ticket 02 ambulance placeholder item is resolved.
 - **Kept by judgement:** `@react-three/drei` is pinned but unused; `ZONE_NAMES` duplicates the profile.
 - **Open questions** (`OPEN_QUESTIONS.md`) and their working decisions:
+  - **Q7 (ticket 07):** an "alert" for the camera is an Overloaded zone only (building, Cannot assess and Normal select without zoom); assigned doctors are listed in zone 2 only, nurses only when they cover a space held by a patient in the zone; Back keeps the selection.
   - **Q1:** 2 of the 24 spaces (`R1`, `R2`) are resuscitation spaces held for critical bypass. General spaces are `S01`–`S22`.
   - **Q2:** "available staffed spaces" counts free general spaces whose covering nurse is on duty; "awaiting a space" counts both queues.
   - **Both confirmed by the user on 2026-10-10 ("keep as is").**
@@ -133,6 +136,7 @@ Tickets 01 to 06 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
   - `Scene.tsx`: R3F isometric scene, DOM labels, compact labels below a 560 px canvas, and the `data-patient-meshes` counter.
   - `layout.ts`: dot areas (phases that share a waiting line or a doctor share one area; wait lines have 8 columns, two rows per layer, extra patients stack upward; zone 4 has seven single-row areas, queue and active apart, pitch `ZONE4_ROW_PITCH` 1.18) and platform size (6 wide, 8 deep).
   - `status.tsx`: `ZONE_LOOK` (icon, tone and word per zone state, including `idle` = "Not started"), shared by the chips and the scene labels.
+  - Ticket 07: `Scene.tsx` `useCameraView` / `CameraView` (camera focus, zoom 1.9, 450 ms ease, reduced motion jumps), `App.tsx` `ZoneDrawer` reading `ZoneDetail`, `replay.py` `zone_detail`, `api.py` `GET /api/v1/replays/{id}/zones/{zone}`.
   - `api.ts`, `types.ts`, `tokens.css`, `app.css`, `icons.tsx`.
 - **Design:** `DESIGN.md` ("The Charge Desk") and `.impeccable/design.json`.
 
@@ -168,6 +172,14 @@ Start commands, from `Real/`:
 - **Git:** no global git identity is set. Commit with `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit ...`.
 - **Stray screenshots:** old screenshots sit outside the repo (`Prototype/evidence/shots/`, `Prototype/Real/evidence/shots/`); they were left untouched.
 
+## Ticket 07 summary
+
+- **Backend:** `ReplaySession.zone_detail(zone_id)` in `replay.py` and `GET /api/v1/replays/{id}/zones/{zone}` in `api.py` (404 for zone outside 1-4 or an unknown replay, 422 for a non-integer). It is computed from `snapshot()`, so it carries the same `version`, `sim_time_min`, `run_number` and `replay_id`. Fields: `zone`, `roster` (identical to `/state` patients), `queues`, `units`, `capacity` (`none` for zone 1, `shared_ed_spaces` for zones 2 and 3, `spaces_retained` plus ward/ICU beds for zone 4), `staff`, `freshness`, `pressure`, `summary` (headline, cause, blocked_reason).
+- **Frontend:** `api.zone`, `ZoneDetail` types. `App.tsx` fetches the open zone with each snapshot and applies both together; `ZoneDrawer` renders from it and shows a loading state when the response is missing or its version differs. Selecting an Overloaded zone sets `focusZone`; `.scene-canvas` carries `data-camera` (`overview` | `zone-N`) and `data-camera-zoom`; a "Focused on zone N" callout with `back-to-overview` sits top-left of the map. While a zone is focused its ALERT bubble sits above its label (`data-bubble-side="above"`, as zone 1's does); left of the label it fell outside the map at 768 px and right of it hit zone 4's area labels.
+- **Test hooks:** `data-patient-meshes` is written every 15th frame, so a snippet must wait for it to equal `patients.length` before comparing (`03-staffing` and `06-ui` now do; a read 100 ms after a step can be one dot high).
+- **Evidence:** all 7 criteria pass (`evidence/07-zone-drawers-and-camera.md`). Regression `01` to `05` and `06-*` pass on the final build.
+- **Known limits:** zone details are received state only (no forecast); the drawer does not retry a failed zone request until the next state version; in the compact scene the focused zone is zoomed but no bubble is drawn.
+
 ## Review gate state (tickets 03-06: closed)
 
 The `code-review` skill ran two reviewers (Standards, Spec) over `e69ceb6...3ecc56c`. All in-scope findings were fixed and re-verified through Playwright MCP on the gate build; the details and numbers are in `evidence/06-zone-pressure-and-ed-congestion.md`, section "Review-gate fixes".
@@ -188,10 +200,10 @@ The `code-review` skill ran two reviewers (Standards, Spec) over `e69ceb6...3ecc
 
 ## Exact next steps
 
-1. Start ticket 07 (blockers 04, 05, 06 are complete).
-2. Continue in blocker order: 07 -> 08 -> 09 -> 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
+1. Start ticket 08 (`PulseAhead-Tickets/.scratch/pulseahead-3d/issues/08-received-data-and-robustness.md`). It carries two deferred review findings: per-source freshness (`freshness.age_min` is always 0), and masking of `resources.diagnostics.*.waiting`, `zones[].lab_queue` and the sidebar for a service whose inputs are missing; the overall monitor also ignores missing space-feed inputs.
+2. Continue in blocker order: 08 -> 09 -> 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
 3. **Stop before ticket 21** (hosting): ask the user for an authorized target. Ticket 22's rehearsal and the organizer check stay with the user.
-4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow or layout changed, the `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition` and `06-*` snippets. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`; copy them there with the leading `//` lines removed (for `06-pressure`, also set `PART`).
+4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow or layout changed, the `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition` and `06-*` snippets, plus `07-zones`. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`: stage them with the leading `//` lines removed, as UTF-8 without a BOM (PowerShell `Get-Content`/`Set-Content` re-encodes the middle dot and adds a BOM; use `node`). For `06-pressure`, also set `PART`.
 
 ## Tool quirks seen this session
 

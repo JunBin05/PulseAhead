@@ -6,6 +6,7 @@ import {
   IconCheck,
   IconClock,
   IconOctagon,
+  IconOverview,
   IconPause,
   IconPlay,
   IconReset,
@@ -21,6 +22,7 @@ import {
   type PressureService,
   type Snapshot,
   type Urgency,
+  type ZoneDetail,
 } from './types';
 
 const SPEEDS = [1, 2, 5, 10] as const;
@@ -144,6 +146,11 @@ export function App() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(2);
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
+  // The open zone's details, for the version they were computed at. Shown only while that version
+  // is the one on screen.
+  const [zoneDetail, setZoneDetail] = useState<ZoneDetail | null>(null);
+  // Camera focus follows a user's selection of an overloaded zone; a state change never moves it.
+  const [focusZone, setFocusZone] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [slow, setSlow] = useState(false);
   const [, setClock] = useState(0);
@@ -155,12 +162,22 @@ export function App() {
   const requestRef = useRef(0);
   const playRef = useRef<HTMLButtonElement>(null);
   const focusPlayRef = useRef(false);
+  const selectedRef = useRef<number | null>(null);
+  const snapRef = useRef<Snapshot | null>(null);
+
+  const clearSelection = useCallback(() => {
+    selectedRef.current = null;
+    setSelectedZone(null);
+    setFocusZone(null);
+    setZoneDetail(null);
+  }, []);
 
   const apply = useCallback((s: Snapshot) => {
     // Discard anything older than what is already shown for the same replay.
     if (idRef.current === s.replay_id && s.version < versionRef.current) return;
     idRef.current = s.replay_id;
     versionRef.current = s.version;
+    snapRef.current = s;
     setSnap(s);
     setConn({ state: 'ok', lastValidAt: Date.now() });
   }, []);
@@ -193,7 +210,23 @@ export function App() {
       setConn((c) => ({ state: 'pending', lastValidAt: lastValid(c) }));
       try {
         const s = await work();
-        if (epochRef.current === epoch) apply(s);
+        // With a zone open, fetch its details for this very version before showing either, so the
+        // drawer and the map never describe different states.
+        let detail: ZoneDetail | null = null;
+        const open = selectedRef.current;
+        if (open !== null && epochRef.current === epoch) {
+          try {
+            detail = await api.zone(s.replay_id, open);
+          } catch {
+            detail = null; // the drawer shows its loading state and refetches
+          }
+        }
+        if (epochRef.current === epoch) {
+          apply(s);
+          if (detail && detail.version === s.version && selectedRef.current === detail.zone.id) {
+            setZoneDetail(detail);
+          }
+        }
       } catch (e) {
         if (epochRef.current === epoch) fail(e);
       } finally {
@@ -214,9 +247,9 @@ export function App() {
     epochRef.current += 1;
     idRef.current = null;
     versionRef.current = 0;
-    setSelectedZone(null);
+    clearSelection();
     void run(() => api.create(TEST_FIXTURE), true);
-  }, [run]);
+  }, [run, clearSelection]);
 
   const advance = useCallback(
     (minutes: number) => {
@@ -243,10 +276,10 @@ export function App() {
     const id = idRef.current;
     if (!id) return;
     setPlaying(false);
-    setSelectedZone(null);
+    clearSelection();
     epochRef.current += 1;
     void run(() => api.reset(id), true);
-  }, [run]);
+  }, [run, clearSelection]);
 
   // Playback: each tick asks the backend to advance one simulated minute. Rendering speed never
   // changes simulated time; only these requests do.
@@ -287,10 +320,48 @@ export function App() {
     return () => window.clearInterval(t);
   }, [showingStale]);
 
+  // Selecting a zone opens its drawer. If that zone is overloaded (an alert) the camera also focuses
+  // it; a normal zone is not zoomed, and later state changes never move the camera on their own.
   const toggleZone = useCallback(
-    (z: number) => setSelectedZone((cur) => (cur === z ? null : z)),
-    [],
+    (z: number) => {
+      if (selectedRef.current === z) {
+        clearSelection();
+        return;
+      }
+      selectedRef.current = z;
+      setSelectedZone(z);
+      const state = snapRef.current?.pressure.zones.find((x) => x.zone === z)?.state;
+      setFocusZone(state === 'overloaded' ? z : null);
+    },
+    [clearSelection],
   );
+
+  // Keep the open zone's details at the version on screen (selection changes, or a refresh that
+  // could not be fetched together with its state).
+  useEffect(() => {
+    if (!snap || selectedZone === null) return;
+    if (
+      zoneDetail &&
+      zoneDetail.zone.id === selectedZone &&
+      zoneDetail.replay_id === snap.replay_id &&
+      zoneDetail.version === snap.version
+    ) {
+      return;
+    }
+    let cancelled = false;
+    api
+      .zone(snap.replay_id, selectedZone)
+      .then((d) => {
+        if (cancelled) return;
+        if (d.zone.id === selectedRef.current && d.version === versionRef.current) setZoneDetail(d);
+      })
+      .catch(() => {
+        /* the drawer keeps its loading state; the next state refresh tries again */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [snap?.replay_id, snap?.version, selectedZone, zoneDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scene = useMemo(() => buildScene(snap), [snap]);
   const zoneCounts = scene.perZone;
@@ -534,6 +605,7 @@ export function App() {
             data-dots-z3={zoneCounts[3]}
             data-dots-z4={zoneCounts[4]}
             data-replay-version={snap?.version ?? 0}
+            data-camera={focusZone === null ? 'overview' : `zone-${focusZone}`}
           >
             <Scene
               scene={scene}
@@ -551,7 +623,18 @@ export function App() {
               }}
               selectedZone={selectedZone}
               onSelectZone={toggleZone}
+              focusZone={focusZone}
             />
+            {focusZone !== null && (
+              <div className="camera-callout" data-testid="camera-callout" role="status">
+                <span>
+                  Focused on zone {focusZone} · {ZONE_NAMES[focusZone]}
+                </span>
+                <button className="btn" onClick={() => setFocusZone(null)} data-testid="back-to-overview">
+                  <IconOverview /> Back to overview
+                </button>
+              </div>
+            )}
             {scene.overflow > 0 && (
               <div className="overflow-note" data-testid="overflow">
                 +{scene.overflow} patients not drawn (listed in zone details)
@@ -589,8 +672,20 @@ export function App() {
                     : 'Zone details appear here once the simulation has started.'}
                 </p>
               </>
+            ) : zoneDetail &&
+              zoneDetail.zone.id === zone.id &&
+              zoneDetail.replay_id === snap!.replay_id &&
+              zoneDetail.version === snap!.version ? (
+              <ZoneDrawer snap={snap!} detail={zoneDetail} />
             ) : (
-              <ZoneDrawer snap={snap!} zoneId={zone.id} />
+              <div data-testid="zone-drawer-loading" data-zone={zone.id}>
+                <h2 id="drawer-h">
+                  Zone {zone.id} · {zone.name}
+                </h2>
+                <p className="muted" role="status">
+                  Loading zone details for state v{snap!.version}…
+                </p>
+              </div>
             )}
           </section>
         </aside>
@@ -599,16 +694,47 @@ export function App() {
   );
 }
 
-function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
-  const zone = snap.zones.find((z) => z.id === zoneId)!;
-  const patients = snap.patients.filter((p) => zone.patient_ids.includes(p.id));
+function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
+  // Zone, roster, staff, queues and capacity come from the versioned zone response; `snap` is the
+  // same version and supplies the shared resource totals and the pressure services.
+  const zone = {
+    ...detail.zone.counts,
+    id: detail.zone.id,
+    name: detail.zone.name,
+    patient_count: detail.zone.patient_count,
+  } as Record<string, number> & { id: number; name: string; patient_count: number };
+  const patients = detail.roster;
   const sp = snap.resources.ed_spaces;
   const rs = snap.resources.resus_spaces;
+  const summary = detail.summary;
   return (
-    <div data-testid="zone-drawer" data-zone={zone.id} data-version={snap.version}>
+    <div
+      data-testid="zone-drawer"
+      data-zone={detail.zone.id}
+      data-version={detail.version}
+      data-state={detail.pressure.state}
+    >
       <h2 id="drawer-h">
         Zone {zone.id} · {zone.name}
       </h2>
+      <p className="drawer-source muted" data-testid="drawer-source">
+        State v{detail.version} · {formatClock(detail.sim_time_min)} · feed updated{' '}
+        {formatClock(detail.freshness.state_updated_at_min)}, {detail.freshness.age_min} min old
+      </p>
+      <div className="callout" data-testid="drawer-summary" data-state={summary.state}>
+        <p>
+          <strong data-testid="drawer-headline">{summary.headline}</strong>
+        </p>
+        {summary.cause && <p data-testid="drawer-cause">{summary.cause}</p>}
+        {summary.blocked_reason && (
+          <p data-testid="drawer-blocked">
+            <strong>Blocked:</strong> {summary.blocked_reason}
+          </p>
+        )}
+        <p className="muted">
+          {summary.note} Overall ED status: {summary.overall_status_label}.
+        </p>
+      </div>
       <dl className="kv" style={{ marginBottom: 'var(--s-4)' }}>
         <dt>Patients here</dt>
         <dd data-testid="drawer-count">{zone.patient_count}</dd>
@@ -703,13 +829,57 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
           </>
         )}
       </dl>
-      <p style={{ marginBottom: 'var(--s-4)' }}>
-        {zone.id === 1 && 'No treatment beds here. Patients wait for registration and triage.'}
+      <p style={{ marginBottom: 'var(--s-4)' }} data-testid="drawer-capacity" data-kind={detail.capacity.kind}>
+        {zone.id === 1 && detail.capacity.text}
         {(zone.id === 2 || zone.id === 3) &&
           `ED spaces are one shared pool for zones 2 and 3: ${sp.occupied} of ${sp.total} occupied, ${sp.available_staffed} general spaces free. ${rs.available} of ${rs.total} resuscitation spaces (held for supplied critical bypass) free${rs.awaiting ? `, ${rs.awaiting} critical patient${rs.awaiting === 1 ? '' : 's'} waiting` : ''}.`}
         {zone.id === 4 &&
           `These patients still occupy their ED space until they physically leave (${sp.occupied} of ${sp.total} spaces occupied).`}
+        {(zone.id === 2 || zone.id === 3) && (
+          <>
+            {' '}
+            <span className="muted" data-testid="drawer-shared-note">
+              {detail.capacity.held_by_patients_here} of the {detail.capacity.occupied} occupied spaces are held
+              by patients in this zone. The same pool is shown for zone {detail.capacity.shared_with_zone}; the
+              two are not added together.
+            </span>
+          </>
+        )}
       </p>
+      <section data-testid="assigned-staff" aria-labelledby="assigned-h" style={{ marginBottom: 'var(--s-4)' }}>
+        <h3 id="assigned-h" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--s-2)' }}>
+          Assigned here
+        </h3>
+        {detail.staff.doctors.length > 0 && (
+          <ul className="roster" data-testid="assigned-doctors">
+            {detail.staff.doctors.map((d) => (
+              <li key={d.id} data-testid={`assigned-doctor-${d.id}`} data-assigned={d.assigned}>
+                <strong>{d.id}</strong>
+                <span>
+                  {d.name} · {d.assigned ? `with ${d.patient_id}` : 'on duty, free'}
+                </span>
+                <span className="tag">Doctor, on duty</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {detail.staff.nurses.length > 0 && (
+          <ul className="roster" data-testid="assigned-nurses">
+            {detail.staff.nurses.map((n) => (
+              <li key={n.id} data-testid={`assigned-nurse-${n.id}`}>
+                <strong>{n.id}</strong>
+                <span>
+                  {n.name} · {n.patient_ids.map((p, i) => `${p} in ${n.space_ids[i]}`).join(', ')}
+                </span>
+                <span className="tag">Nurse, on duty</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="muted" data-testid="assigned-note">
+          {detail.staff.note}
+        </p>
+      </section>
       {zone.id === 3 && (
         <p className="muted" data-testid="diag-note" style={{ marginBottom: 'var(--s-4)' }}>
           These patients keep their ED space while they wait for or have tests; no doctor is held

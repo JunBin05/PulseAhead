@@ -412,6 +412,211 @@ class ReplaySession:
             "event_count": len(e.events),
         }
 
+    # -- one zone, versioned ---------------------------------------------------------------
+    def zone_detail(self, zone_id: int) -> dict[str, Any] | None:
+        """Details for one zone, computed from the same state version as `snapshot()`.
+
+        Everything here is received simulation state: the roster, who is assigned, queues and
+        capacity. Nothing is a forecast and nothing comes from the hidden replay future. Callers hold
+        the session lock. Returns None for an unknown zone.
+        """
+        if zone_id not in (1, 2, 3, 4):
+            return None
+        snap = self.snapshot()
+        zone = next(z for z in snap["zones"] if z["id"] == zone_id)
+        members = set(zone["patient_ids"])
+        roster = [p for p in snap["patients"] if p["id"] in members]
+        res = snap["resources"]
+        pressure = snap["pressure"]
+        zone_pressure = next(z for z in pressure["zones"] if z["zone"] == zone_id)
+        sp, rs = res["ed_spaces"], res["resus_spaces"]
+        dg, dp = res["diagnostics"], res["disposition"]
+
+        def line(key: str, label: str, count: int, kind: str, of: int | None = None) -> dict[str, Any]:
+            return {"id": key, "label": label, "count": count, "kind": kind, "of": of}
+
+        if zone_id == 1:
+            queues = [
+                line("triage_queue", "Waiting for triage", zone["queue"], "queue"),
+                line("triage_active", "At the triage desk", zone["active"], "active", res["triage_desk"]["total"]),
+            ]
+            units = [
+                {"id": "triage_desk", "label": "Triage desk", **{k: res["triage_desk"][k] for k in ("busy", "waiting", "owner")},
+                 "servers": res["triage_desk"]["total"],
+                 "reserve_team_active": res["triage_desk"]["reserve_team"]["active"]},
+            ]
+            capacity = {
+                "kind": "none",
+                "text": "No treatment beds here. Patients wait for registration and triage.",
+            }
+        elif zone_id == 2:
+            queues = [
+                line("awaiting_space", "Waiting for an ED space", zone["awaiting_space"], "queue"),
+                line("awaiting_clinician", "Waiting for a clinician", zone["awaiting_clinician"], "queue"),
+                line("with_clinician", "With a clinician (assessment or result review)", zone["active"], "active",
+                     res["clinician_slots"]["total"]),
+                line("awaiting_result_review", "Results back, waiting for review", zone["awaiting_result_review"], "queue"),
+                line("awaiting_care_completion", "Decision received, care not complete", zone["awaiting_care_completion"],
+                     "queue"),
+            ]
+            units = [
+                {"id": "clinician_slots", "label": "Doctor work slots", "busy": res["clinician_slots"]["busy"],
+                 "servers": res["clinician_slots"]["total"], "waiting": res["clinician_slots"]["waiting"],
+                 "owner": res["clinician_slots"]["owner"]},
+            ]
+        elif zone_id == 3:
+            queues = [
+                line("lab_queue", "Waiting for the lab", zone["lab_queue"], "queue"),
+                line("lab_active", "Lab tests running", zone["lab_active"], "active", dg["lab"]["servers"]),
+                line("imaging_queue", "Waiting for imaging", zone["imaging_queue"], "queue"),
+                line("imaging_active", "Imaging running", zone["imaging_active"], "active", dg["imaging"]["servers"]),
+            ]
+            units = [
+                {"id": k, "label": k.capitalize(), **{f: dg[k][f] for f in ("busy", "servers", "waiting", "owner")}}
+                for k in ("lab", "imaging")
+            ]
+        else:
+            queues = [
+                line("discharge_queue", "Home discharge: waiting", zone["awaiting_discharge"], "queue"),
+                line("discharge_active", "Home discharge: processing", zone["discharge_active"], "active",
+                     dp["discharge"]["servers"]),
+                line("boarding", "Boarding: waiting for a suitable bed", zone["awaiting_ward_bed"], "queue"),
+                line("allocation_queue", "Ward allocation: waiting", zone["awaiting_ward_allocation"], "queue"),
+                line("allocation_active", "Ward allocation: in progress", zone["allocation_active"], "active",
+                     dp["allocation"]["servers"]),
+                line("transport_queue", "Transport: waiting", zone["awaiting_transport"], "queue"),
+                line("transport_active", "Transport: moving a patient", zone["in_transport"], "active",
+                     dp["transport"]["servers"]),
+            ]
+            units = [
+                {"id": k, "label": k.capitalize(), **{f: dp[k][f] for f in ("busy", "servers", "waiting", "owner")}}
+                for k in ("discharge", "allocation", "transport")
+            ]
+
+        if zone_id in (2, 3):
+            # One pool for both zones: the same numbers appear in each zone and are never added.
+            capacity = {
+                "kind": "shared_ed_spaces",
+                "shared_with_zone": 3 if zone_id == 2 else 2,
+                "total": sp["total"],
+                "occupied": sp["occupied"],
+                "available_staffed": sp["available_staffed"],
+                "staffed_total": sp["staffed_total"],
+                "resus": {"total": rs["total"], "available": rs["available"], "awaiting": rs["awaiting"]},
+                "held_by_patients_here": sum(1 for p in roster if p["space_id"]),
+                "text": "ED spaces are one shared pool for zones 2 and 3; zone 3 patients keep their space "
+                "while they wait for tests, so the two zones' counts are never added together.",
+            }
+        elif zone_id == 4:
+            capacity = {
+                "kind": "spaces_retained",
+                "total": sp["total"],
+                "occupied": sp["occupied"],
+                "held_by_patients_here": sum(1 for p in roster if p["space_id"]),
+                "ward_beds": {k: dp["beds"]["ward"][k] for k in ("free", "reserved", "occupied", "total")},
+                "icu_beds": {k: dp["beds"]["icu"][k] for k in ("free", "reserved", "occupied", "total")},
+                "text": "These patients still occupy their ED space until they physically leave.",
+            }
+
+        # Who is assigned here, from the received assignment of each patient. Nobody is listed as
+        # assigned unless a patient in this zone is actually with them.
+        doctors: list[dict[str, Any]] = []
+        if zone_id == 2:
+            holder = {p["clinician_id"]: p["id"] for p in roster if p["clinician_id"]}
+            doctors = [
+                {"id": d["id"], "name": d["name"], "on_duty": d["on_duty"], "owner": d["owner"],
+                 "patient_id": holder.get(d["id"]), "assigned": d["id"] in holder}
+                for d in res["staff"]["doctors"]
+                if d["on_duty"]
+            ]
+        nurses: list[dict[str, Any]] = []
+        if zone_id in (2, 3, 4):
+            for n in res["staff"]["nurses"]:
+                mine = [p for p in roster if p["nurse_id"] == n["id"]]
+                if n["on_duty"] and mine:
+                    nurses.append(
+                        {"id": n["id"], "name": n["name"], "on_duty": True, "owner": n["owner"],
+                         "patient_ids": [p["id"] for p in mine], "space_ids": [p["space_id"] for p in mine]}
+                    )
+        staff_note = {
+            1: "Zone 1 has no treatment spaces, so no doctor or nurse is assigned here.",
+            2: "Doctors work only in zone 2. Nurses are listed when they cover a space held by a patient here.",
+            3: "No doctor is held while patients wait for or have tests. Nurses are listed when they cover a "
+            "space held by a patient here.",
+            4: "No doctor is held in disposition. Nurses are listed when they cover a space held by a patient here.",
+        }[zone_id]
+
+        # Plain cause / blocked-reason summary from received queues and capacity (no forecast).
+        alerts = [a for a in pressure["alerts"] if a["zone"] == zone_id]
+        services = {sid: pressure["services"][sid] for sid in zone_pressure["services"]}
+        state = zone_pressure["state"]
+        top = next((a for a in alerts if a["state"] == "overloaded"), alerts[0] if alerts else None)
+        headline: str
+        cause: str | None = None
+        blocked: str | None = None
+        if state in ("overloaded", "building") and top is not None:
+            svc = services[top["service"]]
+            headline = "Overloaded: " if state == "overloaded" else "Pressure building: "
+            headline += top["category_label"]
+            cause = (
+                f"{top['evidence']}. Affected patients: {top['affected_patients']}; "
+                f"urgent group waiting: {top['urgent_group_waiting']}."
+            )
+            if svc["capacity_unavailable"]:
+                blocked = "No suitable free capacity for patients who are waiting."
+            elif svc["threshold"] is not None and svc["queue"] is not None and svc["queue"] >= svc["threshold"]:
+                blocked = f"The waiting line is at or above its threshold of {svc['threshold']}."
+            if state == "building" and svc["confirms_in_min"] is not None:
+                cause += f" It confirms in about {svc['confirms_in_min']} min if it persists."
+        elif state == "unknown":
+            missing = [s["name"] for s in services.values() if not s["inputs_ok"]]
+            headline = "Cannot assess this zone"
+            cause = "Inputs are missing for: " + (", ".join(missing) or "an essential feed") + "."
+        else:
+            headline = "No local alert"
+            cause = "Every service in this zone is within its threshold."
+        summary = {
+            "state": state,
+            "headline": headline,
+            "cause": cause,
+            "blocked_reason": blocked,
+            "overall_status_label": snap["overall_status"]["label"],
+            "note": "A local zone state is not overall ED congestion.",
+        }
+
+        return {
+            "api_version": API_VERSION,
+            "replay_id": self.id,
+            "run_number": self.run_number,
+            "version": snap["version"],
+            "sim_time_min": snap["sim_time_min"],
+            "freshness": snap["freshness"],
+            "zone": {
+                "id": zone["id"],
+                "key": zone["key"],
+                "name": zone["name"],
+                "patient_count": zone["patient_count"],
+                "counts": {
+                    k: v
+                    for k, v in zone.items()
+                    if k not in ("id", "key", "name", "patient_count", "patient_ids", "capacity")
+                },
+            },
+            "roster": roster,
+            "queues": queues,
+            "units": units,
+            "capacity": capacity,
+            "staff": {"doctors": doctors, "nurses": nurses, "note": staff_note,
+                      "off_duty_nurses": res["staff"]["off_duty_nurses"]},
+            "pressure": {
+                "state": state,
+                "label": zone_pressure["label"],
+                "service_ids": zone_pressure["services"],
+                "alerts": alerts,
+            },
+            "summary": summary,
+        }
+
     # -- zone pressure ---------------------------------------------------------------------
     def _pressure(self, patients: list[dict[str, Any]], now: float) -> dict[str, Any]:
         """Local zone overload state, rates in matching units and failure categories."""

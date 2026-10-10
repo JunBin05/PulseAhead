@@ -321,3 +321,66 @@ export const ZONE_NAMES: Record<number, string> = {
   3: 'Diagnostics and testing',
   4: 'Disposition',
 };
+
+/** One line of a zone's queues: a waiting line (`queue`) or work under way (`active`, with its slots). */
+export interface ZoneQueueLine {
+  id: string;
+  label: string;
+  count: number;
+  kind: 'queue' | 'active';
+  of: number | null;
+}
+
+export interface ZoneUnit {
+  id: string;
+  label: string;
+  busy: number;
+  servers: number;
+  waiting: number;
+  owner: string;
+  reserve_team_active?: boolean;
+}
+
+export interface ZoneCapacity {
+  kind: 'none' | 'shared_ed_spaces' | 'spaces_retained';
+  text: string;
+  shared_with_zone?: number;
+  total?: number;
+  occupied?: number;
+  available_staffed?: number;
+  staffed_total?: number;
+  resus?: { total: number; available: number; awaiting: number };
+  held_by_patients_here?: number;
+  ward_beds?: { free: number; reserved: number; occupied: number; total: number };
+  icu_beds?: { free: number; reserved: number; occupied: number; total: number };
+}
+
+/** `GET /api/v1/replays/{id}/zones/{zone}`: one zone at the replay's current version. */
+export interface ZoneDetail {
+  api_version: string;
+  replay_id: string;
+  run_number: number;
+  version: number;
+  sim_time_min: number;
+  freshness: { state_updated_at_min: number; age_min: number; note: string };
+  zone: { id: number; key: string; name: string; patient_count: number; counts: Record<string, number> };
+  roster: PatientDot[];
+  queues: ZoneQueueLine[];
+  units: ZoneUnit[];
+  capacity: ZoneCapacity;
+  staff: {
+    doctors: { id: string; name: string; on_duty: boolean; owner: string; patient_id: string | null; assigned: boolean }[];
+    nurses: { id: string; name: string; on_duty: boolean; owner: string; patient_ids: string[]; space_ids: string[] }[];
+    note: string;
+    off_duty_nurses: string[];
+  };
+  pressure: { state: LocalState; label: string; service_ids: string[]; alerts: PressureAlert[] };
+  summary: {
+    state: LocalState;
+    headline: string;
+    cause: string | null;
+    blocked_reason: string | null;
+    overall_status_label: string;
+    note: string;
+  };
+}

@@ -87,6 +87,17 @@ def read_state(replay_id: str) -> dict:
         return s.snapshot()
 
 
+@app.get("/api/v1/replays/{replay_id}/zones/{zone_id}")
+def read_zone(replay_id: str, zone_id: int) -> dict:
+    """One zone's roster, assigned staff, queues and capacity at the replay's current version."""
+    s = _session(replay_id)
+    with s.lock:
+        detail = s.zone_detail(zone_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="unknown zone")
+    return detail
+
+
 @app.post("/api/v1/replays/{replay_id}/advance")
 def advance(replay_id: str, body: Advance) -> dict:
     result = _session(replay_id).advance(body.minutes, body.expected_version)

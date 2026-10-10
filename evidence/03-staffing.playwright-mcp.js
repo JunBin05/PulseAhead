@@ -128,6 +128,8 @@ async (page) => {
   for (let k = 1; k <= 28; k++) {
     await page.getByTestId('step').click(); await waitV(k + 1); await page.waitForTimeout(120);
     const st = await api(`/api/v1/replays/${replayId}/state`);
+    // data-patient-meshes is sampled every 15 frames; wait for it to catch up (as 02, 04 and 05 do).
+    await page.waitForFunction((n) => Number(document.querySelector('canvas').dataset.patientMeshes) === n, st.patients.length, { timeout: 3000 }).catch(() => {});
     const ui = await page.evaluate(() => {
       const t = (id) => document.querySelector(`[data-testid=${id}]`)?.textContent ?? null;
       return {

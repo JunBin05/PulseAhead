@@ -1,4 +1,4 @@
-import type { Snapshot } from './types';
+import type { Snapshot, ZoneDetail } from './types';
 
 const BASE = '/api/v1';
 
@@ -41,6 +41,8 @@ export const api = {
       body: JSON.stringify(scenario === undefined ? {} : { scenario }),
     }),
   state: (id: string) => request<Snapshot>(`/replays/${id}/state`),
+  /** One zone's roster, assigned staff, queues and capacity at the replay's current version. */
+  zone: (id: string, zone: number) => request<ZoneDetail>(`/replays/${id}/zones/${zone}`),
   /** Applies only at `expectedVersion`; a 409 means the replay moved on and the caller should reload. */
   advance: (id: string, minutes: number, expectedVersion: number) =>
     request<Snapshot>(`/replays/${id}/advance`, {

@@ -70,3 +70,9 @@ export const IconClock = () => (
     <path d="M12 7.5V12l3 2" />
   </Svg>
 );
+
+export const IconOverview = () => (
+  <Svg>
+    <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />
+  </Svg>
+);

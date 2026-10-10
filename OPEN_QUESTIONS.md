@@ -80,3 +80,16 @@ Spec §Zone pressure: local overload occurs when the queue reaches its threshold
 
 **Alternative not taken:** treat any fully busy unit as capacity unavailable (this would raise an alert at normal load); show a zone as Cannot assess as soon as one service is missing, even with a confirmed episode.
 
+
+## Q7. What is an "alert" for the camera, and who counts as "assigned on-duty" staff? (ticket 07)
+
+Spec and ticket 07: an alert selection focuses the zone, a normal selection need not zoom, "no auto-zoom on every warning"; the drawer lists "assigned on-duty doctors/nurses".
+
+**Working decision:**
+- *Alert* means a zone whose local state is Overloaded. Building, Cannot assess and Normal zones open the drawer without zooming (the spec names only normal and overloaded and forbids zooming on every warning). Zooming happens only on a user selection; a state change never moves the camera.
+- *Assigned on-duty doctors* are listed in zone 2 only: the on-duty doctors, each marked assigned when a patient in the zone's roster holds that clinician slot. Doctors are not listed in zones 1, 3 or 4, where no clinician slot is held.
+- *Assigned on-duty nurses* are the on-duty nurses who cover a space held by a patient in that zone (zones 2-4), with those patients. Off-duty nurses are never listed, and zone 1 lists none because it has no treatment spaces.
+- Back to overview restores the overview camera and keeps the zone selected and the drawer open; reset clears both.
+- Zone details are received state only. Forecast content belongs to the selected-zone panel of ticket 10.
+
+**Alternative not taken:** zoom on Building and Cannot assess zones too; list every on-duty doctor and nurse in every drawer.

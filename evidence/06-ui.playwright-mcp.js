@@ -158,6 +158,7 @@ async (page) => {
   for (let k = 1; k <= 24; k++) {
     await page.getByTestId('step').click(); await waitV(k + 1); await page.waitForTimeout(100);
     const st = await api(`/api/v1/replays/${replayId}/state`);
+    await page.waitForFunction((n) => Number(document.querySelector('canvas').dataset.patientMeshes) === n, st.patients.length, { timeout: 3000 }).catch(() => {});
     const ui = await stepAgreement(st, 3, problemsC, 'C');
     if (st.sim_time_min >= 90 && st.sim_time_min < 120) gapRows.push({ t: st.sim_time_min, zone3: ui.zoneChips[2], imaging: ui.svc.imaging.state, queue: ui.svc.imaging.queue, lam: ui.svc.imaging.lam, thr: ui.svc.imaging.thr, mu: ui.svc.imaging.mu, recovery: ui.svc.imaging.recovery });
   }

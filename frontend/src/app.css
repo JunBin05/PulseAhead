@@ -355,6 +355,9 @@ p {
 
 .scene-canvas {
   height: clamp(340px, 52vh, 560px);
+  /* Labels belong to the map: a focused camera pushes some off it, and they must not spill onto the
+     zone buttons below. */
+  overflow: hidden;
 }
 
 .scene-fallback {
@@ -703,4 +706,56 @@ p {
 
 .zone-label[data-bubble-side='left'] .alert-bubble {
   right: calc(100% + 6px);
+}
+
+/* ---- camera focus callout and zone summary ------------------------------------------- */
+.camera-callout {
+  position: absolute;
+  top: var(--s-3);
+  left: var(--s-3);
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  max-width: calc(100% - 2 * var(--s-3));
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+
+.callout {
+  margin-bottom: var(--s-4);
+  padding: var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--status-unknown-ink);
+  border-radius: var(--radius-sm);
+}
+
+.callout p + p {
+  margin-top: var(--s-1);
+}
+
+.callout[data-state='normal'] {
+  border-left-color: var(--status-normal-ink);
+}
+
+.callout[data-state='building'] {
+  border-left-color: var(--status-pressure-ink);
+  background: var(--status-pressure-tint);
+}
+
+.callout[data-state='overloaded'] {
+  border-left-color: var(--status-overload-ink);
+  background: var(--status-overload-tint);
+}
+
+.drawer-source {
+  margin-bottom: var(--s-3);
+  font-size: var(--text-xs);
 }

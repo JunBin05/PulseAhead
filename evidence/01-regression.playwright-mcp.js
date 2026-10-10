@@ -62,6 +62,7 @@ async (page) => {
 
   // 4. Drawer shows space / clinician identities
   await page.getByTestId('zone-2').click();
+  await page.getByTestId('zone-drawer').waitFor(); // the zone response is fetched after the click
   R.checks.drawer = { heading: await page.locator('#drawer-h').textContent(), roster: await page.evaluate(() => [...document.querySelectorAll('[data-testid=roster] li')].map(li => li.innerText.replace(/\s+/g, ' '))) };
   await page.getByTestId('zone-2').click();
 

@@ -50,37 +50,72 @@ function usePrefersReducedMotion(): boolean {
   return ref.current;
 }
 
-// Camera sits on the true isometric diagonal from its target.
-const CAMERA_TARGET: [number, number, number] = [3, 0, 0];
-const CAMERA_POSITION: [number, number, number] = [
-  CAMERA_TARGET[0] + 15,
-  CAMERA_TARGET[1] + 15,
-  CAMERA_TARGET[2] + 15,
-];
+// Camera sits on the true isometric diagonal from its target. The target slides along x to focus a
+// zone and the zoom is multiplied by `k`; the overview is { tx: 3, k: 1 }.
+const OVERVIEW_TX = 3;
+const FOCUS_ZOOM = 1.9;
+const FOCUS_MS = 450;
+export interface CameraView {
+  tx: number;
+  k: number;
+}
+const OVERVIEW: CameraView = { tx: OVERVIEW_TX, k: 1 };
+
+/**
+ * Presentation-only camera: eases the view toward the focused zone (or back to the overview). It
+ * never touches replay state. Reduced motion jumps straight to the target view.
+ */
+function useCameraView(focusZone: number | null, reduced: boolean): CameraView {
+  const target: CameraView = focusZone === null ? OVERVIEW : { tx: ZONE_CENTERS[focusZone][0], k: FOCUS_ZOOM };
+  const [view, setView] = useState<CameraView>(OVERVIEW);
+  const viewRef = useRef<CameraView>(OVERVIEW);
+  useEffect(() => {
+    if (reduced) {
+      viewRef.current = target;
+      setView(target);
+      return;
+    }
+    const from = viewRef.current;
+    const t0 = performance.now();
+    let raf = 0;
+    const step = (now: number) => {
+      const u = Math.min(1, (now - t0) / FOCUS_MS);
+      const e = 1 - Math.pow(1 - u, 3);
+      const v = { tx: from.tx + (target.tx - from.tx) * e, k: from.k + (target.k - from.k) * e };
+      viewRef.current = v;
+      setView(v);
+      if (u < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusZone, reduced]);
+  return view;
+}
 
 // World is ~34 units along the diagonal; fit horizontally with margin.
 function fitZoom(width: number, height: number): number {
   return Math.max(6, Math.min(width / 31, height / 17));
 }
 
-function CameraRig() {
+function CameraRig({ view }: { view: CameraView }) {
   const { camera, size } = useThree();
   useEffect(() => {
     const ortho = camera as THREE.OrthographicCamera;
-    ortho.position.set(...CAMERA_POSITION);
-    ortho.lookAt(...CAMERA_TARGET);
-    ortho.zoom = fitZoom(size.width, size.height);
+    ortho.position.set(view.tx + 15, 15, 15);
+    ortho.lookAt(view.tx, 0, 0);
+    ortho.zoom = fitZoom(size.width, size.height) * view.k;
     ortho.updateProjectionMatrix();
-  }, [camera, size.width, size.height]);
+  }, [camera, size.width, size.height, view.tx, view.k]);
   return null;
 }
 
 /** Same fixed camera as the canvas, so DOM labels can be placed over world positions. */
-function projector(width: number, height: number) {
+function projector(width: number, height: number, view: CameraView) {
   const cam = new THREE.OrthographicCamera(-width / 2, width / 2, height / 2, -height / 2, 0.1, 200);
-  cam.position.set(...CAMERA_POSITION);
-  cam.lookAt(...CAMERA_TARGET);
-  cam.zoom = fitZoom(width, height);
+  cam.position.set(view.tx + 15, 15, 15);
+  cam.lookAt(view.tx, 0, 0);
+  cam.zoom = fitZoom(width, height) * view.k;
   cam.updateProjectionMatrix();
   cam.updateMatrixWorld();
   return (x: number, y: number, z: number) => {
@@ -100,7 +135,11 @@ function LabelLayer({
   areaCounts,
   zoneStates,
   exitCounts,
+  view,
+  focusZone,
 }: {
+  view: CameraView;
+  focusZone: number | null;
   counts: Record<number, number>;
   areaCounts: Record<string, number>;
   zoneStates: Record<number, ZoneDisplay>;
@@ -116,7 +155,7 @@ function LabelLayer({
     setBox({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
-  const project = useMemo(() => (box.w > 0 ? projector(box.w, box.h) : null), [box.w, box.h]);
+  const project = useMemo(() => (box.w > 0 ? projector(box.w, box.h, view) : null), [box.w, box.h, view]);
   // 'top' hangs the element below its anchor, so a two-line zone label grows toward the viewer
   // instead of into the area labels above it.
   const place = (x: number, y: number, z: number, anchor: 'center' | 'start' | 'top' = 'center') => {
@@ -131,8 +170,9 @@ function LabelLayer({
   };
   // Too narrow for full labels: show zone numbers only. The zone buttons below the map carry the
   // same names and counts.
-  const rowPitchPx = ZONE4_ROW_PITCH * Z_TO_SCREEN_Y * fitZoom(box.w, box.h);
-  const compact = box.w < COMPACT_BELOW_PX || rowPitchPx < MIN_LABEL_PITCH_PX;
+  // A focused camera is zoomed in, so the room it gives each label counts as extra canvas width.
+  const rowPitchPx = ZONE4_ROW_PITCH * Z_TO_SCREEN_Y * fitZoom(box.w, box.h) * view.k;
+  const compact = box.w * view.k < COMPACT_BELOW_PX || rowPitchPx < MIN_LABEL_PITCH_PX;
   return (
     <div ref={ref} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
       {project && (
@@ -148,9 +188,9 @@ function LabelLayer({
                 key={`l${z}`}
                 className={compact ? 'zone-label' : 'zone-label zone-label--stacked'}
                 // The alert bubble is a child hanging off the label (above it for zone 1, whose front strip
-                // is empty and which sits at the canvas edge; to the left for the others), so its position
+                // is empty and which sits at the canvas edge; to the left for the others; the focused zone also goes above, because the zoom leaves no room beside it at a 768 px viewport), so its position
                 // never depends on the label's size or the zoom.
-                data-bubble-side={z === 1 ? 'above' : 'left'}
+                data-bubble-side={z === 1 || z === focusZone ? 'above' : 'left'}
                 // Front edge: the back edge is where the area labels sit. The stacked label hangs below
                 // its anchor so it grows toward the viewer, away from the rows above it.
                 style={place(cx, 0.4, cz + PLATFORM_SIZE / 2 + 0.9, compact ? 'center' : 'top')}
@@ -280,6 +320,8 @@ interface SceneProps {
   exitCounts: { home: number; ward: number };
   selectedZone: number | null;
   onSelectZone: (zone: number) => void;
+  /** Zone the camera is focused on, or null for the fixed overview. */
+  focusZone: number | null;
 }
 
 const TEST_HOOKS = new URLSearchParams(window.location.search).has('fixture');
@@ -310,11 +352,11 @@ function MeshCounter() {
   return null;
 }
 
-function World({ scene, selectedZone, zoneStates, onSelectZone }: SceneProps) {
+function World({ scene, selectedZone, zoneStates, onSelectZone, view }: SceneProps & { view: CameraView }) {
   const reduced = usePrefersReducedMotion();
   return (
     <>
-      <CameraRig />
+      <CameraRig view={view} />
       <MeshCounter />
       <ambientLight intensity={1.7} />
       <directionalLight position={[8, 14, 6]} intensity={1.5} />
@@ -344,6 +386,8 @@ class SceneBoundary extends Component<
 }
 
 export function Scene(props: SceneProps) {
+  const reduced = usePrefersReducedMotion();
+  const view = useCameraView(props.focusZone, reduced);
   return (
     <SceneBoundary
       fallback={
@@ -352,15 +396,23 @@ export function Scene(props: SceneProps) {
         </div>
       }
     >
-      <div className="scene-canvas" style={{ position: 'relative' }} aria-hidden="true">
+      <div
+        className="scene-canvas"
+        style={{ position: 'relative' }}
+        aria-hidden="true"
+        data-camera={props.focusZone === null ? 'overview' : `zone-${props.focusZone}`}
+        data-camera-zoom={view.k.toFixed(2)}
+      >
         <Canvas orthographic flat dpr={[1, 2]} camera={{ near: 0.1, far: 200 }}>
-          <World {...props} />
+          <World {...props} view={view} />
         </Canvas>
         <LabelLayer
           counts={props.counts}
           areaCounts={props.areaCounts}
           zoneStates={props.zoneStates}
           exitCounts={props.exitCounts}
+          view={view}
+          focusZone={props.focusZone}
         />
       </div>
     </SceneBoundary>
