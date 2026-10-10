@@ -46,7 +46,7 @@ export function RoleSwitcher({
   return (
     <div className="meta">
       <label className="meta-label" htmlFor="demo-role">
-        Demo role
+        Viewing as
       </label>
       <select
         id="demo-role"

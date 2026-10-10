@@ -58,7 +58,7 @@ function usePrefersReducedMotion(): boolean {
 const OVERVIEW_TX = 3;
 /** The camera looks slightly toward the back so the ambulance road above zone 1 stays in frame. */
 const CAM_TZ = -2.2;
-const FOCUS_ZOOM = 1.9;
+const FOCUS_ZOOM = 1.45;
 const FOCUS_MS = 450;
 export interface CameraView {
   tx: number;

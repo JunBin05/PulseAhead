@@ -609,3 +609,157 @@ body {
     grid-area: auto;
   }
 }
+
+/* =====================================================================================
+   First-time-user polish: the pitch story, the alert popup, the splash, plain dock.
+   ===================================================================================== */
+.pitch-head h2 { font-size: var(--text-lg); font-weight: 700; margin: 0 0 2px; }
+.pitch-head p { margin: 0 0 var(--s-3); font-size: var(--text-sm); }
+
+.pitch-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+.pitch-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--glass-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  opacity: 0.6;
+  transition: opacity var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.pitch-step[data-state='now'] { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+.pitch-step[data-state='done'] { opacity: 1; }
+.pitch-step p { margin: 2px 0 0; font-size: var(--text-sm); }
+.pitch-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  border: 1px solid var(--line-strong);
+}
+.pitch-step[data-state='done'] .pitch-num { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pitch-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pitch-chips span {
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pitch-delays { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.pitch-delays li {
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--status-overload-ink);
+  background: rgba(230, 57, 70, 0.08);
+  border-radius: 0 8px 8px 0;
+  font-size: var(--text-sm);
+}
+.pitch-delays b { color: var(--ink); }
+.pitch-delays span { color: var(--ink-muted); }
+.pitch-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
+.pitch-actions .btn-hero { flex: 1 1 100%; }
+.pitch-wait, .pitch-note { font-size: var(--text-sm); margin: var(--s-2) 0 0; }
+.pitch-note { color: var(--status-pressure-ink); }
+.story-advanced { margin-top: var(--s-4); }
+.story-advanced > summary { color: var(--ink-muted); font-size: var(--text-sm); font-weight: 500; }
+
+/* The alert: the deck's navy card with the red ALERT pill. It waits for a click. */
+.alert-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: start center;
+  padding-top: 11vh;
+  background: rgba(4, 14, 30, 0.45);
+}
+.alert-popup {
+  width: min(520px, calc(100vw - 32px));
+  padding: var(--s-5);
+  color: #f2f8fb;
+  background: #0a2342;
+  border: 1px solid #3fbcc2;
+  border-radius: 20px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  animation: popup-in 260ms var(--ease);
+}
+@keyframes popup-in {
+  from { opacity: 0; transform: translateY(-14px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .alert-popup { animation: none; } }
+.alert-pill {
+  display: inline-block;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: #e63946;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.alert-popup h2 { margin: var(--s-3) 0 2px; font-size: 2rem; line-height: 1.15; font-weight: 700; }
+.alert-popup-where { margin: 0 0 var(--s-4); color: #9fe3e6; font-size: var(--text-md); }
+.alert-popup-fix {
+  display: grid;
+  gap: 2px;
+  padding: var(--s-3) var(--s-4);
+  border-radius: 12px;
+  background: #14386a;
+}
+.alert-popup-fix span { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #9fe3e6; }
+.alert-popup-fix strong { font-size: var(--text-lg); }
+.alert-popup-fix em { font-style: normal; color: #b9ccd8; font-size: var(--text-sm); }
+.alert-popup-points { margin: var(--s-4) 0; padding-left: 1.1em; display: grid; gap: 6px; color: #d7e6ee; font-size: var(--text-sm); }
+.alert-popup-buttons { display: flex; gap: var(--s-2); }
+.alert-popup-buttons .btn-hero { flex: 1 1 auto; }
+
+/* Splash before the demo starts */
+.splash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  width: min(520px, calc(100% - 48px));
+  text-align: center;
+  display: grid;
+  gap: var(--s-3);
+  justify-items: center;
+  padding: var(--s-6) var(--s-5);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 20px;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.splash h2 { margin: 0; font-size: 1.6rem; line-height: 1.2; font-weight: 700; }
+.splash p { margin: 0; color: var(--ink-muted); }
+.splash-mark { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
+.splash-buttons { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: center; }
+
+/* Dock: two plain lines, details folded */
+.dock-center { display: grid; align-content: start; gap: var(--s-2); padding: var(--s-3) var(--s-4); overflow: auto; background: var(--glass); border: 1px solid var(--glass-line); border-radius: 16px; }
+.dock-summary p { margin: 2px 0; font-size: var(--text-md); }
+.dock-summary .dock-local { font-weight: 650; }
+.dock-summary .btn { margin-top: var(--s-2); min-height: 36px; }
+.fc-more > summary { font-size: var(--text-sm); color: var(--ink-muted); }
+.dock-center .fc-strip { background: transparent; border: 0; padding: 0; margin-top: var(--s-2); }
+
+/* Less technical noise on the surface */
+.app--stage .scenario-line { display: none; }
+.app--stage .synthetic-chip { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.app--stage .alert-spine .btn { white-space: nowrap; }
+
+/* Nothing to control before the demo or a run has started. */
+.is-idle .stage-dock { display: none; }
+
+.dock-center { overflow: hidden; }
+.dock-center:has(details[open]) { overflow: auto; }

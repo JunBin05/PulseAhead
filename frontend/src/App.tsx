@@ -8,6 +8,7 @@ import {
   IconOverview,
   IconTriangle,
   IconUnknown,
+  IconPlay,
 } from './icons';
 import { ZONE_LOOK, type ZoneDisplay } from './status';
 import { ActionChip, ComparePanel, RoleSwitcher } from './Actions';
@@ -20,7 +21,8 @@ import { RunsPanel } from './panels/RunsPanel';
 import { RunBar } from './shell/RunBar';
 import { KpiRow } from './shell/KpiRow';
 import { Tabs } from './shell/Tabs';
-import { AlertSpine } from './shell/AlertSpine';
+import { AlertSpine, DockSummary } from './shell/AlertSpine';
+import { PitchStory } from './PitchStory';
 import {
   AlertList,
   ForecastStrip,
@@ -519,7 +521,7 @@ export function App() {
   const ageSec = lastValidAt ? Math.max(0, Math.round((Date.now() - lastValidAt) / 1000)) : null;
 
   return (
-    <div className="app app--stage">
+    <div className={`app app--stage ${snap ? 'is-live' : 'is-idle'}`}>
       <header className="app-header">
         <div className="brand-row">
           <h1 className="app-title">
@@ -609,16 +611,24 @@ export function App() {
               {
                 id: 'story',
                 label: 'Story',
-                content: <DemoBar ctl={demoCtl} kick={demoKick} />,
+                content: (
+                  <>
+                    <PitchStory ctl={demoCtl} kick={demoKick} />
+                    <details className="story-advanced">
+                      <summary>Full evidence walkthrough (for presenters)</summary>
+                      <DemoBar ctl={demoCtl} kick={0} />
+                    </details>
+                  </>
+                ),
               },
               {
                 id: 'resources',
-                label: 'Resources',
+                label: 'Now',
                 content: <ResourcesPanel snap={snap} />,
               },
               {
                 id: 'data',
-                label: 'Data',
+                label: 'Feeds',
                 content: (
                   <>
                     <AmbulancePanel snap={snap} />
@@ -718,6 +728,35 @@ export function App() {
                 </span>
               )}
             </div>
+            {!snap && (
+              <div className="splash" data-testid="splash">
+                <span className="splash-mark" aria-hidden="true">
+                  <svg viewBox="0 0 32 32" width="30" height="30">
+                    <path d="M2 17h7l3-8 5 15 4-11 2 4h7" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <h2>Know when the emergency department will overload</h2>
+                <p>
+                  A simulated hospital with made-up patients. PulseAhead warns early, says what is holding things up,
+                  and ranks what to fix first.
+                </p>
+                <div className="splash-buttons">
+                  <button
+                    className="btn btn-primary btn-hero"
+                    onClick={() => {
+                      setLeftTab('story');
+                      setDemoKick((k) => k + 1);
+                    }}
+                    data-testid="splash-demo"
+                  >
+                    <IconPlay /> Start the demo
+                  </button>
+                  <button className="btn" onClick={start} data-testid="splash-explore">
+                    Explore on my own
+                  </button>
+                </div>
+              </div>
+            )}
             {snap && (
               <AlertSpine
                 snap={snap}
@@ -740,7 +779,7 @@ export function App() {
             tabs={[
               {
                 id: 'zone',
-                label: 'Zone',
+                label: 'Zones',
                 content: (
                   <>
                   <div className="zone-bar" role="group" aria-label="Zones">
@@ -798,7 +837,7 @@ export function App() {
               },
               {
                 id: 'act',
-                label: 'Act',
+                label: 'Fixes',
                 content: (
                   <>
                     {snap && !compareOpen && (
@@ -856,7 +895,21 @@ export function App() {
         onReset={reset}
         playRef={playRef}
       />
-          <ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />
+          <div className="dock-center">
+            {snap && (
+              <DockSummary
+                snap={snap}
+                view={fcView}
+                onCompare={() => {
+                  openCompare();
+                }}
+              />
+            )}
+            <details className="fc-more">
+              <summary>How this forecast was made</summary>
+              <ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />
+            </details>
+          </div>
         </div>
       </main>
     </div>
