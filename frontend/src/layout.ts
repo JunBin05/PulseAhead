@@ -32,13 +32,22 @@ const AREAS: Record<Phase, Area> = {
   disposition_processing: { zone: 4, origin: [-2.1, -1.0], cols: 5, step: 0.85 },
 };
 
-export const AREA_LABELS: { zone: number; text: string; local: [number, number] }[] = [
-  { zone: 1, text: 'Triage queue', local: [0, -2.3] },
-  { zone: 2, text: 'Awaiting space', local: [0, -2.75] },
-  { zone: 2, text: 'Awaiting clinician', local: [0, -0.45] },
-  { zone: 2, text: 'With clinician', local: [0, 1.9] },
-  { zone: 4, text: 'Processing departure', local: [0, -2.3] },
-];
+const AREA_TEXT: Record<Phase, string> = {
+  arrival: 'Triage queue',
+  awaiting_space: 'Awaiting space',
+  awaiting_clinician: 'Awaiting clinician',
+  assessment_active: 'With clinician',
+  disposition_processing: 'Processing departure',
+};
+
+// Each label starts just behind the first dot of its own row and stays on its own platform. Rows
+// run down-right on screen, so the row's dots stay below the left-aligned text.
+export const AREA_LABELS: { zone: number; text: string; local: [number, number] }[] = (
+  Object.keys(AREAS) as Phase[]
+).map((phase) => {
+  const a = AREAS[phase];
+  return { zone: a.zone, text: AREA_TEXT[phase], local: [a.origin[0], a.origin[1] - 0.9] };
+});
 
 export interface DotTarget {
   id: string;

@@ -45,7 +45,7 @@ PHASE_ZONE = {
 }
 
 
-def _tri(rng: random.Random, spec: dict[str, float]) -> float:
+def _triangular(rng: random.Random, spec: dict[str, float]) -> float:
     return rng.triangular(spec["min"], spec["max"], spec["mode"])
 
 
@@ -60,6 +60,8 @@ class Patient:
     phase: str = "arrival"
     phase_since_min: float = 0.0
     has_space: bool = False
+    space_id: str | None = None
+    clinician_id: str | None = None
     first_assessment_min: float | None = None
     decision_min: float | None = None
     departure_min: float | None = None
@@ -71,6 +73,8 @@ class Patient:
             "phase": self.phase,
             "zone": PHASE_ZONE[self.phase],
             "has_space": self.has_space,
+            "space_id": self.space_id,
+            "clinician_id": self.clinician_id,
             "phase_since_min": round(self.phase_since_min, 2),
             "minutes_in_phase": round(now - self.phase_since_min, 2),
             "arrival_min": round(self.arrival_min, 2),
@@ -143,6 +147,10 @@ class EDEngine:
         self.env = simpy.Environment()
         self.spaces = simpy.PriorityResource(self.env, capacity=PROFILE["regular_spaces"])
         self.clinicians = simpy.PriorityResource(self.env, capacity=PROFILE["clinician_slots"])
+        # Named units so events and state can say which space and clinician slot a patient holds.
+        # Always the lowest free id, so allocation is deterministic for a seed.
+        self.free_spaces = [f"S{i:02d}" for i in range(1, PROFILE["regular_spaces"] + 1)]
+        self.free_clinicians = [f"C{i}" for i in range(1, PROFILE["clinician_slots"] + 1)]
         self.patients: dict[str, Patient] = {}
         self.events: list[dict[str, Any]] = []
         self.departed_count = 0
@@ -159,8 +167,15 @@ class EDEngine:
         return float(self.env.now)
 
     def run_until(self, t: float) -> None:
+        """Process every event scheduled at or before t.
+
+        `env.run(until=t)` stops before events scheduled exactly at t (such as the per-minute
+        congestion tick), which would show them one advance late.
+        """
         if t > self.env.now:
             self.env.run(until=t)
+        while self.env.peek() <= t:
+            self.env.step()
 
     # -- derived resource state ----------------------------------------------------------
     def occupied_spaces(self) -> int:
@@ -173,7 +188,13 @@ class EDEngine:
         return len(self.spaces.queue)
 
     # -- events --------------------------------------------------------------------------
-    def _emit(self, etype: str, patient_id: str | None, payload: dict[str, Any]) -> None:
+    def _emit(
+        self,
+        etype: str,
+        patient_id: str | None,
+        payload: dict[str, Any],
+        resources: dict[str, str | None] | None = None,
+    ) -> None:
         self.events.append(
             {
                 "id": f"E{len(self.events) + 1:06d}",
@@ -181,9 +202,15 @@ class EDEngine:
                 "event_time_min": round(self.now, 3),
                 "received_time_min": round(self.now, 3),
                 "patient_id": patient_id,
+                "resources": resources or {},
                 "payload": payload,
             }
         )
+
+    @staticmethod
+    def _take(pool: list[str]) -> str:
+        pool.sort()
+        return pool.pop(0)
 
     def _set_phase(self, p: Patient, phase: str) -> None:
         previous = p.phase
@@ -198,24 +225,21 @@ class EDEngine:
                 "zone": PHASE_ZONE[phase],
                 "has_space": p.has_space,
             },
+            {"ed_space": p.space_id, "clinician_slot": p.clinician_id},
         )
 
     # -- processes -----------------------------------------------------------------------
+    def _base_rate_per_min(self) -> float:
+        return PROFILE["assumptions"]["arrival_rate_per_hour_average"] / 60.0 * self._rate_mult
+
     def _rate_per_min(self, t: float) -> float:
-        a = PROFILE["assumptions"]
-        base = a["arrival_rate_per_hour_average"] / 60.0
+        variation = PROFILE["assumptions"]["arrival_rate_variation"]
         # Slow daily wave around the average, peaking mid-shift (demo assumption).
-        wave = 1.0 + a["arrival_rate_variation"] * math.sin(2 * math.pi * (t / 60.0 - 4.0) / 24.0)
-        return base * wave * self._rate_mult
+        wave = 1.0 + variation * math.sin(2 * math.pi * (t / 60.0 - 4.0) / 24.0)
+        return self._base_rate_per_min() * wave
 
     def _arrivals(self):
-        a = PROFILE["assumptions"]
-        max_rate = (
-            a["arrival_rate_per_hour_average"]
-            / 60.0
-            * (1 + a["arrival_rate_variation"])
-            * self._rate_mult
-        )
+        max_rate = self._base_rate_per_min() * (1 + PROFILE["assumptions"]["arrival_rate_variation"])
         while True:
             yield self.env.timeout(self._arrival_rng.expovariate(max_rate))
             # Thinning for a time-varying rate.
@@ -238,9 +262,9 @@ class EDEngine:
             id=pid,
             urgency=urgency,
             arrival_min=self.now,
-            triage_min=_tri(rng, a["triage_dwell_minutes"]),
-            work_min=_tri(rng, a["active_assessment_minutes"]),
-            disposition_min=_tri(rng, a["disposition_processing_minutes"]),
+            triage_min=_triangular(rng, a["triage_dwell_minutes"]),
+            work_min=_triangular(rng, a["active_assessment_minutes"]),
+            disposition_min=_triangular(rng, a["disposition_processing_minutes"]),
             phase_since_min=self.now,
         )
         self.patients[pid] = p
@@ -258,22 +282,29 @@ class EDEngine:
         space_req = self.spaces.request(priority=rank)
         yield space_req
         p.has_space = True
+        p.space_id = self._take(self.free_spaces)
         self._set_phase(p, "awaiting_clinician")
         clin_req = self.clinicians.request(priority=rank)
         yield clin_req
+        p.clinician_id = self._take(self.free_clinicians)
         p.first_assessment_min = self.now
         self._set_phase(p, "assessment_active")
         yield self.env.timeout(p.work_min)
         self.clinicians.release(clin_req)
+        self.free_clinicians.append(p.clinician_id)
+        p.clinician_id = None
         p.decision_min = self.now
         self._set_phase(p, "disposition_processing")
         yield self.env.timeout(p.disposition_min)
         # Physical departure: the only point where the ED space is released.
         self.spaces.release(space_req)
+        self.free_spaces.append(p.space_id)
         p.has_space = False
         p.departure_min = self.now
         self.departed_count += 1
+        # The departure event names the space it released.
         self._set_phase(p, "departed")
+        p.space_id = None
 
     def _monitor_loop(self):
         while True:

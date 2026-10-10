@@ -15,6 +15,8 @@
 
   /* Accent: primary actions and current selection only */
   --accent: #0a6680;
+  --accent-hover: #085469;
+  --accent-pressed: #064557;
   --accent-ink: #ffffff;
   --accent-soft: #dcecf1;
   --focus: #0a6680;
@@ -37,7 +39,7 @@
   /* Scene */
   --scene-ground: #e4eaef;
   --scene-platform: #f8fafb;
-  --scene-platform-edge: #c4ced7;
+  --scene-platform-edge: #b3bec8;
   --scene-selected: #0a6680;
 
   /* Type: system stack, fixed rem scale (ratio ~1.15) */

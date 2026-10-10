@@ -1,0 +1,289 @@
+{
+ "base": "http://127.0.0.1:8000",
+ "at": "2026-10-10T12:12:38.066Z",
+ "checks": {
+  "firstStart": {
+   "header": "Simulation Window PulseAhead ED operational twin Synthetic demo Simulated time T+00:00 Demo role ED shift coordinator Overall status Not started",
+   "afterStart": {
+    "time": "T+00:00",
+    "version": 1,
+    "status": "Stable",
+    "replayId": "feb4326dd272"
+   },
+   "zoneButtons": [
+    "Zone 1 Arrival and triage 0 patients",
+    "Zone 2 Doctor assessment 0 patients",
+    "Zone 3 Diagnostics and testing 0 patients",
+    "Zone 4 Disposition 0 patients"
+   ],
+   "sceneLabels": [
+    "1 · Arrival and triage · 0",
+    "2 · Doctor assessment · 0",
+    "3 · Diagnostics and testing · 0",
+    "4 · Disposition · 0",
+    "Triage queue",
+    "Awaiting space",
+    "Awaiting clinician",
+    "With clinician",
+    "Processing departure",
+    "Not modeled yet",
+    "Home",
+    "Ward / ICU"
+   ]
+  },
+  "counts": {
+   "ui": {
+    "time": "T+02:00",
+    "version": 25,
+    "dots": 4,
+    "meshes": 4,
+    "z": [
+     0,
+     1,
+     0,
+     3
+    ],
+    "zoneBtn": [
+     0,
+     1,
+     0,
+     3
+    ],
+    "occupied": 4,
+    "inEd": 4,
+    "departed": 10
+   },
+   "api": {
+    "version": 25,
+    "sim": 120,
+    "inEd": 4,
+    "zones": [
+     0,
+     1,
+     0,
+     3
+    ],
+    "occupied": 4,
+    "departed": 10,
+    "patients": 4
+   },
+   "occupiedFromEvents": 4,
+   "eventProblems": [],
+   "exportVersion": 25,
+   "exportEvents": 79,
+   "eventsTotal": 79,
+   "agree": true
+  },
+  "patientJourney": {
+   "patient": "P0001",
+   "events": [
+    {
+     "t": 6.636,
+     "to": "arrival",
+     "space": null,
+     "clin": null
+    },
+    {
+     "t": 10.242,
+     "to": "awaiting_space",
+     "space": null,
+     "clin": null
+    },
+    {
+     "t": 10.242,
+     "to": "awaiting_clinician",
+     "space": "S01",
+     "clin": null
+    },
+    {
+     "t": 10.242,
+     "to": "assessment_active",
+     "space": "S01",
+     "clin": "C1"
+    },
+    {
+     "t": 23.692,
+     "to": "disposition_processing",
+     "space": "S01",
+     "clin": null
+    },
+    {
+     "t": 33.694,
+     "to": "departed",
+     "space": "S01",
+     "clin": null
+    }
+   ],
+   "exportRow": {
+    "patient_id": "P0001",
+    "urgency": "medium",
+    "arrival_min": 6.636,
+    "first_assessment_min": 10.242,
+    "decision_min": 23.692,
+    "departure_min": 33.694
+   }
+  },
+  "drawer": {
+   "heading": "Zone 2 · Doctor assessment",
+   "roster": [
+    "P0014 With a clinician · Space S02 · Clinician slot C2 Medium urgency"
+   ]
+  },
+  "playPause": {
+   "speeds": {
+    "2": {
+     "simMinutes": 10,
+     "wallSec": 5.025,
+     "perSec": 1.99
+    },
+    "10": {
+     "simMinutes": 50,
+     "wallSec": 5.024,
+     "perSec": 9.95
+    }
+   },
+   "pausedVersionBefore": 85,
+   "pausedVersionAfter2s": 85
+  },
+  "staleAndReset": {
+   "beforeStale": {
+    "time": "T+03:00",
+    "version": 85
+   },
+   "ui": {
+    "time": "T+00:00",
+    "version": 86,
+    "dots": "0",
+    "meshes": "0",
+    "inEd": "0",
+    "departed": "0"
+   },
+   "backend": {
+    "version": 86,
+    "sim": 0,
+    "run": 2,
+    "patients": 0
+   },
+   "lateAdvanceStatus": [
+    409
+   ],
+   "nextStep": {
+    "time": "T+00:05",
+    "version": 87
+   }
+  },
+  "errorPath": {
+   "lastGood": {
+    "time": "T+00:05",
+    "version": 87
+   },
+   "bannerText": "The simulation service is not reachable. Showing the last valid state from T+00:05, received Ns ago. It may be out of date. Retry",
+   "timeShown": "T+00:05",
+   "afterRetry": {
+    "bannerGone": true,
+    "time": "T+00:05",
+    "version": 87
+   }
+  },
+  "keyboard": [
+   [
+    "focus",
+    "start",
+    "solid 2.4px"
+   ],
+   [
+    "after Enter on Start, focus",
+    "play-pause"
+   ],
+   [
+    "3x Space on",
+    "step",
+    "time",
+    "T+00:15"
+   ],
+   [
+    "play/pause by keyboard, pressed",
+    "false",
+    "version",
+    6
+   ],
+   [
+    "tab order",
+    "step > speed-1 > speed-2 > speed-5 > speed-10 > reset > zone-1 > zone-2 > zone-3 > zone-4"
+   ],
+   [
+    "zone 2 by keyboard",
+    "2"
+   ]
+  ],
+  "widths": {
+   "375": {
+    "horizontalScroll": false,
+    "labels": 6,
+    "overlaps": 0,
+    "clipped": 0,
+    "targetsUnder44": 0
+   },
+   "768": {
+    "horizontalScroll": false,
+    "labels": 6,
+    "overlaps": 0,
+    "clipped": 0,
+    "targetsUnder44": 0
+   },
+   "1024": {
+    "horizontalScroll": false,
+    "labels": 12,
+    "overlaps": 0,
+    "clipped": 0,
+    "targetsUnder44": 0
+   },
+   "1440": {
+    "horizontalScroll": false,
+    "labels": 12,
+    "overlaps": 0,
+    "clipped": 0,
+    "targetsUnder44": 0
+   }
+  },
+  "sameOrigin": {
+   "root": "200 text/html; charset=utf-8",
+   "deepLink": "200 text/html; charset=utf-8",
+   "unknownApi": "404 application/json",
+   "health": "200 application/json"
+  },
+  "pending": {
+   "shownBefore500ms": 0,
+   "at950ms": "Waiting for the simulation service. Showing the state from T+00:00, received 1s ago.",
+   "at2050ms": "Waiting for the simulation service. Showing the state from T+00:00, received 2s ago.",
+   "goneAfter": true,
+   "time": "T+00:05"
+  },
+  "liveAge": {
+   "first": "0",
+   "afterWait": "2"
+  },
+  "canvasToggle": {
+   "afterFirstCanvasClick": [
+    2
+   ],
+   "afterSecondCanvasClick": []
+  },
+  "determinism": {
+   "events": 65,
+   "identical": true
+  }
+ },
+ "console": [
+  "warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.",
+  "error: Failed to load resource: the server responded with a status of 409 (Conflict)",
+  "error: Failed to load resource: net::ERR_CONNECTION_REFUSED",
+  "warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.",
+  "error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+ ],
+ "httpErrors": [
+  "409 /api/v1/replays/feb4326dd272/advance",
+  "404 /api/v1/nope"
+ ],
+ "note": "Second full run after code-review fixes; every other value is identical to the first run. Console/HTTP errors are the deliberately injected 409, aborted connections and unknown-API 404."
+}

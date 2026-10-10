@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api';
 import { buildScene } from './layout';
 import { Scene } from './Scene';
@@ -12,7 +12,7 @@ import {
   IconTriangle,
   IconUnknown,
 } from './icons';
-import { ZONE_NAMES, type Phase, type Snapshot, type Urgency } from './types';
+import { ZONE_NAMES, type CongestionState, type Phase, type Snapshot, type Urgency } from './types';
 
 const SPEEDS = [1, 2, 5, 10] as const;
 const STEP_MINUTES = 5;
@@ -46,35 +46,32 @@ function formatClock(min: number): string {
   return `T+${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function patientCount(n: number): string {
+  return `${n} ${n === 1 ? 'patient' : 'patients'}`;
+}
+
 type Conn =
   | { state: 'idle' }
   | { state: 'pending'; lastValidAt: number | null }
   | { state: 'ok'; lastValidAt: number }
   | { state: 'error'; message: string; lastValidAt: number | null };
 
+const lastValid = (c: Conn): number | null => ('lastValidAt' in c ? c.lastValidAt : null);
+
+/** Slow requests show a pending banner only after this delay, so normal playback does not flicker. */
+const PENDING_AFTER_MS = 500;
+
+const STATUS_LOOK: Record<CongestionState, { tone: string; icon: ReactNode }> = {
+  stable: { tone: 'normal', icon: <IconCheck /> },
+  building: { tone: 'pressure', icon: <IconTriangle /> },
+  confirmed: { tone: 'overload', icon: <IconOctagon /> },
+};
+
 function StatusBadge({ snap }: { snap: Snapshot | null }) {
-  let tone: 'normal' | 'pressure' | 'overload' | 'unknown' = 'unknown';
-  let label = 'Not started';
-  let icon = <IconUnknown />;
-  if (snap) {
-    switch (snap.overall_status.state) {
-      case 'stable':
-        tone = 'normal';
-        label = 'Stable';
-        icon = <IconCheck />;
-        break;
-      case 'building':
-        tone = 'pressure';
-        label = 'Building congestion';
-        icon = <IconTriangle />;
-        break;
-      case 'confirmed':
-        tone = 'overload';
-        label = 'Congested';
-        icon = <IconOctagon />;
-        break;
-    }
-  }
+  // The label text comes from the backend; only tone and icon are chosen here.
+  const look = snap ? STATUS_LOOK[snap.overall_status.state] : { tone: 'unknown', icon: <IconUnknown /> };
+  const label = snap ? snap.overall_status.label : 'Not started';
+  const { tone, icon } = look;
   return (
     <div className="meta">
       <span className="meta-label">Overall status</span>
@@ -93,11 +90,16 @@ export function App() {
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(2);
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const [, setClock] = useState(0);
 
   const idRef = useRef<string | null>(null);
   const versionRef = useRef(0);
   const busyRef = useRef(false);
   const epochRef = useRef(0);
+  const requestRef = useRef(0);
+  const playRef = useRef<HTMLButtonElement>(null);
+  const focusPlayRef = useRef(false);
 
   const apply = useCallback((s: Snapshot) => {
     // Discard anything older than what is already shown for the same replay.
@@ -114,18 +116,25 @@ export function App() {
     setConn((c) => ({
       state: 'error',
       message,
-      lastValidAt: c.state === 'ok' ? c.lastValidAt : 'lastValidAt' in c ? c.lastValidAt : null,
+      lastValidAt: lastValid(c),
     }));
   }, []);
 
-  const lastValid = (c: Conn): number | null => ('lastValidAt' in c ? c.lastValidAt : null);
-
+  /**
+   * Runs one command. A second command is ignored while one is in flight, unless `override` is
+   * set (start, reset): those bump the epoch so the older response is discarded when it lands.
+   * Only the latest request clears the busy and pending flags.
+   */
   const run = useCallback(
-    async (work: () => Promise<Snapshot>) => {
-      if (busyRef.current) return;
+    async (work: () => Promise<Snapshot>, override = false) => {
+      if (busyRef.current && !override) return;
       busyRef.current = true;
       setBusy(true);
       const epoch = epochRef.current;
+      const request = ++requestRef.current;
+      const slowTimer = window.setTimeout(() => {
+        if (requestRef.current === request) setSlow(true);
+      }, PENDING_AFTER_MS);
       setConn((c) => ({ state: 'pending', lastValidAt: lastValid(c) }));
       try {
         const s = await work();
@@ -133,26 +142,39 @@ export function App() {
       } catch (e) {
         if (epochRef.current === epoch) fail(e);
       } finally {
-        busyRef.current = false;
-        setBusy(false);
+        window.clearTimeout(slowTimer);
+        if (requestRef.current === request) {
+          busyRef.current = false;
+          setBusy(false);
+          setSlow(false);
+        }
       }
     },
     [apply, fail],
   );
 
   const start = useCallback(() => {
+    // The Start button is replaced by Play; keep keyboard focus on the controls.
+    focusPlayRef.current = document.activeElement?.getAttribute('data-testid') === 'start';
     epochRef.current += 1;
     idRef.current = null;
     versionRef.current = 0;
     setSelectedZone(null);
-    void run(() => api.create());
+    void run(() => api.create(), true);
   }, [run]);
 
   const advance = useCallback(
     (minutes: number) => {
       const id = idRef.current;
       if (!id) return Promise.resolve();
-      return run(() => api.advance(id, minutes));
+      const expected = versionRef.current;
+      return run(() =>
+        api.advance(id, minutes, expected).catch((e) => {
+          // Someone else moved this replay; show its current state instead of guessing.
+          if (e instanceof ApiError && e.status === 409) return api.state(id);
+          throw e;
+        }),
+      );
     },
     [run],
   );
@@ -168,8 +190,7 @@ export function App() {
     setPlaying(false);
     setSelectedZone(null);
     epochRef.current += 1;
-    busyRef.current = false;
-    void run(() => api.reset(id));
+    void run(() => api.reset(id), true);
   }, [run]);
 
   // Playback: each tick asks the backend to advance one simulated minute. Rendering speed never
@@ -178,17 +199,43 @@ export function App() {
     if (!playing || !snap) return;
     let cancelled = false;
     let timer = 0;
+    const interval = 1000 / speed;
+    const startedAt = performance.now();
+    let ticks = 0;
     const tick = async () => {
       if (cancelled) return;
       await advance(1);
-      if (!cancelled) timer = window.setTimeout(tick, 1000 / speed);
+      ticks += 1;
+      // Schedule against a fixed start so request time and timer delay do not accumulate.
+      const wait = Math.max(0, startedAt + (ticks + 1) * interval - performance.now());
+      if (!cancelled) timer = window.setTimeout(tick, wait);
     };
-    timer = window.setTimeout(tick, 1000 / speed);
+    timer = window.setTimeout(tick, interval);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
   }, [playing, speed, snap?.replay_id, advance]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (snap && focusPlayRef.current) {
+      focusPlayRef.current = false;
+      playRef.current?.focus();
+    }
+  }, [snap]);
+
+  // Keep the "received Ns ago" age current while a stale-state banner is showing.
+  const showingStale = conn.state === 'error' || slow;
+  useEffect(() => {
+    if (!showingStale) return;
+    const t = window.setInterval(() => setClock((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [showingStale]);
+
+  const toggleZone = useCallback(
+    (z: number) => setSelectedZone((cur) => (cur === z ? null : z)),
+    [],
+  );
 
   const scene = useMemo(() => buildScene(snap), [snap]);
   const zoneCounts = scene.perZone;
@@ -247,6 +294,13 @@ export function App() {
             Starting the simulation…
           </div>
         )}
+        {conn.state === 'pending' && slow && snap && (
+          <div className="banner" data-tone="pending" data-testid="conn-pending">
+            Waiting for the simulation service. Showing the state from{' '}
+            {formatClock(snap.sim_time_min)}
+            {ageSec !== null ? `, received ${ageSec}s ago` : ''}.
+          </div>
+        )}
       </div>
 
       <main className="workspace">
@@ -265,7 +319,6 @@ export function App() {
                 <button
                   className="btn btn-primary btn-block"
                   onClick={start}
-                  disabled={busy}
                   data-testid="start"
                 >
                   <IconPlay /> Start simulation
@@ -275,6 +328,7 @@ export function App() {
               <>
                 <div className="btn-row">
                   <button
+                    ref={playRef}
                     className="btn btn-primary"
                     onClick={() => setPlaying((p) => !p)}
                     aria-pressed={playing}
@@ -287,7 +341,9 @@ export function App() {
                   <button
                     className="btn"
                     onClick={() => void advance(STEP_MINUTES)}
-                    disabled={playing || busy}
+                    // Not disabled while a request is in flight: that would drop keyboard focus.
+                    // `run` already ignores a second command until the first one returns.
+                    disabled={playing}
                     data-testid="step"
                     title={`Advance ${STEP_MINUTES} simulated minutes`}
                   >
@@ -395,7 +451,7 @@ export function App() {
               scene={scene}
               counts={zoneCounts}
               selectedZone={selectedZone}
-              onSelectZone={setSelectedZone}
+              onSelectZone={toggleZone}
             />
             {scene.overflow > 0 && (
               <div className="overflow-note" data-testid="overflow">
@@ -408,13 +464,13 @@ export function App() {
                   key={z}
                   className="zone-btn"
                   aria-pressed={selectedZone === z}
-                  onClick={() => setSelectedZone((cur) => (cur === z ? null : z))}
+                  onClick={() => toggleZone(z)}
                   data-testid={`zone-${z}`}
                 >
                   <span className="zone-num">Zone {z}</span>
                   <span className="zone-name">{ZONE_NAMES[z]}</span>
                   <span className="zone-count" data-testid={`zone-${z}-count`}>
-                    {snap ? snap.zones.find((q) => q.id === z)?.patient_count : 0} patients
+                    {patientCount(snap ? snap.zones.find((q) => q.id === z)?.patient_count ?? 0 : 0)}
                   </span>
                 </button>
               ))}
@@ -495,7 +551,11 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
             {patients.map((p) => (
               <li key={p.id}>
                 <strong>{p.id}</strong>
-                <span>{PHASE_LABEL[p.phase]}</span>
+                <span>
+                  {PHASE_LABEL[p.phase]}
+                  {p.space_id && ` · Space ${p.space_id}`}
+                  {p.clinician_id && ` · Clinician slot ${p.clinician_id}`}
+                </span>
                 <span className="tag">{URGENCY_LABEL[p.urgency]}</span>
               </li>
             ))}

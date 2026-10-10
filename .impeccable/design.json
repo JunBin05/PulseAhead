@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-10T12:10:00Z",
+  "title": "Design System: PulseAhead",
+  "extensions": {
+    "colorMeta": {
+      "accent": { "role": "primary", "displayName": "Deep Clinical Teal", "canonical": "#0a6680", "tonalRamp": ["#04232c", "#064557", "#085469", "#0a6680", "#3d8aa0", "#7fb3c3", "#c2dde5", "#e8f3f6"] },
+      "accent-soft": { "role": "primary", "displayName": "Clinical Teal Wash", "canonical": "#dcecf1" },
+      "ground": { "role": "neutral", "displayName": "Charge Desk Ground", "canonical": "#f2f5f7", "tonalRamp": ["#15202b", "#2b3843", "#46535f", "#5c6874", "#b4bfca", "#d3dae1", "#e9eef2", "#f2f5f7"] },
+      "surface": { "role": "neutral", "displayName": "Clean Sheet White", "canonical": "#ffffff" },
+      "surface-sunken": { "role": "neutral", "displayName": "Recessed Tray", "canonical": "#e9eef2" },
+      "line": { "role": "neutral", "displayName": "Hairline", "canonical": "#d3dae1" },
+      "line-strong": { "role": "neutral", "displayName": "Firm Hairline", "canonical": "#b4bfca" },
+      "ink": { "role": "neutral", "displayName": "Chart Ink", "canonical": "#15202b" },
+      "ink-muted": { "role": "neutral", "displayName": "Muted Ink", "canonical": "#46535f" },
+      "ink-faint": { "role": "neutral", "displayName": "Faint Ink", "canonical": "#5c6874" },
+      "status-normal-ink": { "role": "status", "displayName": "Stable Green", "canonical": "#14663e" },
+      "status-pressure-ink": { "role": "status", "displayName": "Pressure Amber", "canonical": "#7a4d00" },
+      "status-overload-ink": { "role": "status", "displayName": "Overload Red", "canonical": "#a4231a" },
+      "status-unknown-ink": { "role": "status", "displayName": "Unknown Slate", "canonical": "#44505b" },
+      "urgency-urgent": { "role": "data", "displayName": "Urgent dot", "canonical": "#b4281f" },
+      "urgency-medium": { "role": "data", "displayName": "Medium urgency dot", "canonical": "#b8700a" },
+      "urgency-lower": { "role": "data", "displayName": "Lower urgency dot", "canonical": "#1f6f8f" },
+      "scene-ground": { "role": "neutral", "displayName": "Scene Floor", "canonical": "#e4eaef" },
+      "scene-platform": { "role": "neutral", "displayName": "Platform White", "canonical": "#f8fafb" },
+      "scene-platform-edge": { "role": "neutral", "displayName": "Platform Edge", "canonical": "#b3bec8" }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "\"Simulation Window\" in the header only." },
+      "headline": { "displayName": "Headline", "purpose": "Panel headings and the status badge label." },
+      "body": { "displayName": "Body", "purpose": "Running text and key/value lists, tabular numerals." },
+      "label": { "displayName": "Label", "purpose": "Meta labels, field labels, zone numbers, scene labels, tags." }
+    },
+    "shadows": [
+      { "name": "panel-lift", "value": "0 1px 2px rgba(21,32,43,.06), 0 4px 14px rgba(21,32,43,.06)", "purpose": "Every panel and the scene frame, at rest only. The only shadow." }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Background and border transitions on buttons and zone buttons." },
+      { "name": "dur", "value": "180ms", "purpose": "Default state-transition duration; removed under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "two-column", "value": "1180px" },
+      { "name": "one-column", "value": "760px" },
+      { "name": "compact-scene-labels", "value": "560px canvas width" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Start and Play/Pause. Teal, white text, 44px.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 3l9 5-9 5z\" fill=\"currentColor\"/></svg>Play</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid #0a6680;background:#0a6680;color:#fff;font:600 0.875rem system-ui,sans-serif;cursor:pointer;transition:background 180ms cubic-bezier(0.22,1,0.36,1)}.ds-btn-primary:hover{background:#085469}.ds-btn-primary:active{background:#064557}.ds-btn-primary:focus-visible{outline:3px solid #0a6680;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Step and Reset. White with a firm hairline outline.",
+      "html": "<button class=\"ds-btn-secondary\">Step 5 min</button>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid #b4bfca;background:#fff;color:#15202b;font:600 0.875rem system-ui,sans-serif;cursor:pointer;transition:background 180ms cubic-bezier(0.22,1,0.36,1)}.ds-btn-secondary:hover{background:#e9eef2}.ds-btn-secondary:active{background:#d3dae1}.ds-btn-secondary:focus-visible{outline:3px solid #0a6680;outline-offset:2px}"
+    },
+    {
+      "name": "Segmented Speed Control",
+      "kind": "custom",
+      "refersTo": "segmented-option-selected",
+      "description": "Four equal options; selected gets the teal wash and underline.",
+      "html": "<div class=\"ds-seg\"><button>1×</button><button aria-pressed=\"true\">2×</button><button>5×</button><button>10×</button></div>",
+      "css": ".ds-seg{display:flex;border:1px solid #b4bfca;border-radius:8px;overflow:hidden;font:600 0.875rem system-ui,sans-serif}.ds-seg button{flex:1;min-height:44px;border:0;border-right:1px solid #d3dae1;background:#fff;color:#15202b;font:inherit;cursor:pointer}.ds-seg button:last-child{border-right:0}.ds-seg button:hover{background:#e9eef2}.ds-seg button[aria-pressed=true]{background:#dcecf1;color:#0a6680;box-shadow:inset 0 -3px 0 #0a6680}.ds-seg button:focus-visible{outline:3px solid #0a6680;outline-offset:-3px}"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge-normal",
+      "description": "Overall status: icon + label on its ink/tint pair.",
+      "html": "<span class=\"ds-status\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"10\" r=\"8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"/><path d=\"M6.5 10.2l2.3 2.3 4.7-4.8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"/></svg>Stable</span>",
+      "css": ".ds-status{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:8px;font:650 1rem system-ui,sans-serif;color:#14663e;background:#e0f1e7;border:1px solid rgba(20,102,62,.3)}"
+    },
+    {
+      "name": "Zone Button",
+      "kind": "card",
+      "refersTo": "zone-button-selected",
+      "description": "Keyboard twin of a scene platform; toggles the zone drawer.",
+      "html": "<button class=\"ds-zone\" aria-pressed=\"true\"><span class=\"n\">Zone 2</span><span class=\"t\">Doctor assessment</span><span class=\"n\">2 patients</span></button>",
+      "css": ".ds-zone{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:44px;padding:8px 12px;text-align:left;border:1px solid #b4bfca;border-radius:8px;background:#fff;color:#15202b;font:0.875rem system-ui,sans-serif;cursor:pointer;transition:background 180ms cubic-bezier(0.22,1,0.36,1)}.ds-zone:hover{background:#e9eef2}.ds-zone[aria-pressed=true]{border-color:#0a6680;background:#dcecf1;box-shadow:inset 0 0 0 1px #0a6680}.ds-zone .n{font-size:.75rem;color:#46535f;font-weight:600}.ds-zone .t{font-weight:650}.ds-zone:focus-visible{outline:3px solid #0a6680;outline-offset:2px}"
+    },
+    {
+      "name": "Synthetic Demo Chip",
+      "kind": "chip",
+      "refersTo": "synthetic-chip",
+      "description": "Persistent honesty label in the header.",
+      "html": "<span class=\"ds-chip\">Synthetic demo</span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;min-height:32px;padding:4px 12px;border:1px solid #b4bfca;border-radius:999px;background:#e9eef2;color:#15202b;font:600 0.875rem system-ui,sans-serif}"
+    },
+    {
+      "name": "Panel with key/value list",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Side panel: heading plus right-aligned tabular values.",
+      "html": "<section class=\"ds-panel\"><h2>ED resources</h2><dl><dt>Available staffed spaces</dt><dd>21 of 24</dd><dt>Occupied spaces</dt><dd>3</dd></dl></section>",
+      "css": ".ds-panel{background:#fff;border:1px solid #d3dae1;border-radius:8px;box-shadow:0 1px 2px rgba(21,32,43,.06),0 4px 14px rgba(21,32,43,.06);padding:16px;font:0.875rem/1.45 system-ui,sans-serif;color:#15202b;font-variant-numeric:tabular-nums}.ds-panel h2{font-size:1rem;font-weight:650;margin:0 0 12px}.ds-panel dl{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:0}.ds-panel dt{color:#46535f}.ds-panel dd{margin:0;font-weight:650;text-align:right}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Charge Desk",
+    "overview": "PulseAhead is the calm, well-lit station a shift coordinator stands at to read the whole floor at a glance. Surfaces are light and cool-neutral, and most of the screen is quiet on purpose. The eye goes to the one place where flow is stuck: a status badge, a queue count, or a cluster of dots in the scene. Status is always spoken plainly in words, with an icon, and never by colour alone. Density is operational, not editorial. A three-column workspace holds controls and feeds on the left, the isometric four-zone scene in the centre, and the selected-zone drawer on the right. Numbers use tabular figures and sit right-aligned in key/value lists, so a coordinator can compare them down a column. Exactly one accent, Deep Clinical Teal, marks primary actions and the current selection, and nothing else. The 3D scene is a simple isometric diagram, not a realistic hospital. Flat pale platforms with hairline edges, small coloured patient dots and DOM labels carry the meaning. Depth exists only to show four zones in sequence.",
+    "keyCharacteristics": [
+      "Light, cool-neutral ground with white panels; one teal accent.",
+      "Status always uses text, an icon and a tint together.",
+      "System font stack, a compact type scale and tabular numerals.",
+      "44px minimum targets on every control; a visible 3px teal focus ring.",
+      "A simple isometric scene; its labels are DOM text, so they stay readable at any zoom."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Teal means \"action or current selection\". It never signals status, urgency or decoration.", "section": "colors" },
+      { "name": "The Never Colour Alone Rule", "body": "Every status or urgency colour is paired with text and an icon or size difference. A screen read in greyscale must lose no meaning.", "section": "colors" },
+      { "name": "The Tabular Count Rule", "body": "Every number a coordinator compares (counts, spaces, times) uses tabular numerals and sits in a consistent, right-aligned column.", "section": "typography" },
+      { "name": "The Flat Panel Rule", "body": "One shadow value, used at rest only. State changes use fill and border, never extra elevation.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do show every status with text, an icon and its ink/tint pair together.",
+      "Do keep every interactive target at least 44px and keep the 3px teal focus ring visible.",
+      "Do right-align numbers in key/value lists, using tabular numerals.",
+      "Do place scene labels on their own platform and check them for overlap at 375 and 1440px.",
+      "Do keep the \"Synthetic demo\" chip in the header on every screen."
+    ],
+    "donts": [
+      "Don't use teal for status, urgency or decoration.",
+      "Don't add a second shadow or deeper elevation for hover or selection.",
+      "Don't put configuration or dense controls inside the 3D scene; they belong in the side panels.",
+      "Don't let a scene label run past its platform onto a neighbouring zone.",
+      "Don't use a display font, gradients or glossy materials; the scene stays a flat, pale diagram."
+    ]
+  }
+}

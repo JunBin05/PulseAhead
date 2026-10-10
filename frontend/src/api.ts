@@ -30,7 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(detail, res.status);
   }
-  return (await res.json()) as Snapshot as T;
+  return (await res.json()) as T;
 }
 
 export const api = {
@@ -40,10 +40,11 @@ export const api = {
       body: JSON.stringify(seed === undefined ? {} : { seed }),
     }),
   state: (id: string) => request<Snapshot>(`/replays/${id}/state`),
-  advance: (id: string, minutes: number) =>
+  /** Applies only at `expectedVersion`; a 409 means the replay moved on and the caller should reload. */
+  advance: (id: string, minutes: number, expectedVersion: number) =>
     request<Snapshot>(`/replays/${id}/advance`, {
       method: 'POST',
-      body: JSON.stringify({ minutes }),
+      body: JSON.stringify({ minutes, expected_version: expectedVersion }),
     }),
   reset: (id: string) =>
     request<Snapshot>(`/replays/${id}/reset`, { method: 'POST', body: JSON.stringify({}) }),

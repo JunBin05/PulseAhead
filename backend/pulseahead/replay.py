@@ -28,8 +28,10 @@ class ReplaySession:
         self.engine = EDEngine(seed, scenario)
 
     # -- commands ------------------------------------------------------------------------
-    def advance(self, minutes: float) -> dict[str, Any]:
+    def advance(self, minutes: float, expected_version: int | None = None) -> dict[str, Any] | None:
         with self.lock:
+            if expected_version is not None and expected_version != self.version:
+                return None
             self.engine.run_until(self.engine.now + minutes)
             self.version += 1
             return self.snapshot()

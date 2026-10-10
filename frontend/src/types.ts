@@ -13,6 +13,8 @@ export interface PatientDot {
   phase: Phase;
   zone: number | null;
   has_space: boolean;
+  space_id: string | null;
+  clinician_id: string | null;
   phase_since_min: number;
   minutes_in_phase: number;
   arrival_min: number;

@@ -229,11 +229,11 @@ p {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #085469;
+  background: var(--accent-hover);
 }
 
 .btn-primary:active:not(:disabled) {
-  background: #064557;
+  background: var(--accent-pressed);
 }
 
 .btn-row {

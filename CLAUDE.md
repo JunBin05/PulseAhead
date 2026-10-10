@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PulseAhead is a hackathon MVP: a synthetic 3D operational digital twin of one fictional 24-space emergency department (ED). Patient dots move through four zones. The app forecasts sustained congestion, compares six staff-approved operational actions against no action, and routes each approval to the resource owner.
 
-**Application code has not been written yet.** The folder holds the approved plan, plus a `backend/.venv` with the pinned Python dependencies. All planning docs are under `PulseAhead-Tickets/docs/`:
+Ticket status lives in each ticket file and in `evidence/NN-*.md`; `HANDOFF.md` describes where the last session stopped. Code: `backend/pulseahead/` (`profile.py`, `engine.py`, `replay.py`, `api.py`) and `frontend/src/` (`App.tsx`, `Scene.tsx`, `layout.ts`, `api.ts`). All planning docs are under `PulseAhead-Tickets/docs/`:
 
 - `PULSEAHEAD_3D_MVP_SPEC.md` is the canonical spec and the source of truth for every rule. `PULSEAHEAD_3D_MVP_SPEC.md` at the `Real/` root is an identical copy; treat the docs copy as authoritative.
 - `PULSEAHEAD_3D_TICKET_PLAN.md` is the 22-ticket index with blockers. Tickets live in `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/NN-*.md`. The tracker is local files only; there is no external issue tracker.
@@ -24,7 +24,14 @@ The stack is Python 3.12 with SimPy for the engine and FastAPI for the API, in `
 
 Python is not on PATH. Use `backend/.venv/Scripts/python.exe`, or `C:\Users\Vaas\AppData\Local\Programs\Python\Python312\python.exe` to create a venv.
 
-Commands are added here as tickets create them.
+Commands, run from `Real/`:
+
+- Backend: `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000`. Restart it after backend edits. Avoid `--reload` on Windows: its worker can survive a restart and keep serving old code on the port.
+- Frontend dev server: `cd frontend && npx vite --host 127.0.0.1` (port 5173, proxies `/api`).
+- Type-check: `cd frontend && npx tsc --noEmit`. Production build: `cd frontend && npm run build`. Then `:8000` serves the app and API from one origin; the backend looks for `frontend/dist` only at startup.
+- Design detector: `sh ~/.claude/skills/impeccable/scripts/impeccable detect --json frontend/src`.
+
+Playwright MCP resolves relative screenshot paths from `C:\Users\Vaas\Documents\Prototype`, so save evidence as `PulseAhead/Real/evidence/shots/<name>.png`. Its Chrome window is visible on the desktop; manual clicks in it affect checks.
 
 ## Working rules
 

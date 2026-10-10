@@ -26,6 +26,9 @@ class CreateReplay(BaseModel):
 
 class Advance(BaseModel):
     minutes: float = Field(gt=0, le=MAX_ADVANCE_MIN)
+    # When given, the command applies only if the replay is still at this version (409 otherwise),
+    # so a late command from an older view can never move a newer run.
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 class Reset(BaseModel):
@@ -73,7 +76,10 @@ def read_state(replay_id: str) -> dict:
 
 @app.post("/api/v1/replays/{replay_id}/advance")
 def advance(replay_id: str, body: Advance) -> dict:
-    return _session(replay_id).advance(body.minutes)
+    result = _session(replay_id).advance(body.minutes, body.expected_version)
+    if result is None:
+        raise HTTPException(status_code=409, detail="replay version changed; reload the state")
+    return result
 
 
 @app.post("/api/v1/replays/{replay_id}/reset")
@@ -102,6 +108,9 @@ if _DIST.is_dir():
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str):
+        # Unknown API routes stay JSON 404s; only UI routes fall back to the app shell.
+        if path == "api" or path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
         candidate = (_DIST / path).resolve()
         if path and candidate.is_file() and _DIST in candidate.parents:
             return FileResponse(candidate)
