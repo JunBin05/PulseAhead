@@ -78,7 +78,11 @@ def scan_shift(family: str, seed: int, partition: str, log) -> dict[str, Any]:
     for ep in m["episodes"]:
         if ep["result"] != "early_warned" or ep["lead_min"] is None:
             continue
-        t_alert = round(ep["onset"] - ep["lead_min"], 3)
+        # The earliest forecast-risk warning that preceded this episode (the one match_forecasts credited).
+        t_alert = min(
+            w["t"] for w in warnings
+            if w["key"] == ep["key"] and w["kind"] == "forecast_risk" and w["t"] < ep["onset"] <= w["t"] + fcast.HORIZON_MIN
+        )
         info = at_alert.get((t_alert, ep["key"]))
         row = {"key": ep["key"], "onset_min": ep["onset"], "confirmed_min": ep["confirmed"], "alert_time_min": t_alert,
                "lead_min": ep["lead_min"], "qualifies": False, "reason": None}

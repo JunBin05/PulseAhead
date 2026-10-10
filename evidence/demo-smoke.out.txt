@@ -2,6 +2,8 @@ PASS  case: unavailable is stated with its reason (no invented early warning)  -
 PASS  beat F: /evaluations/latest is the newest saved file, complete  -- 73ec843aaf 2026-10-10T20:01:56+00:00
 PASS  beat F: episodes = early + late + missed; targets stated  -- 29 = 12+11+6; false warnings 0.29/shift
 PASS  beat F: the latest evaluation is the frozen-settings held-out run on test seed index 1  -- threshold 0.6, reactive trigger building, seeds 2002,2012,2022,2032,2042,2052,2062
+PASS  beat F: frozen settings equal the recorded tuning choice (no drift)  -- threshold 0.6, trigger building
+PASS  beat F: a held-out run on the exposed test seed [0] is refused (422)  -- held-out evaluation is limited to test seed index 1; index 0 was alrea
 PASS  beat F: three policies reported on the same shifts
 PASS  beat F: test-seed exposure is disclosed  -- Test seed [0] of every family was evaluated by an earlier run (thresho
 PASS  beat F: the saved numbers equal the export of that evaluation id (when still in memory)

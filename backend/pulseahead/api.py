@@ -286,9 +286,16 @@ def start_evaluation(body: EvaluationBody | None = None) -> dict:
     """One small evaluation, run in the background (see evaluation.py). Progress via GET."""
     body = body or EvaluationBody()
     idx = body.seed_index if body.seed_index is not None else (evaluation.TEST_SEED_INDEX if body.partition == "test" else 0)
-    sizes = {"development": 1, "tuning": 2, "demo": 4, "test": 4}
-    if idx >= sizes[body.partition]:
-        raise HTTPException(status_code=422, detail=f"{body.partition} has {sizes[body.partition]} seed(s) per family")
+    n_seeds = min(len(v["seed_partitions"][body.partition]) for v in SCENARIOS.values())
+    if idx >= n_seeds:
+        raise HTTPException(status_code=422, detail=f"{body.partition} has {n_seeds} seed(s) per family")
+    if body.partition == "test" and idx != evaluation.TEST_SEED_INDEX:
+        # Test seed [0] was seen before tuning; the other test seeds are kept unspent. Only the one frozen run is allowed.
+        raise HTTPException(
+            status_code=422,
+            detail=f"held-out evaluation is limited to test seed index {evaluation.TEST_SEED_INDEX}; "
+                   "index 0 was already seen and the rest are kept in reserve",
+        )
     try:
         job = evaluation.start(None, body.partition, idx)
     except RuntimeError as exc:
@@ -302,9 +309,7 @@ def latest_evaluation() -> dict:
     rec = evaluation.latest_saved()
     if rec is None:
         raise HTTPException(status_code=404, detail="no saved evaluation: run one from the evaluation panel")
-    # `exposure` is served from the current settings text when an older file predates it.
-    rec.setdefault("results", {}).setdefault("settings", {}).setdefault("exposure", evaluation.settings()["exposure"])
-    return rec
+    return rec  # served exactly as measured and saved; nothing is filled in
 
 
 @app.get("/api/v1/demo/case")

@@ -155,6 +155,12 @@ check('beat F: episodes = early + late + missed; targets stated',
 check('beat F: the latest evaluation is the frozen-settings held-out run on test seed index 1',
   lat.partition === 'test' && lat.seed_index === 1 && lat.results.settings.threshold_tuned === true && [0.4, 0.6, 0.8].includes(lat.results.settings.warning_threshold),
   `threshold ${lat.results.settings.warning_threshold}, reactive trigger ${lat.results.settings.reactive_trigger}, seeds ${lat.results.shifts.map((x) => x.seed).join(',')}`);
+const tuned = JSON.parse(readFileSync(join(ROOT, 'evidence', 'tuning-results.json'), 'utf8')).chosen;
+check('beat F: frozen settings equal the recorded tuning choice (no drift)',
+  lat.results.settings.warning_threshold === tuned.warning_threshold && lat.results.settings.reactive_trigger === tuned.reactive_trigger,
+  `threshold ${tuned.warning_threshold}, trigger ${tuned.reactive_trigger}`);
+const rej = await j('/evaluations', { partition: 'test', seed_index: 0 });
+check('beat F: a held-out run on the exposed test seed [0] is refused (422)', rej.s === 422, String(rej.detail).slice(0, 70));
 check('beat F: three policies reported on the same shifts', ['no_action', 'reactive', 'pulseahead'].every((p) => g.policies[p]?.total_ed_patient_min > 0));
 check('beat F: test-seed exposure is disclosed', /exposed|seen/i.test(lat.results.settings.exposure ?? ''), (lat.results.settings.exposure ?? '').slice(0, 70));
 const exp = await get(`/evaluations/${lat.id}/export`);

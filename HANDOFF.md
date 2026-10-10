@@ -1,5 +1,9 @@
 # HANDOFF: PulseAhead build
 
+## Review-gate fixes (latest)
+
+/code-review (medium) on 8c583ce..HEAD: fixed that held-out evaluations are limited to test seed index 1 (index 0 and the reserve seeds are refused, repeats are labelled REPEAT), that /evaluations/latest serves only stamped test-partition runs exactly as saved (no filled-in text), the demo-scan alert time is carried from the matched warning (no float reconstruction), the case label names the real partition, and seed-count validation reads the profile. Added a drift check (frozen settings = tuning-results.json). Not changed: catalog version 2 (load does not compare it), the demo-drivers forecast reuse (cached at the same version). The gates for tickets 11 and 17 were not re-run.
+
 ## Update after the remaining-gaps pass (latest)
 
 - **Demo case:** a non-test `demo` seed partition (3001-3004 per family, catalog version 2) widened the scan to 49 non-test shifts at the frozen threshold. 5 episodes have 2+ supported drivers and 30+ min lead, but all are staffed-space overloads, for which no action preset exists, so none qualifies. The demo still stops honestly at beat A. A real fix needs a third intervention (staffed surge spaces, "not modeled"), not a relaxed rule.

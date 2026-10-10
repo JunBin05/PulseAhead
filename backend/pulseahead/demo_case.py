@@ -158,7 +158,7 @@ def case() -> dict[str, Any]:
     info = SCENARIOS[rec["scenario"]]
     return {
         "api_version": "v1", "kind": "demo_case", "available": True, "synthetic": True,
-        "label": "Demo case: a development/tuning seed chosen by scan. Not held-out evidence.",
+        "label": f"Demo case: a {rec['partition']}-partition seed chosen by scan. Not held-out evidence.",
         "scenario": rec["scenario"], "scenario_name": info["name"], "seed": rec["seed"],
         "partition": rec["partition"], "service": rec["service"], "service_name": rec.get("service_name"),
         "alert_time_min": rec["alert_time_min"], "why": rec["why"], "scan": rec.get("scan"),

@@ -64,6 +64,7 @@ class EvalJob:
         self.cancel = threading.Event()
         self.families: list[str] = []
         self.partition = "test"
+        self.repeat_of: str | None = None
         self.seed_index = TEST_SEED_INDEX
         self.done: list[dict[str, Any]] = []
         self.current: dict[str, Any] | None = None
@@ -77,13 +78,18 @@ class EvalJob:
         with self.lock:
             return {
                 "api_version": "v1", "kind": "evaluation", "id": self.id, "status": self.status,
-                "synthetic": True, "created": self.created, "partition": self.partition, "seed_index": self.seed_index, "families_total": len(self.families),
+                "synthetic": True, "created": self.created, "partition": self.partition, "seed_index": self.seed_index, "repeat_of": self.repeat_of, "families_total": len(self.families),
                 "families_done": len(self.done), "current": self.current, "error": self.error,
                 "elapsed_s": round((self.finished or time.time()) - self.started, 1),
                 "complete": self.status == "done",
                 "label": (
                     (
-                        "Synthetic, 7 shifts (1 held-out seed per family), descriptive only"
+                        (
+                            "Synthetic, 7 shifts (1 held-out seed per family), descriptive only"
+                            if self.repeat_of is None
+                            else f"Synthetic, 7 shifts, REPEAT of held-out run {self.repeat_of}: the seed was already seen, "
+                                 "not an untouched test; descriptive only"
+                        )
                         if self.partition == "test"
                         else f"Synthetic, 7 shifts on {self.partition} seeds: NOT held-out evidence, descriptive only"
                     )
@@ -418,7 +424,8 @@ def latest_saved() -> dict[str, Any] | None:
         except (OSError, ValueError):
             continue
         # Only held-out (test partition) evaluations count as "the latest evaluation" for the demo.
-        if rec.get("status") == "done" and rec.get("partition", "test") == "test" and (best is None or rec.get("created", "") > best.get("created", "")):
+        stamped = rec.get("results", {}).get("settings", {}).get("forecast_model") is not None
+        if rec.get("status") == "done" and rec.get("partition") == "test" and stamped and (best is None or rec.get("created", "") > best.get("created", "")):
             best = rec
     return best
 
@@ -430,6 +437,8 @@ def start(families: list[str] | None = None, partition: str = "test", seed_index
         job = EvalJob()
         job.families = [f for f in (families or list(SCENARIOS)) if f in SCENARIOS]
         job.partition, job.seed_index = partition, seed_index
+        prior = latest_saved()
+        job.repeat_of = prior["id"] if prior and partition == "test" and prior.get("seed_index") == seed_index else None
         JOBS[job.id] = job
     threading.Thread(target=run_job, args=(job,), daemon=True, name=f"eval-{job.id}").start()
     return job

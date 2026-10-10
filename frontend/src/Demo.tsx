@@ -666,7 +666,7 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
         {finished
           ? 'Demo finished'
           : `Next: beat ${nextBeat!.id} of ${BEATS.length}, ${nextBeat!.name}`}
-        {' · '}Synthetic data, live backend. A demo case is a development/tuning seed, not held-out evidence.
+        {' · '}Synthetic data, live backend. A demo case is a non-test seed chosen by scan, not held-out evidence.
       </p>
       <nav className="demo-beats" aria-label="Demo beats">
         {BEATS.map((b, i) => (
