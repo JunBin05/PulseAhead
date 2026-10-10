@@ -302,7 +302,7 @@ Ticket file: `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-a
 - `diagnostic-delay` seed 2033 at T+80: imaging 68% chance, median in 35 min (range 5 to 70), real onset T+82; with one more imaging slot the same futures give 10%. At T+100 imaging is Overloaded (0% clears), overall 0% (stable).
 - The UI at T+100 shows the strip, the zone button forecast lines and the Recovery alert list correctly (see `shots/10-first-look.png`).
 
-## Final build plan (scope amendment, 2026-10-11)
+## Final build plan (scope amendment, 2026-10-11; historical, now executed, see "Final build status")
 
 The user cut scope with about five hours of build time left. The source of truth is the spec's "Scope amendment (2026-10-11, final build)" section at the top of `PulseAhead-Tickets/docs/PULSEAHEAD_3D_MVP_SPEC.md` (byte-identical copy at the repo root). The index is in `PULSEAHEAD_3D_TICKET_PLAN.md` under "Amended breakdown", and each remaining ticket file has a "Criteria (scope amendment, final build)" list.
 
