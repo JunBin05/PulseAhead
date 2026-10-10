@@ -20,6 +20,7 @@ import { RunsPanel } from './panels/RunsPanel';
 import { RunBar } from './shell/RunBar';
 import { KpiRow } from './shell/KpiRow';
 import { Tabs } from './shell/Tabs';
+import { AlertSpine } from './shell/AlertSpine';
 import {
   AlertList,
   ForecastStrip,
@@ -45,8 +46,8 @@ import {
 } from './types';
 
 const SPEEDS = [1, 2, 5, 10] as const;
-type LeftTab = 'resources' | 'data' | 'runs';
-type RightTab = 'zone' | 'act';
+type LeftTab = 'story' | 'resources' | 'data' | 'runs';
+type RightTab = 'zone' | 'act' | 'alerts';
 
 /** Test-only: `?fixture=<id>` starts a controlled fixture scenario for Playwright MCP checks.
  * It is not linked or shown anywhere in the staff workflow. */
@@ -177,7 +178,7 @@ export function App() {
   // 2D list view: the same zone status, alerts, comparison and approvals without the 3D scene.
   const [listView, setListView] = useState(false);
   // Which tab each rail shows. Panels in hidden tabs stay mounted, so nothing loses its state.
-  const [leftTab, setLeftTab] = useState<LeftTab>('resources');
+  const [leftTab, setLeftTab] = useState<LeftTab>('story');
   // Pressing "Start guided demo" in the run bar asks the story stage to run its first beat.
   const [demoKick, setDemoKick] = useState(0);
   const [rightTab, setRightTab] = useState<RightTab>('zone');
@@ -547,21 +548,6 @@ export function App() {
       </header>
 
       <KpiRow snap={snap} view={fcView} />
-      <RunBar
-        onStartDemo={() => setDemoKick((k) => k + 1)}
-        snap={snap}
-        playing={playing}
-        speed={speed}
-        speeds={SPEEDS}
-        stepMinutes={STEP_MINUTES}
-        onStart={start}
-        onTogglePlay={() => setPlaying((p) => !p)}
-        onStep={() => void advance(STEP_MINUTES)}
-        onSpeed={(s) => setSpeed(s as (typeof SPEEDS)[number])}
-        onReset={reset}
-        playRef={playRef}
-      />
-
       <div aria-live="polite" role="status">
         {conn.state === 'error' && (
           <div className="banner" data-tone="error" data-testid="conn-error">
@@ -596,7 +582,7 @@ export function App() {
         )}
       </div>
 
-      <main className="workspace">
+      <main className="workspace stage">
         <aside className="rail rail-left" aria-label="Story, resources, data and runs">
           <Tabs
             label="Panels"
@@ -604,6 +590,11 @@ export function App() {
             value={leftTab}
             onChange={(v) => setLeftTab(v as LeftTab)}
             tabs={[
+              {
+                id: 'story',
+                label: 'Story',
+                content: <DemoBar ctl={demoCtl} kick={demoKick} />,
+              },
               {
                 id: 'resources',
                 label: 'Resources',
@@ -646,9 +637,7 @@ export function App() {
           />
         </aside>
 
-        <section aria-label="Four-zone ED map">
-          <DemoBar ctl={demoCtl} kick={demoKick} />
-          <ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />
+        <section className="stage-center" aria-label="Four-zone ED map">
           <div
             className="scene-wrap"
             data-testid="scene"
@@ -711,7 +700,32 @@ export function App() {
                 </span>
               )}
             </div>
-            <div className="zone-bar" role="group" aria-label="Zones">
+            {snap && (
+              <AlertSpine
+                snap={snap}
+                view={fcView}
+                onCompare={(z) => {
+                  selectAlert(z);
+                  openCompare();
+                }}
+              />
+            )}
+          </div>
+        </section>
+
+        <aside className="rail drawer-col" aria-label="Selected zone and actions">
+          <Tabs
+            label="Zone and actions"
+            idPrefix="right"
+            value={rightTab}
+            onChange={(v) => setRightTab(v as RightTab)}
+            tabs={[
+              {
+                id: 'zone',
+                label: 'Zone',
+                content: (
+                  <>
+                  <div className="zone-bar" role="group" aria-label="Zones">
               {[1, 2, 3, 4].map((z) => (
                 <button
                   key={z}
@@ -734,34 +748,7 @@ export function App() {
                   )}
                 </button>
               ))}
-            </div>
-          </div>
-          {snap && (
-            <AlertList
-              snap={snap}
-              view={fcView}
-              onSelect={selectAlert}
-              selectedZone={selectedZone}
-              comparison={lastCmp}
-              onCompare={(z) => {
-                selectAlert(z);
-                openCompare();
-              }}
-            />
-          )}
-        </section>
-
-        <aside className="rail drawer-col" aria-label="Selected zone and actions">
-          <Tabs
-            label="Zone and actions"
-            idPrefix="right"
-            value={rightTab}
-            onChange={(v) => setRightTab(v as RightTab)}
-            tabs={[
-              {
-                id: 'zone',
-                label: 'Zone',
-                content: (
+                  </div>
                   <section className="panel" aria-labelledby="drawer-h">
                     {!zone ? (
                       <>
@@ -788,6 +775,7 @@ export function App() {
                       </div>
                     )}
                   </section>
+                  </>
                 ),
               },
               {
@@ -807,9 +795,51 @@ export function App() {
                   </>
                 ),
               },
+              {
+                id: 'alerts',
+                label: 'Alerts',
+                content: (
+                  <>
+          {snap && (
+            <AlertList
+              snap={snap}
+              view={fcView}
+              onSelect={selectAlert}
+              selectedZone={selectedZone}
+              comparison={lastCmp}
+              onCompare={(z) => {
+                selectAlert(z);
+                openCompare();
+              }}
+            />
+          )}
+                  </>
+                ),
+              },
             ]}
           />
         </aside>
+
+        <div className="stage-dock">
+      <RunBar
+        onStartDemo={() => {
+          setLeftTab('story');
+          setDemoKick((k) => k + 1);
+        }}
+        snap={snap}
+        playing={playing}
+        speed={speed}
+        speeds={SPEEDS}
+        stepMinutes={STEP_MINUTES}
+        onStart={start}
+        onTogglePlay={() => setPlaying((p) => !p)}
+        onStep={() => void advance(STEP_MINUTES)}
+        onSpeed={(s) => setSpeed(s as (typeof SPEEDS)[number])}
+        onReset={reset}
+        playRef={playRef}
+      />
+          <ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />
+        </div>
       </main>
     </div>
   );
