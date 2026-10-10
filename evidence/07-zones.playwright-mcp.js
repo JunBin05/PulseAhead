@@ -68,6 +68,8 @@ async (page) => {
           }
           if (z === 4) { const c = d.capacity; if (c.kind !== 'spaces_retained' || c.occupied !== sp.occupied || !eq(c.ward_beds, { free: st.resources.disposition.beds.ward.free, reserved: st.resources.disposition.beds.ward.reserved, occupied: st.resources.disposition.beds.ward.occupied, total: st.resources.disposition.beds.ward.total })) bad(`${tag} z4 capacity`); }
           held += d.roster.filter((p) => p.space_id).length;
+          // tests_required is a received field once tests are ordered; it must be null before that (ticket 10).
+          for (const p of d.roster) if (p.tests_status === 'not_ordered' && p.tests_required !== null) bad(`${tag} z${z} ${p.id} tests_required before ordering`);
           // freshness and the summary come from the received state
           if (!eq(d.freshness, st.freshness)) bad(`${tag} z${z} freshness`);
           const pz = st.pressure.zones.find((x) => x.zone === z);

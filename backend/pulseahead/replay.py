@@ -46,8 +46,10 @@ class ReplaySession:
         # Set when this run was rebuilt from a saved run; cleared by a reset.
         self.saved_run: dict[str, Any] | None = None
         self._samples: list[tuple[float, dict[str, Any]]] = []
-        # Forecasts by (state version, samples): result, plain input, snapshot. Recent ones only.
-        self._fc: dict[tuple[int, int], tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = {}
+        # Forecasts by (state version, samples): result, plain input, snapshot, the sampled futures.
+        # Recent ones only; read and written under `self.lock`.
+        self._fc: dict[tuple[int, int], tuple[dict[str, Any], dict[str, Any], dict[str, Any],
+                                              list[dict[str, Any]]]] = {}
         self._fc_lock = threading.Lock()
         if self.engine.gate.has_faults:
             self._sample(0.0)
@@ -705,6 +707,8 @@ class ReplaySession:
                  ) -> tuple[dict[str, Any] | None, bool]:
         """Returns (result, cached). None when expected_version is stale. The plain input is built under
         the session lock; the futures are sampled outside it so replay controls stay responsive."""
+        # `_fc_lock` only serialises the sampling (one forecast at a time); the cache itself is read and
+        # written under the session lock, so an explanation of a cached version never waits for a run.
         with self._fc_lock:
             with self.lock:
                 if expected_version is not None and expected_version != self.version:
@@ -713,26 +717,29 @@ class ReplaySession:
                 hit = self._fc.get(key)
                 if hit is not None:
                     return hit[0], True
+                run = self.run_number
                 snap = self.snapshot()
                 inp = fcast.build_input(snap, list(self.engine.gate.received))
-            result = fcast.forecast_from_input(inp, snap, samples, fcast.FORECAST_SEED)
+            futures: list[dict[str, Any]] = []
+            result = fcast.forecast_from_input(inp, snap, samples, fcast.FORECAST_SEED, keep=futures)
             with self.lock:
-                self._fc[key] = (result, inp, snap)
-                for old in sorted(self._fc)[:-6]:
-                    del self._fc[old]
+                if self.run_number == run:  # a reset during the run drops its result from the cache
+                    self._fc[key] = (result, inp, snap, futures)
+                    for old in sorted(self._fc)[:-6]:
+                        del self._fc[old]
             return result, False
 
     def forecast_explain(self, zone: int, samples: int, version: int) -> dict[str, Any] | None:
         """Explains the forecast already computed for `version` (None when it is no longer held)."""
-        with self._fc_lock:
+        with self.lock:
             hit = self._fc.get((version, samples))
         if hit is None:
             return None
-        result, inp, snap = hit
+        result, inp, snap, futures = hit
         if result["status"] != "ok":
             return {"api_version": "v1", "kind": "forecast_explanation", "source": result["source"],
                     "status": result["status"], "reasons": result["reasons"], "zone": zone}
-        return fcast.explain_zone(inp, snap, result, zone, samples, fcast.FORECAST_SEED)
+        return fcast.explain_zone(inp, snap, result, zone, samples, fcast.FORECAST_SEED, base_outs=futures)
 
     # -- one zone, versioned ---------------------------------------------------------------
     def zone_detail(self, zone_id: int) -> dict[str, Any] | None:
@@ -1213,15 +1220,7 @@ class ReplaySession:
                 "announcements": snap["ambulance_announcements"],
                 # Staff decisions and approvals arrive with the action tickets; none exist yet.
                 "choices": [],
-                "settings": {
-                    "simulation": settings,
-                    "forecast": {
-                        "samples": forecast_samples, "model_version": fcast.MODEL_VERSION,
-                        "horizon_min": fcast.HORIZON_MIN, "tail_min": fcast.TAIL_MIN,
-                        "refresh_every_min": fcast.REFRESH_MIN, "seed": fcast.FORECAST_SEED,
-                        "warning_threshold": fcast.WARNING_THRESHOLD,
-                    },
-                },
+                "settings": {"simulation": settings, "forecast": fcast.model_settings(forecast_samples)},
                 "ui": ui,
                 "observed": {
                     "counts": snap["counts"],
@@ -1316,6 +1315,17 @@ class ReplayStore:
         """Rebuilds a saved run as a new replay at its saved time and checks that it reproduces the saved
         received events exactly. A run that does not reproduce is refused, never approximated."""
         ident = record["identity"]
+        # The forecast model is not rebuilt from events, so a record made under other forecast settings
+        # (model, horizon, tail, refresh, seed, warning threshold) is refused too. The sample count is
+        # the user's choice and is restored, not compared. Older records without the settings load.
+        saved_fc = (record.get("settings") or {}).get("forecast")
+        if saved_fc:
+            now_fc = fcast.model_settings(saved_fc.get("samples", fcast.DEFAULT_SAMPLES))
+            changed = [f"{k} {saved_fc.get(k)} -> {v}" for k, v in now_fc.items() if saved_fc.get(k) != v]
+            if changed:
+                raise SavedRunMismatch(
+                    f"saved run {record['saved_id']} was recorded with other forecast settings: " + "; ".join(changed)
+                )
         session = ReplaySession(ident["seed"], ident["scenario"])
         target = float(ident["sim_time_min"])
         while session.engine.now < target - 1e-9:

@@ -472,6 +472,9 @@ export function ZoneForecast({
   }
   const why = explanation?.data?.zone === zone ? explanation.data : null;
   const w = why?.why_this_alert;
+  // Only a zone that has an alert (building, overloaded, Cannot assess or a forecast warning) is explained
+  // as an alert; any other zone shows the same facts as plain forecast detail.
+  const alerting = z.state !== 'normal' || z.warning;
   return (
     <section data-testid="fc-zone" aria-labelledby="forecast-h" style={{ marginBottom: 'var(--s-4)' }}>
       {header}
@@ -502,7 +505,9 @@ export function ZoneForecast({
       )}
       <div className="callout" data-state="normal" data-testid="fc-explain">
         <p>
-          <strong>Why this alert appeared</strong>
+          <strong data-testid="fc-explain-title">
+            {alerting ? 'Why this alert appeared' : 'Forecast detail for this zone (no alert)'}
+          </strong>
         </p>
         {!w && (
           <p className="muted" role="status">

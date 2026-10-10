@@ -33,7 +33,6 @@ FORECAST_SEED = 7310004
 HORIZON_MIN = 90.0
 TAIL_MIN = 20.0
 REFRESH_MIN = 5.0
-SAMPLE_CHOICES = (50, 100)
 DEFAULT_SAMPLES = 50
 # Provisional warning threshold (spec: start with 0.4, 0.6, 0.8; tuned on tuning shifts in ticket 18).
 WARNING_THRESHOLD = 0.4
@@ -837,7 +836,10 @@ def summarize(inp: dict[str, Any], outs: list[dict[str, Any]]) -> dict[str, Any]
 
         def rank(r: dict[str, Any]) -> tuple:
             order = {"overloaded": 3, "building": 2, "normal": 1, "unknown": 0}
-            return (order.get(r["state"], 0), r.get("chance") or 0.0)
+            chance = r.get("chance") or 0.0
+            # An overloaded service's chance is the chance it clears, so the one least likely to clear
+            # speaks for the zone; for building and normal services a higher chance is the worse signal.
+            return (order.get(r["state"], 0), 1.0 - chance if r["state"] == "overloaded" else chance)
 
         top = max(rows, key=rank)
         # Zone-level chance of a new local overload in the zone (first onset over its services).
@@ -862,7 +864,10 @@ def summarize(inp: dict[str, Any], outs: list[dict[str, Any]]) -> dict[str, Any]
                      "low_in_min": round(zrng["low_min"] - t0, 1), "high_in_min": round(zrng["high_min"] - t0, 1)}
                     if zrng else None
                 ),
-                "warning": zstate == "normal" and len(firsts) / max(1, len(outs)) >= WARNING_THRESHOLD,
+                # A zone warning is the warning of its services (the rule build_alerts applies), so the
+                # zone button, the drawer and the alert list always agree.
+                "warning": zstate == "normal" and any(
+                    r["state"] == "normal" and (r.get("chance") or 0.0) >= WARNING_THRESHOLD for r in rows),
             }
         )
     return {"overall": overall, "services": services, "zones": zones, "series": _series(inp, outs)}
@@ -946,15 +951,17 @@ def next_step(summary: dict[str, Any], assessable: bool, reasons: list[str],
 
 
 # -- top level -------------------------------------------------------------------------------------
-def forecast(snapshot: dict[str, Any], events: list[dict[str, Any]], samples: int = DEFAULT_SAMPLES,
-             base: int = FORECAST_SEED) -> dict[str, Any]:
-    started = time.perf_counter()
-    inp = build_input(snapshot, events)
-    return forecast_from_input(inp, snapshot, samples, base, started)
+def model_settings(samples: int) -> dict[str, Any]:
+    """The settings a forecast is computed with; a saved run records them and Load compares them."""
+    return {
+        "samples": samples, "model_version": MODEL_VERSION, "horizon_min": HORIZON_MIN, "tail_min": TAIL_MIN,
+        "refresh_every_min": REFRESH_MIN, "seed": FORECAST_SEED, "warning_threshold": WARNING_THRESHOLD,
+    }
 
 
 def forecast_from_input(inp: dict[str, Any], snapshot: dict[str, Any], samples: int, base: int,
-                        started: float | None = None) -> dict[str, Any]:
+                        started: float | None = None, keep: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """`keep`, when given, receives the sampled futures so the explanation can reuse them."""
     started = started if started is not None else time.perf_counter()
     adj, scale = _arrival_adjustment(inp), _turnaround_scale(inp)
     model = {
@@ -980,6 +987,8 @@ def forecast_from_input(inp: dict[str, Any], snapshot: dict[str, Any], samples: 
              "compute": {"ms": round((time.perf_counter() - started) * 1000, 1), "futures": 0}})
         return out
     outs = [run_future(inp, k, base, adj=adj, scale=scale) for k in range(samples)]
+    if keep is not None:
+        keep.extend(outs)
     summary = summarize(inp, outs)
     alerts = build_alerts(inp, snapshot, summary)
     limits = [
@@ -1042,9 +1051,12 @@ _RELAX = {
 
 
 def explain_zone(inp: dict[str, Any], snapshot: dict[str, Any], result: dict[str, Any], zone: int,
-                 samples: int, base: int = FORECAST_SEED) -> dict[str, Any]:
+                 samples: int, base: int = FORECAST_SEED,
+                 base_outs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Why a zone's alert appeared: received facts kept apart from model statements, plus how the
-    estimate moves when one constraint is relaxed (same futures, one more unit of the bottleneck)."""
+    estimate moves when one constraint is relaxed (same futures, one more unit of the bottleneck).
+    `base_outs` are the futures the forecast already sampled; without them they are sampled again
+    (the same keyed futures, so the result is identical)."""
     started = time.perf_counter()
     z = next(x for x in result["zones"] if x["zone"] == zone)
     sid = z["top_service"]
@@ -1108,8 +1120,9 @@ def explain_zone(inp: dict[str, Any], snapshot: dict[str, Any], result: dict[str
         else:
             model.append(f"No onset in {n} sampled futures: no countdown is shown.")
     elif s["kind"] == "confirmation":
+        ran = f"{s['elapsed_min']:g} minutes" if s["elapsed_min"] is not None else "an unknown time"
         model.append(
-            f"This interval has run {s['elapsed_min']:g} minutes; in {s['events']} of {n} futures it reaches "
+            f"This interval has run {ran}; in {s['events']} of {n} futures it reaches "
             f"confirmation ({round(s['chance'] * 100)}%)."
         )
     elif s["kind"] == "recovery":
@@ -1124,7 +1137,8 @@ def explain_zone(inp: dict[str, Any], snapshot: dict[str, Any], result: dict[str
     breakdown = None
     if s["kind"] in ("new_onset", "confirmation") and s.get("events"):
         adj, scale = _arrival_adjustment(inp), _turnaround_scale(inp)
-        base_outs = [run_future(inp, k, base, adj=adj, scale=scale) for k in range(samples)]
+        if base_outs is None:
+            base_outs = [run_future(inp, k, base, adj=adj, scale=scale) for k in range(samples)]
         known, bg = [], []
         for o in base_outs:
             first = _first(o["local"][sid]["new"]) if s["kind"] == "new_onset" else o["local"][sid]["confirmed"]

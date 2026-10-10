@@ -70,3 +70,22 @@ Ticket 09 criterion 4 left `settings.forecast` null "until ticket 10". `save()` 
 4. **Forecast CPU competes with the replay.** Regression 01 on this machine measured 10x playback at 9.9 sim min/s with forecasts running (the first machine saw 9.49); ticket 20 still has to measure interaction and frame rate under forecast load.
 5. **The first screen reads "Forecast: computing"** on each zone button until the first forecast arrives (a few hundred milliseconds); it does not claim a risk.
 6. **Console:** one `THREE.Clock` deprecation warning from @react-three/fiber internals, unchanged.
+
+## Review-gate fixes (code-review skill over `d7b2b37..7c9b563`)
+
+Ten findings. Verified with `evidence/10-review-gate.playwright-mcp.js` (PART `A`, `B`, `C`, `D1`/`D2`; all pass) on bundle `index-dABK4qLG.js`:
+
+| # | Finding | Outcome |
+|---|---|---|
+| 1 | Zone warning used the union chance across services, so a zone could read "(warning)" while the alert list said no service was at its warning level | **fixed**: a zone warning is now the warning of its services (the alert-list rule). A2: 168 forecasts, 558 Normal-zone rows, warning equals the presence of a forecast-risk alert in every row; 7 rows had a union chance at or above 0.4 with no service at it (the old mismatch) |
+| 2 | An overloaded zone was represented by the overloaded service most likely to clear | **fixed**: the one least likely to clear. A3 passes (2 rows with two overloaded services) |
+| 3 | The explanation re-sampled the futures the forecast had already run | **fixed**: the cached futures are reused. A1: forecasts and explanations of 9 baseline cases are byte-identical to the pre-fix responses (hash compared) |
+| 4 | `elapsed_min` could be `None` in a format string (500) | **fixed** by a guard; not reproducible through the API (not-run) |
+| 5 | Load ignored the recorded forecast settings | **fixed**: a record made under other forecast settings (model, horizon, tail, refresh, seed, warning threshold) is refused with 409; records without the settings and records that differ only in sample count load. D2-D4 pass (records edited on disk between D1 and D2, as in ticket 09's tamper test) |
+| 6 | The explanation lookup waited behind a running forecast; a reset during a run could cache the old run's result | **fixed**: the cache is read and written under the session lock; a result is cached only if the run number is unchanged. B1: explanation answered in 268 ms (own compute 190 ms) while a 100-future run took 291 ms; B2: after a reset mid-run the old version's explanation is 409 |
+| 7 | Dead and duplicated code | **partly fixed**: unused `forecast()` and `SAMPLE_CHOICES` removed; the repeated 50/100 literals and onset-range dicts kept (judgement call) |
+| 8 | `07-zones` dropped `tests_required` from its hidden-field check instead of narrowing it | **fixed in the snippet**: `tests_required` must be `null` while `tests_status` is `not_ordered`; snippet not re-run after the change (not-run) |
+| 9 | "Why this alert appeared" was shown for zones without an alert | **fixed**: such zones read "Forecast detail for this zone (no alert)". C1-C3 pass |
+| 10 | WIP and docs commits break "one commit per ticket" | not actionable (history; the WIP commit was made at the user's request) |
+
+**Not re-run on the gate build** (stopped by the user to save time for the remaining build): regression `01`, `07-zones` and the other `10-*` snippets. The gate changes touch forecast summaries, the explanation path, the cache and Load only; the engine is unchanged.
