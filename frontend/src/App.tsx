@@ -219,6 +219,8 @@ export function App() {
   const [role, setRole] = useState('ED shift coordinator');
   const [compareOpen, setCompareOpen] = useState(false);
   const [lastCmp, setLastCmp] = useState<ComparisonResult | null>(null);
+  // 2D list view: the same zone status, alerts, comparison and approvals without the 3D scene.
+  const [listView, setListView] = useState(false);
   const compareReturnRef = useRef<HTMLElement | null>(null);
 
   const idRef = useRef<string | null>(null);
@@ -818,24 +820,26 @@ export function App() {
             data-replay-version={snap?.version ?? 0}
             data-camera={focusZone === null ? 'overview' : `zone-${focusZone}`}
           >
-            <Scene
-              scene={scene}
-              counts={zoneCounts}
-              exitCounts={{
-                home: snap?.counts.departed_home ?? 0,
-                ward: snap?.counts.departed_ward ?? 0,
-              }}
-              areaCounts={scene.perArea}
-              zoneStates={{
-                1: zoneState(snap, 1),
-                2: zoneState(snap, 2),
-                3: zoneState(snap, 3),
-                4: zoneState(snap, 4),
-              }}
-              selectedZone={selectedZone}
-              onSelectZone={toggleZone}
-              focusZone={focusZone}
-            />
+            {!listView && (
+              <Scene
+                scene={scene}
+                counts={zoneCounts}
+                exitCounts={{
+                  home: snap?.counts.departed_home ?? 0,
+                  ward: snap?.counts.departed_ward ?? 0,
+                }}
+                areaCounts={scene.perArea}
+                zoneStates={{
+                  1: zoneState(snap, 1),
+                  2: zoneState(snap, 2),
+                  3: zoneState(snap, 3),
+                  4: zoneState(snap, 4),
+                }}
+                selectedZone={selectedZone}
+                onSelectZone={toggleZone}
+                focusZone={focusZone}
+              />
+            )}
             {focusZone !== null && (
               <div className="camera-callout" data-testid="camera-callout" role="status">
                 <span>
@@ -851,6 +855,21 @@ export function App() {
                 +{scene.overflow} patients not drawn (listed in zone details)
               </div>
             )}
+            <div className="view-toggle">
+              <button
+                className="btn"
+                aria-pressed={listView}
+                onClick={() => setListView((v) => !v)}
+                data-testid="view-toggle"
+              >
+                {listView ? 'Show 3D view' : 'Show 2D list view'}
+              </button>
+              {listView && (
+                <span className="muted" data-testid="list-view-note">
+                  2D list view: counts, status, alerts, comparison and approvals are the same as in 3D.
+                </span>
+              )}
+            </div>
             <div className="zone-bar" role="group" aria-label="Zones">
               {[1, 2, 3, 4].map((z) => (
                 <button

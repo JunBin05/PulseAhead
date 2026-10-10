@@ -1,5 +1,17 @@
 # HANDOFF: PulseAhead build
 
+## Final build status (2026-10-11, end of the 2-hour push) - supersedes older statements below
+
+**Branch `pulseahead-mvp`, nothing pushed.** Committed this session: ticket 11 (ward coordination and the shared request/approval/lifecycle machinery), 14 (diagnostic reserve slot, reduced), 17 (lite ranking, priority list, what-if A vs B, per-action deadline, impact per reserve unit-hour), the guided **Demo bar**, **predicted waits** (FR-03), ticket 18 merged with 19 (one background evaluation run, panel, export) and a 2D list view toggle. Engine `flow-4`; seed 7 normal still 705 events / 59 patients.
+
+**Where the evidence is:** `evidence/final-build-scorecard.md` (R1-R5 statuses and gaps), `evidence/11-*`, `14-*`, `17-*`, `18-*`, `waits-*`, `demo-smoke.*`; each smoke script runs against :8000 (`node evidence/NN-smoke.mjs`; `18-smoke.mjs` takes about 2 minutes).
+
+**Honest results to know before the pitch:** forecast early warning 12 of 16 episodes (median lead 48 min) but 2.71 false warnings per shift (target 1, not met); PulseAhead beats no action in 7 of 7 shifts but **not the reactive baseline in aggregate** (one seed per family, descriptive only). Two of six interventions are built.
+
+**Not done / owned elsewhere:** ticket 20 full UX pass (keyboard-only and reduced-motion not browser-verified, regression 01 not re-run), threshold tuning, noise suite, simple-flow baseline, 200-dot / 30 fps measurement, **ticket 21 hosting (needs an authorized target: ask the user)**, **ticket 22 rehearsal (the user's)**. The code-review gates after 11 and 17 were skipped for time.
+
+**How to run:** backend `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000` (no `--reload`), after `cd frontend && npm run build`; open `http://127.0.0.1:8000/` and use the Guided demo panel (Next, Auto-play, Skip to result, Reset demo). Windows quirk: a stale Playwright Chrome may lock its profile; stop only the chrome.exe whose command line holds that profile directory.
+
 Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Ticket 11 is built and smoke-verified (see "Ticket 11 summary"); Tickets 14 and 17 (lite) are built and smoke-verified; next: the guided demo run, then 18 and 20 only if time allows (both paused).** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
 
 ## Goal and rules

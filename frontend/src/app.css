@@ -1148,3 +1148,11 @@ p {
 .cmp-table th:first-child {
   width: 34%;
 }
+
+.view-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+}
