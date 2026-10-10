@@ -93,3 +93,21 @@ Spec and ticket 07: an alert selection focuses the zone, a normal selection need
 - Zone details are received state only. Forecast content belongs to the selected-zone panel of ticket 10.
 
 **Alternative not taken:** zoom on Building and Cannot assess zones too; list every on-duty doctor and nurse in every drawer.
+
+
+## Q8. How are faulty, late and missing inputs treated? (ticket 08)
+
+Spec §Data: "Process ... only when received", "Missing essential information or an update older than ten simulated minutes shows Cannot assess", "Reject/quarantine invalid inputs with a reason; do not discard genuine outliers". The spec names no heartbeat period, no list of essential sources and no outlier thresholds.
+
+**Working decision:**
+- **Sources.** Six feeds: queues, spaces and staffing are essential; diagnostics, disposition and ambulance are optional. A separate replay clock heartbeat never refreshes any of them.
+- **Heartbeat and boundary.** Each healthy feed sends a heartbeat every 5 simulated minutes and an update on every change. "Older than ten minutes" is strictly more than 10: age 10.0 is fresh, 10.001 is stale. A stop that starts at minute S also loses a heartbeat that falls exactly on S.
+- **Essential stale means Cannot assess for the whole ED; optional stale limits only its own part** (zone 3 reads Cannot assess when diagnostics is stale, the overall ED stays assessable).
+- **A stale feed keeps its last valid values and age.** When it resumes, its next heartbeat carries the current state, so changes made during the outage appear then; the lost events stay as sequence gaps in the event log.
+- **External messages never move a patient.** Only the replay feed produces transitions. An outside message is checked (id seen, event time in the future, unknown patient/ambulance, impossible next phase, stale update, impossible count) and then either quarantined or, for the ambulance announce/ETA/cancel and count reports, accepted.
+- **Out of order** means an event time older than the state already received for that patient or ambulance; the newer state is kept.
+- **Outliers kept and flagged, never discarded:** a test longer than 100 min (twice the longest disclosed turnaround), an ETA moved by 30 min or more, 10 or more arrivals within one minute. Counts must be whole, non-negative and no larger than the patients present; an ambulance announces 1 to 10 patients.
+- **`missing_inputs` (a fixture declaring a service's inputs missing)** nulls that service's figures (busy, waiting, throughput, zone sub-counts) and marks `inputs_ok: false`. Patient dots and the zone total stay, because patient positions come from the event feeds.
+- **Patients are shown as the received events describe them**, each from the one-minute sample at their newest received event.
+
+**Alternative not taken:** let an outside valid transition move a patient (a second write path into the state); treat any stale optional feed as Cannot assess for the whole ED.

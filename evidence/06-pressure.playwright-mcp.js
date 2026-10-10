@@ -205,8 +205,9 @@ async (page) => {
       }
       // The diagnostics resource view and the pressure panel use one window and one basis.
       for (const [k, s2] of [['labThr', 'lab'], ['imgThr', 'imaging']]) {
-        const want = round2((dones[s2] || []).filter((x) => x > t - w && x <= t).length * 60 / w);
-        if (Math.abs(row.res[k] - want) > 0.006) bad(`T+${t} resources.diagnostics ${s2} throughput ${row.res[k]} vs ${want}`);
+        // Ticket 08: a service whose inputs are declared missing reports no throughput (null), like its pressure card.
+        const want = missingAt(s2, t) ? null : round2((dones[s2] || []).filter((x) => x > t - w && x <= t).length * 60 / w);
+        if (want === null ? row.res[k] !== null : Math.abs(row.res[k] - want) > 0.006) bad(`T+${t} resources.diagnostics ${s2} throughput ${row.res[k]} vs ${want}`);
       }
       for (const s2 of ['discharge', 'allocation', 'transport']) if (Math.abs(row.res.disp[s2] - row.svc[s2].mu) > 0.006) bad(`T+${t} disposition ${s2} capacity ${row.res.disp[s2]} vs pressure mu ${row.svc[s2].mu}`);
       // failure categories, affected and urgent-group counts from /state patients

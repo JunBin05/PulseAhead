@@ -18,6 +18,7 @@ import { ZONE_LOOK, type ZoneDisplay } from './status';
 import {
   ZONE_NAMES,
   type CongestionState,
+  type Feed,
   type Phase,
   type PressureService,
   type Snapshot,
@@ -116,9 +117,45 @@ function LocalChip({ state, testid }: { state: ZoneDisplay; testid?: string }) {
   );
 }
 
+/** Feeds each zone's figures depend on, for its limitation notes. */
+const ZONE_FEEDS: Record<number, string[]> = {
+  1: ['queues'],
+  2: ['queues', 'spaces', 'staffing'],
+  3: ['diagnostics', 'spaces', 'staffing'],
+  4: ['disposition', 'spaces', 'staffing'],
+};
+
+const FEED_ORDER = ['queues', 'spaces', 'staffing', 'diagnostics', 'disposition', 'ambulance'] as const;
+
+const FEED_LOOK: Record<Feed['status'], { tone: string; icon: ReactNode; word: string }> = {
+  fresh: { tone: 'normal', icon: <IconCheck />, word: 'Current' },
+  stale: { tone: 'pressure', icon: <IconClock />, word: 'Stale' },
+  missing: { tone: 'unknown', icon: <IconUnknown />, word: 'Missing' },
+};
+
+/** A figure a service cannot currently report is null: say so, never show it as zero. */
+const NOT_CURRENT = 'Not current';
+
+function fig(v: number | null | undefined, fallback = 0): number | string {
+  return v === null ? NOT_CURRENT : (v ?? fallback);
+}
+
+function ofTotal(v: number | null | undefined, total: number): string {
+  return v === null || v === undefined ? NOT_CURRENT : `${v} of ${total}`;
+}
+
+function clockOrDash(min: number | null | undefined): string {
+  return min === null || min === undefined ? '—' : formatClock(min);
+}
+
 function StatusBadge({ snap }: { snap: Snapshot | null }) {
-  // The label text comes from the backend; only tone and icon are chosen here.
-  const look = snap ? STATUS_LOOK[snap.overall_status.state] : { tone: 'unknown', icon: <IconUnknown /> };
+  // The label text comes from the backend; only tone and icon are chosen here. An essential feed
+  // older than ten simulated minutes means Cannot assess, whatever the last valid state was.
+  const look = !snap
+    ? { tone: 'unknown', icon: <IconUnknown /> }
+    : snap.overall_status.assessable === false
+      ? { tone: 'unknown', icon: <IconUnknown /> }
+      : STATUS_LOOK[snap.overall_status.state];
   const label = snap ? snap.overall_status.label : 'Not started';
   const { tone, icon } = look;
   return (
@@ -506,13 +543,27 @@ export function App() {
 
           <AmbulancePanel snap={snap} />
 
+          <FeedsPanel snap={snap} />
+
+          <DataQualityPanel snap={snap} />
+
           {snap && (
             <section className="panel" aria-labelledby="res-h">
               <h2 id="res-h">ED resources</h2>
+              {Object.values(snap.feeds).some((f) => f.id !== 'replay' && f.status !== 'fresh') && (
+                <p className="muted" data-testid="resources-stale" style={{ marginBottom: 'var(--s-3)' }}>
+                  Some figures are the last valid values from a feed that is no longer current:{' '}
+                  {Object.values(snap.feeds)
+                    .filter((f) => f.id !== 'replay' && f.status !== 'fresh')
+                    .map((f) => `${f.label.toLowerCase()} (last valid ${clockOrDash(f.last_update_min)})`)
+                    .join(', ')}
+                  .
+                </p>
+              )}
               <dl className="kv">
                 <dt>Available staffed spaces</dt>
                 <dd data-testid="available-spaces">
-                  {snap.resources.ed_spaces.available_staffed} of {snap.resources.ed_spaces.total}
+                  {ofTotal(snap.resources.ed_spaces.available_staffed, snap.resources.ed_spaces.total)}
                 </dd>
                 <dt>Staffed spaces</dt>
                 <dd data-testid="staffed-spaces">
@@ -521,38 +572,38 @@ export function App() {
                 <dt>Occupied spaces</dt>
                 <dd data-testid="occupied-spaces">{snap.resources.ed_spaces.occupied}</dd>
                 <dt>Awaiting a space</dt>
-                <dd data-testid="awaiting-space">{snap.resources.ed_spaces.awaiting_space}</dd>
+                <dd data-testid="awaiting-space">{fig(snap.resources.ed_spaces.awaiting_space)}</dd>
                 <dt>Resuscitation spaces free</dt>
                 <dd data-testid="resus-available">
                   {snap.resources.resus_spaces.available} of {snap.resources.resus_spaces.total}
                 </dd>
                 <dt>Triage desk busy</dt>
                 <dd data-testid="triage-busy">
-                  {snap.resources.triage_desk.busy} of {snap.resources.triage_desk.total}
+                  {ofTotal(snap.resources.triage_desk.busy, snap.resources.triage_desk.total)}
                 </dd>
                 <dt>Lab busy</dt>
                 <dd data-testid="lab-busy">
-                  {snap.resources.diagnostics.lab.busy} of {snap.resources.diagnostics.lab.servers}
-                  {snap.resources.diagnostics.lab.waiting > 0 &&
+                  {ofTotal(snap.resources.diagnostics.lab.busy, snap.resources.diagnostics.lab.servers)}
+                  {(snap.resources.diagnostics.lab.waiting ?? 0) > 0 &&
                     ` · ${snap.resources.diagnostics.lab.waiting} waiting`}
                 </dd>
                 <dt>Imaging busy</dt>
                 <dd data-testid="imaging-busy">
-                  {snap.resources.diagnostics.imaging.busy} of {snap.resources.diagnostics.imaging.servers}
-                  {snap.resources.diagnostics.imaging.waiting > 0 &&
+                  {ofTotal(snap.resources.diagnostics.imaging.busy, snap.resources.diagnostics.imaging.servers)}
+                  {(snap.resources.diagnostics.imaging.waiting ?? 0) > 0 &&
                     ` · ${snap.resources.diagnostics.imaging.waiting} waiting`}
                 </dd>
                 <dt>Discharge processing busy</dt>
                 <dd data-testid="discharge-busy">
-                  {snap.resources.disposition.discharge.busy} of {snap.resources.disposition.discharge.servers}
+                  {ofTotal(snap.resources.disposition.discharge.busy, snap.resources.disposition.discharge.servers)}
                 </dd>
                 <dt>Ward allocation busy</dt>
                 <dd data-testid="allocation-busy">
-                  {snap.resources.disposition.allocation.busy} of {snap.resources.disposition.allocation.servers}
+                  {ofTotal(snap.resources.disposition.allocation.busy, snap.resources.disposition.allocation.servers)}
                 </dd>
                 <dt>Transport busy</dt>
                 <dd data-testid="transport-busy">
-                  {snap.resources.disposition.transport.busy} of {snap.resources.disposition.transport.servers}
+                  {ofTotal(snap.resources.disposition.transport.busy, snap.resources.disposition.transport.servers)}
                 </dd>
                 <dt>Ward beds free</dt>
                 <dd data-testid="ward-beds-free">
@@ -564,7 +615,7 @@ export function App() {
                 </dd>
                 <dt>Doctors busy</dt>
                 <dd>
-                  {snap.resources.clinician_slots.busy} of {snap.resources.clinician_slots.total}
+                  {ofTotal(snap.resources.clinician_slots.busy, snap.resources.clinician_slots.total)}
                 </dd>
                 <dt>Patients in the ED</dt>
                 <dd data-testid="in-ed">{snap.counts.in_ed}</dd>
@@ -707,6 +758,9 @@ function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
   const sp = snap.resources.ed_spaces;
   const rs = snap.resources.resus_spaces;
   const summary = detail.summary;
+  const limited = ZONE_FEEDS[detail.zone.id]
+    .map((id) => snap.feeds[id])
+    .filter((f): f is Feed => f !== undefined && f.status !== 'fresh');
   return (
     <div
       data-testid="zone-drawer"
@@ -718,9 +772,24 @@ function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
         Zone {zone.id} · {zone.name}
       </h2>
       <p className="drawer-source muted" data-testid="drawer-source">
-        State v{detail.version} · {formatClock(detail.sim_time_min)} · feed updated{' '}
-        {formatClock(detail.freshness.state_updated_at_min)}, {detail.freshness.age_min} min old
+        State v{detail.version} · {formatClock(detail.sim_time_min)} · replay clock{' '}
+        {formatClock(detail.freshness.state_updated_at_min)}
+        {detail.freshness.oldest_essential_age_min != null &&
+          `, oldest essential feed ${detail.freshness.oldest_essential_age_min} min old`}
       </p>
+      {limited.length > 0 && (
+        <div className="callout" data-state="building" data-testid="drawer-limitations">
+          <p>
+            <strong>Limited data for this zone</strong>
+          </p>
+          {limited.map((f) => (
+            <p key={f.id} data-testid={`drawer-limit-${f.id}`}>
+              {f.label}: last valid update {clockOrDash(f.last_update_min)}
+              {f.age_min != null && ` (${f.age_min} min old)`}. {f.limitation}
+            </p>
+          ))}
+        </div>
+      )}
       <div className="callout" data-testid="drawer-summary" data-state={summary.state}>
         <p>
           <strong data-testid="drawer-headline">{summary.headline}</strong>
@@ -741,24 +810,24 @@ function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
         {zone.id === 2 && (
           <>
             <dt>Waiting for an ED space</dt>
-            <dd>{zone.awaiting_space ?? 0}</dd>
+            <dd>{fig(zone.awaiting_space)}</dd>
             <dt>Waiting for a clinician</dt>
-            <dd>{zone.awaiting_clinician ?? 0}</dd>
+            <dd>{fig(zone.awaiting_clinician)}</dd>
             <dt>With a clinician (assessment or result review)</dt>
-            <dd>{zone.active}</dd>
+            <dd>{fig(zone.active)}</dd>
             <dt>Results back, waiting for review</dt>
-            <dd data-testid="drawer-review-wait">{zone.awaiting_result_review ?? 0}</dd>
+            <dd data-testid="drawer-review-wait">{fig(zone.awaiting_result_review)}</dd>
             <dt>Decision received, care not complete</dt>
-            <dd data-testid="drawer-care-wait">{zone.awaiting_care_completion ?? 0}</dd>
+            <dd data-testid="drawer-care-wait">{fig(zone.awaiting_care_completion)}</dd>
           </>
         )}
         {zone.id === 1 && (
           <>
             <dt>Waiting for triage</dt>
-            <dd data-testid="drawer-triage-queue">{zone.queue}</dd>
+            <dd data-testid="drawer-triage-queue">{fig(zone.queue)}</dd>
             <dt>At the triage desk</dt>
             <dd>
-              {snap.resources.triage_desk.busy} of {snap.resources.triage_desk.total}
+              {ofTotal(snap.resources.triage_desk.busy, snap.resources.triage_desk.total)}
             </dd>
             <dt>Reserve triage team</dt>
             <dd>{snap.resources.triage_desk.reserve_team.active ? 'Active' : 'Declared, not active'}</dd>
@@ -767,50 +836,50 @@ function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
         {zone.id === 3 && (
           <>
             <dt>Waiting for the lab</dt>
-            <dd data-testid="drawer-lab-queue">{zone.lab_queue ?? 0}</dd>
+            <dd data-testid="drawer-lab-queue">{fig(zone.lab_queue)}</dd>
             <dt>Lab tests running</dt>
             <dd data-testid="drawer-lab-active">
-              {zone.lab_active ?? 0} of {snap.resources.diagnostics.lab.servers}
+              {ofTotal(zone.lab_active, snap.resources.diagnostics.lab.servers)}
             </dd>
             <dt>Waiting for imaging</dt>
-            <dd data-testid="drawer-imaging-queue">{zone.imaging_queue ?? 0}</dd>
+            <dd data-testid="drawer-imaging-queue">{fig(zone.imaging_queue)}</dd>
             <dt>Imaging running</dt>
             <dd data-testid="drawer-imaging-active">
-              {zone.imaging_active ?? 0} of {snap.resources.diagnostics.imaging.servers}
+              {ofTotal(zone.imaging_active, snap.resources.diagnostics.imaging.servers)}
             </dd>
             <dt>Lab capacity</dt>
             <dd data-testid="drawer-lab-rate">
               {snap.resources.diagnostics.lab.capacity_tasks_per_hour} tasks/h ·{' '}
-              {snap.resources.diagnostics.lab.completed_last_30_min} done in 30 min
+              {fig(snap.resources.diagnostics.lab.completed_last_30_min)} done in 30 min
             </dd>
             <dt>Imaging capacity</dt>
             <dd data-testid="drawer-imaging-rate">
               {snap.resources.diagnostics.imaging.capacity_tasks_per_hour} tasks/h ·{' '}
-              {snap.resources.diagnostics.imaging.completed_last_30_min} done in 30 min
+              {fig(snap.resources.diagnostics.imaging.completed_last_30_min)} done in 30 min
             </dd>
           </>
         )}
         {zone.id === 4 && (
           <>
             <dt>Home discharge: waiting</dt>
-            <dd data-testid="drawer-discharge-queue">{zone.awaiting_discharge ?? 0}</dd>
+            <dd data-testid="drawer-discharge-queue">{fig(zone.awaiting_discharge)}</dd>
             <dt>Home discharge: processing</dt>
             <dd data-testid="drawer-discharge-active">
-              {zone.discharge_active ?? 0} of {snap.resources.disposition.discharge.servers}
+              {ofTotal(zone.discharge_active, snap.resources.disposition.discharge.servers)}
             </dd>
             <dt>Boarding: waiting for a suitable bed</dt>
-            <dd data-testid="drawer-boarding">{zone.awaiting_ward_bed ?? 0}</dd>
+            <dd data-testid="drawer-boarding">{fig(zone.awaiting_ward_bed)}</dd>
             <dt>Ward allocation: waiting</dt>
-            <dd data-testid="drawer-allocation-queue">{zone.awaiting_ward_allocation ?? 0}</dd>
+            <dd data-testid="drawer-allocation-queue">{fig(zone.awaiting_ward_allocation)}</dd>
             <dt>Ward allocation: in progress</dt>
             <dd data-testid="drawer-allocation-active">
-              {zone.allocation_active ?? 0} of {snap.resources.disposition.allocation.servers}
+              {ofTotal(zone.allocation_active, snap.resources.disposition.allocation.servers)}
             </dd>
             <dt>Transport: waiting</dt>
-            <dd data-testid="drawer-transport-queue">{zone.awaiting_transport ?? 0}</dd>
+            <dd data-testid="drawer-transport-queue">{fig(zone.awaiting_transport)}</dd>
             <dt>Transport: moving a patient</dt>
             <dd data-testid="drawer-transport-active">
-              {zone.in_transport ?? 0} of {snap.resources.disposition.transport.servers}
+              {ofTotal(zone.in_transport, snap.resources.disposition.transport.servers)}
             </dd>
             <dt>Ward beds (free, reserved, occupied)</dt>
             <dd data-testid="drawer-ward-beds">
@@ -832,7 +901,7 @@ function ZoneDrawer({ snap, detail }: { snap: Snapshot; detail: ZoneDetail }) {
       <p style={{ marginBottom: 'var(--s-4)' }} data-testid="drawer-capacity" data-kind={detail.capacity.kind}>
         {zone.id === 1 && detail.capacity.text}
         {(zone.id === 2 || zone.id === 3) &&
-          `ED spaces are one shared pool for zones 2 and 3: ${sp.occupied} of ${sp.total} occupied, ${sp.available_staffed} general spaces free. ${rs.available} of ${rs.total} resuscitation spaces (held for supplied critical bypass) free${rs.awaiting ? `, ${rs.awaiting} critical patient${rs.awaiting === 1 ? '' : 's'} waiting` : ''}.`}
+          `ED spaces are one shared pool for zones 2 and 3: ${sp.occupied} of ${sp.total} occupied, ${fig(sp.available_staffed)} general spaces free. ${fig(rs.available)} of ${rs.total} resuscitation spaces (held for supplied critical bypass) free${rs.awaiting ? `, ${rs.awaiting} critical patient${rs.awaiting === 1 ? '' : 's'} waiting` : ''}.`}
         {zone.id === 4 &&
           `These patients still occupy their ED space until they physically leave (${sp.occupied} of ${sp.total} spaces occupied).`}
         {(zone.id === 2 || zone.id === 3) && (
@@ -1143,6 +1212,123 @@ const AMB_STATUS: Record<'en_route' | 'delayed', string> = {
   en_route: 'En route',
   delayed: 'Delayed, ETA overdue',
 };
+
+function FeedsPanel({ snap }: { snap: Snapshot | null }) {
+  if (!snap) return null;
+  const q = snap.data_quality;
+  return (
+    <section className="panel" aria-labelledby="feeds-h">
+      <h2 id="feeds-h">Data feeds</h2>
+      <p className="feed-summary" data-testid="feeds-summary" data-assessable={q.assessable}>
+        <span className="status" data-tone={q.assessable ? 'normal' : 'unknown'}>
+          {q.assessable ? <IconCheck /> : <IconUnknown />}
+          <span>{q.assessable ? 'Essential feeds current' : 'Cannot assess'}</span>
+        </span>
+      </p>
+      {!q.assessable && (
+        <p data-testid="feeds-reasons" style={{ marginBottom: 'var(--s-3)' }}>
+          {q.reasons.join(' ')}
+        </p>
+      )}
+      <p className="muted">
+        Replay clock <span data-testid="replay-heartbeat">{formatClock(snap.feeds.replay.last_update_min ?? 0)}</span>
+        . It does not refresh any feed below. A feed whose newest valid update is older than{' '}
+        {q.stale_after_min} simulated minutes is stale.
+      </p>
+      <ul className="feed-list" data-testid="feed-list">
+        {FEED_ORDER.map((id) => snap.feeds[id]).filter(Boolean).map((f) => {
+          const look = FEED_LOOK[f.status];
+          return (
+            <li key={f.id} data-testid={`feed-${f.id}`} data-status={f.status} data-essential={f.essential}>
+              <div className="feed-row">
+                <strong>{f.label}</strong>
+                <span className="feed-status" data-tone={look.tone} data-testid={`feed-${f.id}-status`}>
+                  {look.icon}
+                  {look.word}
+                </span>
+              </div>
+              <div className="muted" data-testid={`feed-${f.id}-age`}>
+                {f.essential ? 'Essential' : 'Optional'} ·{' '}
+                {f.last_update_min === null
+                  ? 'no valid update received'
+                  : `last valid update ${formatClock(f.last_update_min)} · ${f.age_min} min old`}
+              </div>
+              {f.limitation && (
+                <div className="muted" data-testid={`feed-${f.id}-limit`}>
+                  {f.limitation}
+                </div>
+              )}
+              {f.status === 'fresh' && f.resumed_at_min != null && (
+                <div className="muted" data-testid={`feed-${f.id}-resumed`}>
+                  Resumed at {formatClock(f.resumed_at_min)}; assessment restored.
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = {
+  duplicate: 'Duplicate ignored',
+  out_of_order: 'Out of order, newer state kept',
+  quarantined: 'Invalid, quarantined',
+  outlier_kept: 'Extreme but valid, kept',
+};
+
+function DataQualityPanel({ snap }: { snap: Snapshot | null }) {
+  if (!snap) return null;
+  const { counts, recent, sequence_gaps: gaps } = snap.data_quality;
+  const missing = gaps.reduce((n, g) => n + g.missing, 0);
+  return (
+    <section className="panel" aria-labelledby="dq-h">
+      <h2 id="dq-h">Data quality</h2>
+      <dl className="kv">
+        <dt>Events accepted</dt>
+        <dd data-testid="dq-accepted">{counts.accepted}</dd>
+        <dt>Duplicates ignored</dt>
+        <dd data-testid="dq-duplicates">{counts.duplicates}</dd>
+        <dt>Out of order, ignored</dt>
+        <dd data-testid="dq-out-of-order">{counts.out_of_order}</dd>
+        <dt>Invalid, quarantined</dt>
+        <dd data-testid="dq-quarantined">{counts.quarantined}</dd>
+        <dt>Extreme but valid, kept</dt>
+        <dd data-testid="dq-outliers">{counts.outliers_kept}</dd>
+        <dt>Event ids not received</dt>
+        <dd data-testid="dq-gaps">{missing}</dd>
+      </dl>
+      {recent.length === 0 ? (
+        <p className="muted" data-testid="dq-empty" style={{ marginTop: 'var(--s-3)' }}>
+          Nothing has been ignored, refused or flagged.
+        </p>
+      ) : (
+        <details style={{ marginTop: 'var(--s-3)' }}>
+          <summary>Latest {recent.length} items</summary>
+          <ul className="feed-list" data-testid="dq-list">
+            {recent.map((it, i) => (
+              <li key={`${it.id}-${i}`} data-testid="dq-item" data-kind={it.kind} data-id={it.id ?? ''}>
+                <div className="feed-row">
+                  <strong>{it.id ?? 'no id'}</strong>
+                  <span className="feed-status" data-tone={it.kind === 'outlier_kept' ? 'normal' : 'unknown'}>
+                    {it.kind === 'outlier_kept' ? <IconCheck /> : <IconTriangle />}
+                    {KIND_LABEL[it.kind] ?? it.kind}
+                  </span>
+                </div>
+                <div className="muted">
+                  {it.source} feed · received {formatClock(it.received_min)}
+                  {it.subject ? ` · ${it.subject}` : ''}
+                </div>
+                <div>{it.reason}</div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
 
 function AmbulancePanel({ snap }: { snap: Snapshot | null }) {
   const inbound = snap?.inbound_ambulances ?? [];

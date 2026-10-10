@@ -115,6 +115,12 @@ def reset(replay_id: str, body: Reset | None = None) -> dict:
     return s.reset(body.seed, body.scenario)
 
 
+@app.get("/api/v1/replays/{replay_id}/ingest")
+def ingest(replay_id: str) -> dict:
+    """What the feeds delivered that was refused, ignored or flagged, each with its reason."""
+    return _session(replay_id).ingest()
+
+
 @app.get("/api/v1/replays/{replay_id}/events")
 def events(replay_id: str, since: int = Query(default=0, ge=0)) -> dict:
     return _session(replay_id).events(since)

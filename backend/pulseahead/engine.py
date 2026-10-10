@@ -23,6 +23,7 @@ from typing import Any
 
 import simpy
 
+from .feeds import SERVICE_SOURCE, IngestGate
 from .fixtures import FIXTURES
 from .pressure import LocalMonitor
 from .profile import CRITICAL_RANK, PROFILE, SCENARIOS, URGENCY_RANK
@@ -331,6 +332,15 @@ class CongestionMonitor:
         """Confirmed congestion whose recovery clock (fewer than 3 waiting) is running."""
         return self.state == "confirmed" and self.below_since_min is not None
 
+    def degrade(self) -> None:
+        """Essential inputs are missing: nothing can be established. A building interval is no longer
+        continuous, and recovery time cannot accrue; a confirmed episode stays open."""
+        if self.state == "building":
+            self.state = "stable"
+            self.onset_min = None
+        elif self.state == "confirmed":
+            self.below_since_min = None
+
     def tick(self, now: float, available_spaces: int, awaiting_space: int) -> None:
         rule = PROFILE["congestion_rule"]
         cond = (
@@ -533,6 +543,13 @@ class EDEngine:
         self.patients: dict[str, Patient] = {}
         self.announcements: dict[str, Announcement] = {}
         self.events: list[dict[str, Any]] = []
+        # What was received through the feeds. The replay's own record is `events`; the two differ only
+        # when a fixture scripts a feed fault.
+        self.gate = IngestGate(self.definition)
+        # Per-minute record of the readings the monitors use, so a stopped or delayed feed can be read
+        # as of the time its newest data describes.
+        self._hist: dict[str, list[tuple[float, int, bool]]] = {sid: [] for sid in SERVICE_SOURCE}
+        self._hist_overall: list[tuple[float, int, int]] = []
         self.departed_count = 0
         self.monitor = CongestionMonitor()
         self.local = LocalMonitor()
@@ -554,6 +571,8 @@ class EDEngine:
                 self.env.process(self._ambulance(run))
         for at, nurse_id, on in self.definition.get("staffing", []):
             self.env.process(self._staffing_change(at, nurse_id, on))
+        for inj in self.gate.injections:
+            self.env.process(self._inject(inj))
         self.env.process(self._monitor_loop())
 
     # -- time ----------------------------------------------------------------------------
@@ -592,18 +611,18 @@ class EDEngine:
         resources: dict[str, str | None] | None = None,
         ambulance_id: str | None = None,
     ) -> None:
-        self.events.append(
-            {
-                "id": f"E{len(self.events) + 1:06d}",
-                "type": etype,
-                "event_time_min": round(self.now, 3),
-                "received_time_min": round(self.now, 3),
-                "patient_id": patient_id,
-                "ambulance_id": ambulance_id,
-                "resources": resources or {},
-                "payload": payload,
-            }
-        )
+        event = {
+            "id": f"E{len(self.events) + 1:06d}",
+            "type": etype,
+            "event_time_min": round(self.now, 3),
+            "received_time_min": round(self.now, 3),
+            "patient_id": patient_id,
+            "ambulance_id": ambulance_id,
+            "resources": resources or {},
+            "payload": payload,
+        }
+        self.events.append(event)
+        self.gate.deliver(event, self.now)
 
     @staticmethod
     def _take(pool: list[str]) -> str:
@@ -718,6 +737,8 @@ class EDEngine:
         for at, kind in sorted(steps):
             if at > self.now:
                 yield self.env.timeout(at - self.now)
+            if ann.state == "cancelled":
+                return  # cancelled from outside before the scripted step
             ann.source_updated_min = self.now
             if kind == "update":
                 ann.eta_min = run.update[1]  # type: ignore[index]
@@ -991,13 +1012,48 @@ class EDEngine:
         return None
 
     def _inputs_ok(self, service: str) -> bool:
-        """A fixture can declare a service's inputs missing for an interval (faulty feed)."""
+        """A service's inputs are usable when its source is fresh (its newest valid update is no more
+        than ten simulated minutes old) and no fixture declares them missing for an interval."""
         for start, end, services in self.definition.get("missing_inputs", []):
             if start <= self.now < end and service in services:
                 return False
-        return True
+        return self.gate.fresh(SERVICE_SOURCE[service], self.now)
 
-    def local_readings(self) -> dict[str, dict[str, Any]]:
+    def missing_services(self) -> list[str]:
+        """Services a fixture currently declares missing (as opposed to a stale feed)."""
+        return sorted(
+            {s for start, end, services in self.definition.get("missing_inputs", []) if start <= self.now < end
+             for s in services}
+        )
+
+    def _record(self) -> None:
+        """Remember this minute's true readings (see local_readings, _overall_inputs)."""
+        for sid, (q, blocked) in self._raw_readings().items():
+            self._hist[sid].append((self.now, q, blocked))
+        self._hist_overall.append((self.now, self.available_general_spaces(), self.awaiting_space()))
+
+    @staticmethod
+    def _at(hist: list[tuple], asof: float) -> tuple | None:
+        for entry in reversed(hist):
+            if entry[0] <= asof + 1e-9:
+                return entry
+        return None
+
+    def _overall_inputs(self) -> tuple[int, int] | None:
+        """Available staffed spaces and patients awaiting a space as the feeds describe them, or None
+        when a source they need is older than ten simulated minutes."""
+        srcs = ("spaces", "staffing")
+        if "space" in self.missing_services():
+            return None
+        if not all(self.gate.fresh(s, self.now) for s in srcs):
+            return None
+        asof = min(self.gate.observed_as_of(s, self.now) for s in srcs)
+        if asof >= self.now - 1e-9:
+            return self.available_general_spaces(), self.awaiting_space()
+        entry = self._at(self._hist_overall, asof)
+        return (entry[1], entry[2]) if entry else (0, 0)
+
+    def _raw_readings(self) -> dict[str, tuple[int, bool]]:
         gp, rp = self.general_pool, self.resus_pool
         space_blocked = (len(gp.waiting) > 0 and not gp.free_staffed()) or (
             len(rp.waiting) > 0 and not rp.free_staffed()
@@ -1007,7 +1063,7 @@ class EDEngine:
             # Capacity is unavailable only when the service has no staffed unit at all.
             return len(res.queue), res.capacity == 0
 
-        raw = {
+        return {
             "triage": unit(self.triage),
             "assessment": unit(self.clinicians),
             "space": (len(gp.waiting) + len(rp.waiting), space_blocked),
@@ -1019,16 +1075,57 @@ class EDEngine:
             # A waiter exists only when no suitable free bed of its type does.
             "ward_beds": (beds_waiting, beds_waiting > 0),
         }
-        return {
-            sid: {"queue": q, "capacity_unavailable": blocked, "inputs_ok": self._inputs_ok(sid)}
-            for sid, (q, blocked) in raw.items()
-        }
+
+    def local_readings(self) -> dict[str, dict[str, Any]]:
+        """Queue and capacity readings as the feeds describe them: live while a source is healthy, the
+        last minute before a stop, or the minute a delayed feed's data is from."""
+        raw = self._raw_readings()
+        out: dict[str, dict[str, Any]] = {}
+        for sid, (q, blocked) in raw.items():
+            asof = self.gate.observed_as_of(SERVICE_SOURCE[sid], self.now)
+            if asof < self.now - 1e-9:
+                entry = self._at(self._hist[sid], asof)
+                q, blocked = (entry[1], entry[2]) if entry else (0, False)
+            out[sid] = {"queue": q, "capacity_unavailable": blocked, "inputs_ok": self._inputs_ok(sid)}
+        return out
 
     def _monitor_loop(self):
         while True:
             yield self.env.timeout(1.0)
-            self.monitor.tick(self.now, self.available_general_spaces(), self.awaiting_space())
+            self._record()
+            inputs = self._overall_inputs()
+            if inputs is None:
+                self.monitor.degrade()
+            else:
+                self.monitor.tick(self.now, *inputs)
             self.local.tick(self.now, self.local_readings())
+            self.gate.flush(self.now)
+
+    # -- messages from outside the replay ---------------------------------------------------
+    def _inject(self, inj: dict[str, Any]):
+        if inj["at"] > self.now:
+            yield self.env.timeout(inj["at"] - self.now)
+        self.gate.receive(inj["message"], inj["source"], self)
+
+    def apply_external_announcement(self, amb: str, eta: float, uncertainty: float, patients: int) -> None:
+        ann = Announcement(
+            id=amb, received_min=self.now, eta_min=eta, uncertainty_min=uncertainty,
+            patient_count=patients, acuity=None, source_updated_min=self.now,
+        )
+        self.announcements[amb] = ann
+        self._emit("ambulance_announced", None, ann.public(self.now), ambulance_id=amb)
+
+    def apply_external_eta(self, amb: str, eta: float) -> None:
+        ann = self.announcements[amb]
+        ann.eta_min = eta
+        ann.source_updated_min = self.now
+        self._emit("ambulance_updated", None, ann.public(self.now), ambulance_id=amb)
+
+    def apply_external_ambulance_cancel(self, amb: str) -> None:
+        ann = self.announcements[amb]
+        ann.state, ann.closed_min = "cancelled", self.now
+        ann.source_updated_min = self.now
+        self._emit("ambulance_cancelled", None, ann.public(self.now), ambulance_id=amb)
 
     # -- read models ---------------------------------------------------------------------
     def active_patients(self) -> list[Patient]:

@@ -162,6 +162,119 @@ def _congestion_script() -> dict[str, Any]:
     }
 
 
+
+def _feed_staffing_script() -> dict[str, Any]:
+    # Steady demand and a live ambulance feed while the staffing feed is stopped.
+    walk_ins = [
+        (2.0, "W01", _walk_in("lower", 4)),
+        (2.0, "W02", _walk_in("medium", 3)),
+        (2.0, "W03", _walk_in("lower", 5)),
+        (2.0, "W04", _walk_in("medium", 3)),
+        (2.0, "W05", _walk_in("lower", 4)),
+        (2.0, "W06", _walk_in("medium", 3)),
+        (50.0, "W07", _walk_in("lower", 4)),
+        (50.0, "W08", _walk_in("medium", 3)),
+        (50.0, "W09", _walk_in("lower", 5)),
+        (50.0, "W10", _walk_in("medium", 3)),
+    ]
+    return {
+        "walk_ins": walk_ins,
+        "ambulances": [
+            AmbulanceRun("A01", 1.0, 10.0, 5.0, [_amb("A01", "medium", 3)], True, arrive_min=11.0),
+            # Announced before the stop, ETA revised inside it: the ambulance feed stays healthy.
+            AmbulanceRun("A02", 3.0, 60.0, 5.0, [_amb("A02", "lower", 4)], True,
+                         update=(40.0, 70.0), arrive_min=71.0),
+            AmbulanceRun("A03", 45.0, 85.0, 5.0, [_amb("A03", "medium", 3)], True, arrive_min=86.0),
+        ],
+    }
+
+
+def _feed_faults_script() -> dict[str, Any]:
+    walk_ins = [
+        (2.0, "W01", _walk_in("lower", 4)),
+        # Two ordinary tests whose events fall inside the delayed-diagnostics window.
+        (2.0, "W02", _walk_in("medium", 3, tests=(("lab", 35.0),))),
+        (2.0, "W03", _walk_in("lower", 5, tests=(("imaging", 40.0),))),
+        (2.0, "W04", _walk_in("urgent", 2, 12.0)),
+        # An extreme but valid test turnaround (supplied 130 min): must be kept, not discarded.
+        (5.0, "W05", _walk_in("medium", 3, tests=(("lab", 130.0),))),
+    ] + [
+        # Ten arrivals in one minute: an extreme but valid surge.
+        (30.0, f"B{i:02d}", _walk_in("lower", 4)) for i in range(1, 11)
+    ]
+    return {
+        "walk_ins": walk_ins,
+        "ambulances": [
+            AmbulanceRun("A01", 1.0, 10.0, 5.0, [_amb("A01", "medium", 3), _amb("A01", "lower", 4)], True,
+                         arrive_min=11.0),
+            # ETA revised within its uncertainty (ordinary noise).
+            AmbulanceRun("A02", 3.0, 18.0, 5.0, [_amb("A02", "medium", 3)], True,
+                         update=(9.0, 26.0), arrive_min=27.0),
+            AmbulanceRun("A03", 4.0, 20.0, 5.0, [_amb("A03", "lower", 4)], True, cancel_min=12.0),
+            # ETA moved by 90 minutes: extreme but valid.
+            AmbulanceRun("A05", 20.0, 35.0, 5.0, [_amb("A05", "urgent", 1, True)], True,
+                         update=(25.0, 125.0), arrive_min=125.0),
+        ],
+    }
+
+
+def _feed_optional_script() -> dict[str, Any]:
+    walk_ins = [
+        (2.0, "W01", _walk_in("medium", 3, tests=(("lab", 40.0),))),
+        (2.0, "W02", _walk_in("medium", 3, tests=(("lab", 40.0),))),
+        (2.0, "W03", _walk_in("lower", 4, tests=(("imaging", 60.0),))),
+        (2.0, "W04", _walk_in("lower", 4)),
+    ]
+    return {
+        "walk_ins": walk_ins,
+        "ambulances": [
+            AmbulanceRun("A01", 1.0, 45.0, 5.0, [_amb("A01", "medium", 3)], True, arrive_min=47.0),
+            # Announced while the ambulance feed is stopped: never received.
+            AmbulanceRun("A02", 30.0, 70.0, 5.0, [_amb("A02", "lower", 4)], True, arrive_min=72.0),
+        ],
+    }
+
+
+def _inj(at: float, source: str, message: dict[str, Any]) -> dict[str, Any]:
+    return {"at": at, "source": source, "message": message}
+
+
+# External messages for fixture-feed-faults. They are the hidden schedule of what the outside world
+# sends; each is validated on receipt against the received state.
+_FEED_INJECTIONS = [
+    # A real event id delivered a second time.
+    _inj(13.0, "queues", {"id": "E000005", "type": "phase_change", "patient_id": "W01",
+                          "event_time_min": 2.0, "payload": {"to": "awaiting_triage"}}),
+    # W04 cannot go from its current phase straight to departed.
+    _inj(14.0, "queues", {"id": "X-IMP-1", "type": "phase_change", "patient_id": "W04",
+                          "event_time_min": 14.0, "payload": {"to": "departed"}}),
+    # A stale replay of an old transition for W01: its newer state must be kept.
+    _inj(15.0, "queues", {"id": "X-OOO-1", "type": "phase_change", "patient_id": "W01",
+                          "event_time_min": 3.0, "payload": {"to": "in_triage"}}),
+    _inj(16.0, "queues", {"id": "X-NEG-1", "type": "count_report", "service": "triage", "count": -3}),
+    _inj(17.0, "spaces", {"id": "X-CNT-1", "type": "count_report", "service": "space", "count": 99}),
+    # A01 already arrived at 11.
+    _inj(18.0, "ambulance", {"id": "X-ETA-1", "type": "ambulance_updated", "ambulance_id": "A01",
+                             "payload": {"eta_min": 30.0}}),
+    _inj(19.0, "ambulance", {"id": "X-ETA-2", "type": "ambulance_updated", "ambulance_id": "A99",
+                             "payload": {"eta_min": 40.0}}),
+    # ETA before the announcement, and an impossible patient count.
+    _inj(21.0, "ambulance", {"id": "X-ANN-1", "type": "ambulance_announced", "ambulance_id": "A07",
+                             "payload": {"patient_count": 2, "eta_min": 5.0}}),
+    _inj(22.0, "ambulance", {"id": "X-ANN-2", "type": "ambulance_announced", "ambulance_id": "A08",
+                             "payload": {"patient_count": 0, "eta_min": 40.0}}),
+    # An older update than A02's latest (T+9).
+    _inj(23.0, "ambulance", {"id": "X-ETA-3", "type": "ambulance_updated", "ambulance_id": "A02",
+                             "event_time_min": 1.0, "payload": {"eta_min": 24.0}}),
+    # A valid ETA update from outside: applied.
+    _inj(24.0, "ambulance", {"id": "X-ETA-4", "type": "ambulance_updated", "ambulance_id": "A05",
+                             "payload": {"eta_min": 38.0}}),
+    _inj(26.0, "queues", {"id": "X-FUT-1", "type": "phase_change", "patient_id": "W02",
+                          "event_time_min": 60.0, "payload": {"to": "in_triage"}}),
+    _inj(27.0, "queues", {"id": "X-UNK-1", "type": "phase_change", "patient_id": "Z999",
+                          "event_time_min": 27.0, "payload": {"to": "in_triage"}}),
+]
+
 FIXTURES: dict[str, dict[str, Any]] = {
     "fixture-intake": {
         "id": "fixture-intake",
@@ -223,6 +336,42 @@ FIXTURES: dict[str, dict[str, Any]] = {
         "fixture": True,
         "background_arrivals": False,
         "script": _diagnostics_script,
+    },
+    "fixture-feed-staffing-stop": {
+        "id": "fixture-feed-staffing-stop",
+        "name": "Fixture: staffing feed stopped from T+32 to T+70 while the replay and ambulance feeds stay healthy",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _feed_staffing_script,
+        # Hidden schedule: two nurses go off duty during the outage, which the staffing feed never
+        # reports until it resumes.
+        "staffing": [(45.0, "N1", False), (55.0, "N2", False)],
+        "feed_faults": [{"source": "staffing", "kind": "stop", "start": 32.0, "end": 70.0}],
+    },
+    "fixture-feed-faults": {
+        "id": "fixture-feed-faults",
+        "name": "Fixture: duplicate, delayed, out-of-order and invalid inputs, with valid outliers kept",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _feed_faults_script,
+        "feed_faults": [
+            # Every queue event is delivered twice from T+2 to T+12.
+            {"source": "queues", "kind": "duplicate", "start": 2.0, "end": 12.0},
+            # Lab and imaging events arrive six minutes late from T+40 to T+90.
+            {"source": "diagnostics", "kind": "delay", "start": 40.0, "end": 90.0, "delay_min": 6.0},
+        ],
+        "injections": _FEED_INJECTIONS,
+    },
+    "fixture-feed-optional-stop": {
+        "id": "fixture-feed-optional-stop",
+        "name": "Fixture: ambulance feed stopped T+25 to T+60 and diagnostics feed stopped T+40 to T+80",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _feed_optional_script,
+        "feed_faults": [
+            {"source": "ambulance", "kind": "stop", "start": 25.0, "end": 60.0},
+            {"source": "diagnostics", "kind": "stop", "start": 40.0, "end": 80.0},
+        ],
     },
     "fixture-staffing": {
         "id": "fixture-staffing",

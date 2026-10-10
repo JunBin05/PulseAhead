@@ -57,33 +57,35 @@ export interface Zone {
   name: string;
   patient_count: number;
   patient_ids: string[];
-  queue: number;
-  active: number;
-  awaiting_space?: number;
-  awaiting_clinician?: number;
-  awaiting_care_completion?: number;
-  awaiting_result_review?: number;
-  result_review_active?: number;
-  lab_queue?: number;
-  lab_active?: number;
-  awaiting_discharge?: number;
-  discharge_active?: number;
-  awaiting_ward_bed?: number;
-  awaiting_ward_allocation?: number;
-  allocation_active?: number;
-  awaiting_transport?: number;
-  in_transport?: number;
+  queue: number | null;
+  active: number | null;
+  awaiting_space?: number | null;
+  awaiting_clinician?: number | null;
+  awaiting_care_completion?: number | null;
+  awaiting_result_review?: number | null;
+  result_review_active?: number | null;
+  lab_queue?: number | null;
+  lab_active?: number | null;
+  awaiting_discharge?: number | null;
+  discharge_active?: number | null;
+  awaiting_ward_bed?: number | null;
+  awaiting_ward_allocation?: number | null;
+  allocation_active?: number | null;
+  awaiting_transport?: number | null;
+  in_transport?: number | null;
   home_patients?: number;
   transfer_patients?: number;
-  imaging_queue?: number;
-  imaging_active?: number;
+  imaging_queue?: number | null;
+  imaging_active?: number | null;
   capacity: { kind: string; shared_with_zone?: number } | null;
 }
 
 export interface DispService {
   servers: number;
-  busy: number;
-  waiting: number;
+  busy: number | null;
+  waiting: number | null;
+  /** False when a fixture declares this service's inputs missing (figures are then null). */
+  inputs_ok?: boolean;
   owner: string;
   median_min: number;
   /** Units x 60 / mean disclosed task minutes; the same basis as the zone pressure panel's mu. */
@@ -100,14 +102,15 @@ export interface BedCounts {
 
 export interface DiagService {
   servers: number;
-  busy: number;
-  waiting: number;
+  busy: number | null;
+  waiting: number | null;
+  inputs_ok?: boolean;
   owner: string;
   median_turnaround_min: number;
   capacity_tasks_per_hour: number;
-  started_last_30_min: number;
-  completed_last_30_min: number;
-  recent_throughput_tasks_per_hour: number;
+  started_last_30_min: number | null;
+  completed_last_30_min: number | null;
+  recent_throughput_tasks_per_hour: number | null;
 }
 
 export type CongestionState = 'stable' | 'building' | 'confirmed';
@@ -190,6 +193,55 @@ export interface Pressure {
 
 export type AmbulanceStatus = 'en_route' | 'delayed' | 'cancelled' | 'arrived';
 
+export type FeedStatus = 'fresh' | 'stale' | 'missing';
+
+/** One data source and how current its newest valid update is. */
+export interface Feed {
+  id: string;
+  label: string;
+  essential: boolean;
+  last_update_min: number | null;
+  age_min: number | null;
+  status: FeedStatus;
+  limitation: string | null;
+  guidance: string | null;
+  resumed_at_min?: number | null;
+  note?: string;
+}
+
+/** One message the feeds delivered that was ignored, refused or flagged. */
+export interface IngestItem {
+  id: string | null;
+  kind: 'duplicate' | 'out_of_order' | 'quarantined' | 'outlier_kept';
+  source: string;
+  type: string | null;
+  event_time_min: number | null;
+  received_min: number;
+  subject: string | null;
+  reason: string;
+}
+
+export interface DataQuality {
+  assessable: boolean;
+  reasons: string[];
+  essential_sources: string[];
+  stale_after_min: number;
+  heartbeat_every_min: number;
+  counts: { accepted: number; duplicates: number; out_of_order: number; quarantined: number; outliers_kept: number };
+  sequence_gaps: { after: string; before: string; missing: number }[];
+  recent: IngestItem[];
+}
+
+export interface Freshness {
+  state_updated_at_min: number;
+  age_min: number;
+  note: string;
+  stale_after_min?: number;
+  heartbeat_every_min?: number;
+  oldest_essential_age_min?: number | null;
+  essential_ok?: boolean;
+}
+
 export interface Announcement {
   id: string;
   received_min: number;
@@ -215,10 +267,16 @@ export interface Snapshot {
   seed: number;
   synthetic: boolean;
   sim_time_min: number;
-  freshness: { state_updated_at_min: number; age_min: number; note: string };
+  freshness: Freshness;
+  feeds: Record<string, Feed>;
+  data_quality: DataQuality;
   overall_status: {
     state: CongestionState;
     label: string;
+    /** False when an essential feed is older than ten simulated minutes (the label then reads Cannot assess). */
+    assessable: boolean;
+    reasons: string[];
+    last_valid_label?: string;
     onset_min: number | null;
     confirmed_min: number | null;
     recovering: boolean;
@@ -231,8 +289,8 @@ export interface Snapshot {
     ed_spaces: {
       total: number;
       occupied: number;
-      available_staffed: number;
-      awaiting_space: number;
+      available_staffed: number | null;
+      awaiting_space: number | null;
       general_total: number;
       general_occupied: number;
       staffed_total: number;
@@ -243,9 +301,9 @@ export interface Snapshot {
     resus_spaces: {
       total: number;
       occupied: number;
-      available: number;
+      available: number | null;
       unstaffed_empty: number;
-      awaiting: number;
+      awaiting: number | null;
       owner: string;
     };
     disposition: {
@@ -286,11 +344,11 @@ export interface Snapshot {
       unstaffed_empty_spaces: { count: number; space_ids: string[]; reason: string | null };
       note: string;
     };
-    clinician_slots: { total: number; busy: number; waiting: number; owner: string };
+    clinician_slots: { total: number; busy: number | null; waiting: number | null; owner: string };
     triage_desk: {
       total: number;
-      busy: number;
-      waiting: number;
+      busy: number | null;
+      waiting: number | null;
       owner: string;
       reserve_team: { size: number; active: boolean; owner: string; note: string };
     };
@@ -313,6 +371,8 @@ export interface Snapshot {
   };
   ambulance_announcements: Announcement[];
   event_count: number;
+  /** Services a fixture declares missing; their figures are null rather than exact. */
+  limited_services?: string[];
 }
 
 export const ZONE_NAMES: Record<number, string> = {
@@ -326,7 +386,7 @@ export const ZONE_NAMES: Record<number, string> = {
 export interface ZoneQueueLine {
   id: string;
   label: string;
-  count: number;
+  count: number | null;
   kind: 'queue' | 'active';
   of: number | null;
 }
@@ -334,9 +394,9 @@ export interface ZoneQueueLine {
 export interface ZoneUnit {
   id: string;
   label: string;
-  busy: number;
+  busy: number | null;
   servers: number;
-  waiting: number;
+  waiting: number | null;
   owner: string;
   reserve_team_active?: boolean;
 }
@@ -362,7 +422,7 @@ export interface ZoneDetail {
   run_number: number;
   version: number;
   sim_time_min: number;
-  freshness: { state_updated_at_min: number; age_min: number; note: string };
+  freshness: Freshness;
   zone: { id: number; key: string; name: string; patient_count: number; counts: Record<string, number> };
   roster: PatientDot[];
   queues: ZoneQueueLine[];

@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10 (tickets 01-07 done; the 03-06 review gate is closed and committed as `b4e7f5a review: fixes after ticket 03-06 gate`; ticket 07 is committed on top). Next is ticket 08. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-10 (tickets 01-08 done; the 03-06 review gate is closed and committed as `b4e7f5a review: fixes after ticket 03-06 gate`; tickets 07 and 08 are committed on top). Next is ticket 09. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -26,9 +26,10 @@ Updated 2026-10-10 (tickets 01-07 done; the 03-06 review gate is closed and comm
 | 05 Cleared discharge and constrained ward exits | **done**: 7/7 pass (no review gate due) | `evidence/05-disposition-and-exits.md`, `evidence/05-disposition.playwright-mcp.js`, `evidence/shots/05-boarding-t70.png` |
 | 06 Local overload vs ED congestion | **done**: 8/8 pass; review gate for 03-06 closed, fixes re-verified (see "Review gate state") | `evidence/06-zone-pressure-and-ed-congestion.md`, `evidence/06-pressure.playwright-mcp.js`, `evidence/06-ui.playwright-mcp.js`, `evidence/shots/06-*.png` |
 | 07 Zone drawers and camera | **done**: 7/7 pass (no review gate due) | `evidence/07-zone-drawers-and-camera.md`, `evidence/07-zones.playwright-mcp.js`, `evidence/07-ease.playwright-mcp.js`, `evidence/shots/07-*.png` |
-| 08–22 | not started (08 is next) | n/a |
+| 08 Fresh, noisy, missing and invalid inputs | **done**: 7/7 pass (no review gate due) | `evidence/08-received-data-and-robustness.md`, `evidence/08-feeds.playwright-mcp.js` (PART `A` and `B`), `evidence/shots/08-*.png` |
+| 09–22 | not started (09 is next) | n/a |
 
-Tickets 01 to 07 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
+Tickets 01 to 08 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
 
 ## Verified through Playwright MCP (all pass, production build on :8000)
 
@@ -81,6 +82,12 @@ Tickets 01 to 07 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
 - Short burst never confirms; diagnostic-only and triage-only alerts leave the overall status Stable; missing imaging feed gives Cannot assess and withholds recovery (clears 154, not 99).
 - UI chips, ALERT bubbles, Local alert chip, area-label counts and drawer cards equal `/state` at every step; layered dots stay in their area; 375/768/1024/1440 widths pass.
 
+**Ticket 08** (fixtures `fixture-feed-staffing-stop`, `fixture-feed-faults`, `fixture-feed-optional-stop`, `fixture-diagnostics-gap`; API at 1 min, UI at 5 min steps):
+- Healthy replay and ambulance heartbeats never refresh a stopped staffing feed; exact boundary (age 10 fresh, 11 stale), Cannot assess, last valid values with age, recovery with the resume time.
+- Duplicates, out-of-order updates, 9 quarantined inputs with reasons, valid outliers kept (130 min test, 10-arrival burst, 87 min ETA move), delayed feed shows its as-of time.
+- Optional feeds stale limit only their part; `missing_inputs` figures are `null` and read "Not current"; hidden fault schedule never in any response.
+- Regressions 01 to 05, 06 (pressure engine + seed7, ui, zone4, label geometry) and 07 all pass.
+
 **Not verified yet (not-run), owned by later tickets:**
 - 200-dot / 30 fps performance (ticket 20)
 - reduced-motion and 2D fallback (ticket 20; the camera jumps under reduced motion, checked in ticket 07)
@@ -92,7 +99,7 @@ Tickets 01 to 07 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
 - **Deferred review findings** (full list in `evidence/01-working-3d-replay.md`, "Deferred to the ticket that owns them"):
   - **Ticket 06:** resolved (dots layer instead of overflowing; "Congested, recovering" label; boundaries tested).
   - **Ticket 05:** resolved (exits show destination and counts; bed pool is finite).
-  - **Ticket 08:** per-source freshness; `freshness.age_min` is always 0 (the zone response restates it, ticket 07 evidence limit).
+  - **Ticket 08:** resolved (per-source freshness in `feeds.*`; top-level `freshness.age_min` is the replay heartbeat and stays 0 by design, with `oldest_essential_age_min` beside it).
   - The ticket 02 ambulance placeholder item is resolved.
 - **Kept by judgement:** `@react-three/drei` is pinned but unused; `ZONE_NAMES` duplicates the profile.
 - **Open questions** (`OPEN_QUESTIONS.md`) and their working decisions:
@@ -129,8 +136,9 @@ Tickets 01 to 07 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
   - `fixtures.py`: test-only scripted scenarios (`fixture-intake`, `fixture-staffing`, `fixture-diagnostics`, `fixture-boarding`, `fixture-congestion-boundary`, `fixture-diagnostics-gap`, `fixture-queue-surge`; a fixture may carry a supplied `staffing` roster, `ward_beds` schedule or `fixed_minutes`).
   - `engine.py`: the SimPy flow. Triage desk → staffed general space (`SpacePool`), or critical bypass → staffed resus space; then a named doctor, first assessment, supplied tests (lab `L1`-`L2`, imaging `I1`, zone 3), result review by a doctor (zone 2), decision received, required care complete (`awaiting_care_completion` if premature), then home discharge processing (zone 4) or a Ward/ICU transfer (`WardBeds` bed reservation, allocation work, transport), and physical departure through the Home or Ward/ICU exit. Also the ambulance lifecycle and the congestion monitor.
   - `pressure.py`: `SERVICES` (nine services with zone, category, threshold) and `LocalMonitor` (normal, building, overloaded; 10 min to confirm, 5 min to clear, missing inputs).
+  - `feeds.py`: the received-data layer (`IngestGate`): six sources with heartbeats and freshness, deduplication, validation and quarantine of external messages, outlier log, sequence gaps. Fixtures script `feed_faults` and `injections`.
   - `replay.py`: sessions, versions and the snapshot read model, including `pressure` (services with rates, zone states, alerts) and the `recovering` / `local_alert` fields of `overall_status`.
-  - `api.py`: endpoints (`/api/health`, `/api/v1/profile`, `/api/v1/fixtures`, `/api/v1/replays` create/state/advance with `expected_version` (409 on mismatch)/reset/events/export). It also serves `frontend/dist`.
+  - `api.py`: endpoints (`/api/health`, `/api/v1/profile`, `/api/v1/fixtures`, `/api/v1/replays` create/state/advance with `expected_version` (409 on mismatch)/reset/events/ingest/export). It also serves `frontend/dist`.
 - **Frontend** (`frontend/src/`):
   - `App.tsx`: controls, ambulance panel, resources, zone drawer and the shared staffing summary (zones 2 and 3). The test-only `?fixture=` parameter is read here.
   - `Scene.tsx`: R3F isometric scene, DOM labels, compact labels below a 560 px canvas, and the `data-patient-meshes` counter.
@@ -191,17 +199,27 @@ The `code-review` skill ran two reviewers (Standards, Spec) over `e69ceb6...3ecc
 
 ### Review findings deliberately deferred (not fixed in this gate)
 
-- **Missing-feed masking is partial:** only `pressure` hides counts for a service whose inputs are missing; `resources.diagnostics.*.waiting`, `zones[].lab_queue` and the sidebar still show exact numbers. Owned by ticket 08 (received data).
-- **Overall monitor ignores missing space-feed inputs**, while the local one respects them. Ticket 08/10.
+- **Missing-feed masking:** resolved in ticket 08 (services declared missing report `null` figures and the sidebar/drawer say "Not current").
+- **Overall monitor ignores missing space-feed inputs:** resolved in ticket 08 (`_overall_inputs` degrades).
 - **Total ED time and its parts shown separately in the UI** (story 23): export only for now. Tickets 11 and 17 (comparison panel).
 - **Normal shift ends permanently red in zone 4 (ward beds):** a consequence of the disclosed Q5 bed assumption, an honest model state (also written into `OPEN_QUESTIONS.md` Q6). Revisit with ticket 09 scenarios.
 - **Smells left as judgement calls:** repeated inline styles in `App.tsx`, `Scene` pass-through props, positional `SuppliedInputs(...)` in fixtures, a duplicated local helper `r()` in `engine.py`, mysterious short names in `replay.py`.
 - **Compact scene (map under about 660 px):** area labels and ALERT bubble are not drawn; counts and status words are in the zone buttons and drawer. The 1280 px viewport is compact because the drawer column narrows the map. Ticket 20 owns the full visual and layout pass.
 
+## Ticket 08 summary
+
+- **Backend:** `feeds.py` `IngestGate` sits between the engine and every read model. `replay.py` `snapshot()` is received state: `_observe` rebuilds patients, zones and counts from the last received event of each patient (`_received_patients`) whenever a source is behind, overlays frozen resource sections from per-minute samples, and `_mask_missing` nulls figures for a service whose inputs a fixture declares missing. New fields: `feeds`, `data_quality`, `limited_services`, `overall_status.assessable/reasons/last_valid_label`, `freshness.oldest_essential_age_min`. `GET /api/v1/replays/{id}/ingest`, and `/events` and `/export` serve received events (`export.ingest` carries counts and the log).
+- **Engine:** `CongestionMonitor.degrade()` when spaces or staffing are stale or the space service is declared missing; `missing_services()`; per-minute reading history so a stopped feed's monitors read as of its newest data.
+- **Frontend:** `FeedsPanel`, `DataQualityPanel` (sidebar), Cannot-assess badge, stale-resources note, drawer limitation notes; `fig()`/`ofTotal()` show "Not current" for `null` figures.
+- **Fixtures added:** `fixture-feed-staffing-stop`, `fixture-feed-faults`, `fixture-feed-optional-stop`.
+- **Evidence:** 7/7 criteria pass (`evidence/08-received-data-and-robustness.md`). Open question Q8 records the policy.
+- **Known limits:** external messages never move a patient (by design); a resumed feed's heartbeat shows hidden changes while the lost events stay gaps; observed-count noise is not modelled (ticket 18); `_sample` keeps 400 minutes per faulted session; `07-ease` was not re-run.
+- **Test-snippet lesson:** a Playwright snippet's source is echoed back in its result, so long snippets cost output tokens on every run; run only what the change touches plus 01.
+
 ## Exact next steps
 
-1. Start ticket 08 (`PulseAhead-Tickets/.scratch/pulseahead-3d/issues/08-received-data-and-robustness.md`). It carries two deferred review findings: per-source freshness (`freshness.age_min` is always 0), and masking of `resources.diagnostics.*.waiting`, `zones[].lab_queue` and the sidebar for a service whose inputs are missing; the overall monitor also ignores missing space-feed inputs.
-2. Continue in blocker order: 08 -> 09 -> 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
+1. Start ticket 09 (`PulseAhead-Tickets/.scratch/pulseahead-3d/issues/09-synthetic-scenarios-and-save-load.md`; blocked by 06 and 08, both done).
+2. Continue in blocker order: 09 -> 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
 3. **Stop before ticket 21** (hosting): ask the user for an authorized target. Ticket 22's rehearsal and the organizer check stay with the user.
 4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow or layout changed, the `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition` and `06-*` snippets, plus `07-zones`. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`: stage them with the leading `//` lines removed, as UTF-8 without a BOM (PowerShell `Get-Content`/`Set-Content` re-encodes the middle dot and adds a BOM; use `node`). For `06-pressure`, also set `PART`.
 

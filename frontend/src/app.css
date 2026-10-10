@@ -605,6 +605,64 @@ p {
   background: var(--status-unknown-tint);
 }
 
+/* ---- data feeds and data quality ---------------------------------------------------- */
+.feed-summary {
+  margin: var(--s-3) 0 var(--s-2);
+}
+
+.feed-list {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+
+.feed-list li {
+  display: grid;
+  gap: 2px;
+  padding: var(--s-2) 0;
+  border-top: 1px solid var(--line);
+}
+
+.feed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.feed-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 650;
+}
+
+.feed-status svg {
+  width: 14px;
+  height: 14px;
+}
+
+.feed-status[data-tone='normal'] {
+  color: var(--status-normal-ink);
+  background: var(--status-normal-tint);
+}
+
+.feed-status[data-tone='pressure'] {
+  color: var(--status-pressure-ink);
+  background: var(--status-pressure-tint);
+}
+
+.feed-status[data-tone='unknown'] {
+  color: var(--status-unknown-ink);
+  background: var(--status-unknown-tint);
+}
+
 /* ---- local zone pressure ------------------------------------------------------------ */
 .zone-label {
   position: absolute;

@@ -6,11 +6,14 @@ nothing beyond the current simulated time is ever exposed.
 
 from __future__ import annotations
 
+import copy
+import math
 import threading
 import uuid
 from typing import Any
 
 from .engine import QUEUE_SERVICE, EDEngine
+from .feeds import HEARTBEAT_MIN, SERVICE_SOURCE, SOURCES, STALE_AFTER_MIN
 from .pressure import CATEGORY_LABEL, SERVICES
 from .profile import PROFILE, PROFILE_ID, ZONES
 
@@ -32,13 +35,26 @@ class ReplaySession:
         self.version = 1
         self.lock = threading.Lock()
         self.engine = EDEngine(seed, scenario)
+        self._samples: list[tuple[float, dict[str, Any]]] = []
+        if self.engine.gate.has_faults:
+            self._sample(0.0)
 
     # -- commands ------------------------------------------------------------------------
     def advance(self, minutes: float, expected_version: int | None = None) -> dict[str, Any] | None:
         with self.lock:
             if expected_version is not None and expected_version != self.version:
                 return None
-            self.engine.run_until(self.engine.now + minutes)
+            e = self.engine
+            target = e.now + minutes
+            if e.gate.has_faults:
+                # Step by whole minutes so each feed's last delivered state is recorded exactly.
+                t = e.now
+                while t < target - 1e-9:
+                    t = min(math.floor(t + 1e-9) + 1.0, target)
+                    e.run_until(t)
+                    self._sample(t)
+            else:
+                e.run_until(target)
             self.version += 1
             return self.snapshot()
 
@@ -49,12 +65,16 @@ class ReplaySession:
             if scenario is not None:
                 self.scenario = scenario
             self.engine = EDEngine(self.seed, self.scenario)
+            self._samples = []
+            if self.engine.gate.has_faults:
+                self._sample(0.0)
             self.run_number += 1
             self.version += 1
             return self.snapshot()
 
     # -- read models ---------------------------------------------------------------------
-    def snapshot(self) -> dict[str, Any]:
+    def _live_snapshot(self) -> dict[str, Any]:
+        """The engine's own readings. `snapshot()` is what the feeds have delivered."""
         e = self.engine
         now = e.now
         active = e.active_patients()
@@ -63,97 +83,7 @@ class ReplaySession:
             for p in sorted(active, key=lambda p: p.id)
         ]
 
-        def in_phase(*phases: str) -> list[str]:
-            return [p["id"] for p in patients if p["phase"] in phases]
-
-        zone_defs = {z["id"]: z for z in ZONES}
-        zones = []
-        for zid in (1, 2, 3, 4):
-            if zid == 1:
-                ids = in_phase("awaiting_triage", "in_triage")
-                detail = {"queue": len(in_phase("awaiting_triage")), "active": len(in_phase("in_triage"))}
-                # No treatment-bed pool in zone 1.
-                capacity = {"kind": "triage_desk", "treatment_beds": None}
-            elif zid == 2:
-                ids = in_phase(
-                    "awaiting_space",
-                    "awaiting_clinician",
-                    "assessment_active",
-                    "awaiting_result_review",
-                    "result_review_active",
-                    "awaiting_care_completion",
-                )
-                detail = {
-                    "queue": len(in_phase("awaiting_space", "awaiting_clinician", "awaiting_result_review")),
-                    "active": len(in_phase("assessment_active", "result_review_active")),
-                    "awaiting_space": len(in_phase("awaiting_space")),
-                    "awaiting_clinician": len(in_phase("awaiting_clinician")),
-                    # Returning from diagnostics: results are waiting for, or under, doctor review.
-                    "awaiting_result_review": len(in_phase("awaiting_result_review")),
-                    "result_review_active": len(in_phase("result_review_active")),
-                    # Decision received, required care not finished: holds the space, no doctor.
-                    "awaiting_care_completion": len(in_phase("awaiting_care_completion")),
-                }
-                capacity = {"kind": "ed_spaces", "shared_with_zone": 3}
-            elif zid == 3:
-                ids = in_phase("awaiting_lab", "in_lab", "awaiting_imaging", "in_imaging")
-                lab_q, lab_a = len(in_phase("awaiting_lab")), len(in_phase("in_lab"))
-                img_q, img_a = len(in_phase("awaiting_imaging")), len(in_phase("in_imaging"))
-                # Logical diagnostic work only: these patients keep their ED space (zone 2/3 pool).
-                detail = {
-                    "queue": lab_q + img_q,
-                    "active": lab_a + img_a,
-                    "lab_queue": lab_q,
-                    "lab_active": lab_a,
-                    "imaging_queue": img_q,
-                    "imaging_active": img_a,
-                }
-                capacity = {"kind": "ed_spaces", "shared_with_zone": 2}
-            else:
-                ids = in_phase(
-                    "awaiting_discharge",
-                    "disposition_processing",
-                    "awaiting_ward_bed",
-                    "awaiting_ward_allocation",
-                    "ward_allocation_active",
-                    "awaiting_transport",
-                    "in_transport",
-                )
-                detail = {
-                    "queue": len(
-                        in_phase(
-                            "awaiting_discharge",
-                            "awaiting_ward_bed",
-                            "awaiting_ward_allocation",
-                            "awaiting_transport",
-                        )
-                    ),
-                    "active": len(in_phase("disposition_processing", "ward_allocation_active", "in_transport")),
-                    # Home path and ward/ICU transfer constraints are kept apart.
-                    "awaiting_discharge": len(in_phase("awaiting_discharge")),
-                    "discharge_active": len(in_phase("disposition_processing")),
-                    "awaiting_ward_bed": len(in_phase("awaiting_ward_bed")),
-                    "awaiting_ward_allocation": len(in_phase("awaiting_ward_allocation")),
-                    "allocation_active": len(in_phase("ward_allocation_active")),
-                    "awaiting_transport": len(in_phase("awaiting_transport")),
-                    "in_transport": len(in_phase("in_transport")),
-                    "home_patients": len([p for p in patients if p["zone"] == 4 and p["disposition"] == "home"]),
-                    "transfer_patients": len(
-                        [p for p in patients if p["zone"] == 4 and p["disposition"] in ("ward", "icu")]
-                    ),
-                }
-                capacity = {"kind": "ed_spaces_retained"}
-            zones.append(
-                {
-                    "id": zid,
-                    "key": zone_defs[zid]["key"],
-                    "name": zone_defs[zid]["name"],
-                    "patient_count": len(ids),
-                    "patient_ids": ids,
-                    **detail,
-                    "capacity": capacity,
-                }
-            )
+        zones = self._zones_for(patients)
 
         mon = e.monitor
         status_label = {
@@ -335,6 +265,7 @@ class ReplaySession:
                     "staffed_total": len(all_ids) - len(unstaffed_total),
                     "unstaffed_total": len(unstaffed_total),
                     "unstaffed_empty": len(unstaffed_empty),
+                    "held_space_ids": sorted(gp.held | rp.held),
                     "owner": PROFILE["owners"]["ed_spaces"],
                 },
                 "resus_spaces": {
@@ -409,8 +340,348 @@ class ReplaySession:
                 },
             },
             "pressure": pressure,
-            "event_count": len(e.events),
+            "event_count": len(e.gate.received),
         }
+
+    def _zones_for(self, patients: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Zone counts and member ids from a patient list: the live one, or the one as received."""
+        def in_phase(*phases: str) -> list[str]:
+            return [p["id"] for p in patients if p["phase"] in phases]
+
+        zone_defs = {z["id"]: z for z in ZONES}
+        zones = []
+        for zid in (1, 2, 3, 4):
+            if zid == 1:
+                ids = in_phase("awaiting_triage", "in_triage")
+                detail = {"queue": len(in_phase("awaiting_triage")), "active": len(in_phase("in_triage"))}
+                # No treatment-bed pool in zone 1.
+                capacity = {"kind": "triage_desk", "treatment_beds": None}
+            elif zid == 2:
+                ids = in_phase(
+                    "awaiting_space",
+                    "awaiting_clinician",
+                    "assessment_active",
+                    "awaiting_result_review",
+                    "result_review_active",
+                    "awaiting_care_completion",
+                )
+                detail = {
+                    "queue": len(in_phase("awaiting_space", "awaiting_clinician", "awaiting_result_review")),
+                    "active": len(in_phase("assessment_active", "result_review_active")),
+                    "awaiting_space": len(in_phase("awaiting_space")),
+                    "awaiting_clinician": len(in_phase("awaiting_clinician")),
+                    # Returning from diagnostics: results are waiting for, or under, doctor review.
+                    "awaiting_result_review": len(in_phase("awaiting_result_review")),
+                    "result_review_active": len(in_phase("result_review_active")),
+                    # Decision received, required care not finished: holds the space, no doctor.
+                    "awaiting_care_completion": len(in_phase("awaiting_care_completion")),
+                }
+                capacity = {"kind": "ed_spaces", "shared_with_zone": 3}
+            elif zid == 3:
+                ids = in_phase("awaiting_lab", "in_lab", "awaiting_imaging", "in_imaging")
+                lab_q, lab_a = len(in_phase("awaiting_lab")), len(in_phase("in_lab"))
+                img_q, img_a = len(in_phase("awaiting_imaging")), len(in_phase("in_imaging"))
+                # Logical diagnostic work only: these patients keep their ED space (zone 2/3 pool).
+                detail = {
+                    "queue": lab_q + img_q,
+                    "active": lab_a + img_a,
+                    "lab_queue": lab_q,
+                    "lab_active": lab_a,
+                    "imaging_queue": img_q,
+                    "imaging_active": img_a,
+                }
+                capacity = {"kind": "ed_spaces", "shared_with_zone": 2}
+            else:
+                ids = in_phase(
+                    "awaiting_discharge",
+                    "disposition_processing",
+                    "awaiting_ward_bed",
+                    "awaiting_ward_allocation",
+                    "ward_allocation_active",
+                    "awaiting_transport",
+                    "in_transport",
+                )
+                detail = {
+                    "queue": len(
+                        in_phase(
+                            "awaiting_discharge",
+                            "awaiting_ward_bed",
+                            "awaiting_ward_allocation",
+                            "awaiting_transport",
+                        )
+                    ),
+                    "active": len(in_phase("disposition_processing", "ward_allocation_active", "in_transport")),
+                    # Home path and ward/ICU transfer constraints are kept apart.
+                    "awaiting_discharge": len(in_phase("awaiting_discharge")),
+                    "discharge_active": len(in_phase("disposition_processing")),
+                    "awaiting_ward_bed": len(in_phase("awaiting_ward_bed")),
+                    "awaiting_ward_allocation": len(in_phase("awaiting_ward_allocation")),
+                    "allocation_active": len(in_phase("ward_allocation_active")),
+                    "awaiting_transport": len(in_phase("awaiting_transport")),
+                    "in_transport": len(in_phase("in_transport")),
+                    "home_patients": len([p for p in patients if p["zone"] == 4 and p["disposition"] == "home"]),
+                    "transfer_patients": len(
+                        [p for p in patients if p["zone"] == 4 and p["disposition"] in ("ward", "icu")]
+                    ),
+                }
+                capacity = {"kind": "ed_spaces_retained"}
+            zones.append(
+                {
+                    "id": zid,
+                    "key": zone_defs[zid]["key"],
+                    "name": zone_defs[zid]["name"],
+                    "patient_count": len(ids),
+                    "patient_ids": ids,
+                    **detail,
+                    "capacity": capacity,
+                }
+            )
+        return zones
+
+    # -- what the feeds have delivered -------------------------------------------------------
+    def _received_patients(self, live_patients: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Patients as the received events describe them: each patient's record is the state at their
+        newest received event, so a transition carried by a stopped or delayed feed is not shown.
+        Samples are one per simulated minute, so a record can include another feed's change from the
+        same minute."""
+        e = self.engine
+        now = e.now
+        newest: dict[str, dict[str, Any]] = {}
+        for ev in e.gate.received:
+            pid = ev.get("patient_id")
+            if pid is not None and (pid not in newest or ev["event_time_min"] >= newest[pid]["event_time_min"]):
+                newest[pid] = ev
+        live_by_id = {p["id"]: p for p in live_patients}
+        patients: list[dict[str, Any]] = []
+        home = ward = 0
+        for pid in sorted(newest):
+            ev = newest[pid]
+            t = ev["event_time_min"]
+            if ev["type"] == "phase_change" and ev["payload"].get("to") == "departed":
+                if ev["payload"].get("exit") == "home":
+                    home += 1
+                else:
+                    ward += 1
+                continue
+            rec = None
+            for st, snap in self._samples:
+                if st >= t - 1e-9:
+                    rec = next((p for p in snap["patients"] if p["id"] == pid), None)
+                    if rec is not None:
+                        break
+            if rec is None:
+                for st, snap in reversed(self._samples):
+                    rec = next((p for p in snap["patients"] if p["id"] == pid), None)
+                    if rec is not None:
+                        break
+            if rec is None:
+                rec = live_by_id.get(pid)
+            if rec is None:
+                continue
+            patients.append({**rec, "minutes_in_phase": round(now - rec["phase_since_min"], 2)})
+        counts = {
+            "in_ed": len(patients),
+            "arrived_total": len(newest),
+            "departed_total": home + ward,
+            "departed_home": home,
+            "departed_ward": ward,
+        }
+        return patients, counts
+
+    def _mask_missing(self, out: dict[str, Any]) -> None:
+        """A service whose inputs a fixture declares missing shows no figures, not exact ones. Works
+        on copies: the overlays above may share dictionaries with stored samples."""
+        missing = self.engine.missing_services()
+        if not missing:
+            return
+        res = copy.deepcopy(out["resources"])
+        zones = copy.deepcopy(out["zones"])
+        zone = {z["id"]: z for z in zones}
+
+        def null(d: dict[str, Any], keys: tuple[str, ...]) -> None:
+            for k in keys:
+                if k in d:
+                    d[k] = None
+
+        for sid in missing:
+            if sid in ("lab", "imaging"):
+                d = res["diagnostics"][sid]
+                null(d, ("busy", "waiting", "started_last_30_min", "completed_last_30_min",
+                         "recent_throughput_tasks_per_hour"))
+                d["inputs_ok"] = False
+                null(zone[3], (f"{sid}_queue", f"{sid}_active", "queue", "active"))
+            elif sid in ("discharge", "allocation", "transport"):
+                d = res["disposition"][sid]
+                null(d, ("busy", "waiting"))
+                d["inputs_ok"] = False
+                keys = {
+                    "discharge": ("awaiting_discharge", "discharge_active"),
+                    "allocation": ("awaiting_ward_allocation", "allocation_active"),
+                    "transport": ("awaiting_transport", "in_transport"),
+                }[sid]
+                null(zone[4], keys + ("queue", "active"))
+            elif sid == "ward_beds":
+                null(zone[4], ("awaiting_ward_bed", "queue"))
+            elif sid == "triage":
+                null(res["triage_desk"], ("busy", "waiting"))
+                res["triage_desk"]["inputs_ok"] = False
+                null(zone[1], ("queue", "active"))
+            elif sid == "assessment":
+                null(res["clinician_slots"], ("busy", "waiting"))
+                res["clinician_slots"]["inputs_ok"] = False
+                null(zone[2], ("awaiting_clinician", "awaiting_result_review", "result_review_active",
+                               "awaiting_care_completion", "queue", "active"))
+            elif sid == "space":
+                null(res["ed_spaces"], ("awaiting_space", "available_staffed"))
+                res["ed_spaces"]["inputs_ok"] = False
+                null(res["resus_spaces"], ("awaiting", "available"))
+                null(zone[2], ("awaiting_space", "queue"))
+        out["resources"], out["zones"] = res, zones
+        out["limited_services"] = sorted(missing)
+
+    def _sample(self, t: float) -> None:
+        """Keep this minute's true readings so a stopped or delayed feed can later be shown as it was.
+        Only sessions with scripted feed faults pay for this."""
+        self._samples.append((round(t, 6), self._live_snapshot()))
+        if len(self._samples) > 400:
+            del self._samples[:100]
+
+    def _sample_at(self, asof: float) -> dict[str, Any]:
+        best = self._samples[0][1]
+        for t, snap in self._samples:
+            if t > asof + 1e-9:
+                break
+            best = snap
+        return best
+
+    def snapshot(self) -> dict[str, Any]:
+        """Received state: the engine's readings, except that a source whose feed is stopped or delayed
+        is shown as of its newest delivered data, and every response carries per-source freshness."""
+        e = self.engine
+        e.gate.flush(e.now)
+        live = self._live_snapshot()
+        feeds = e.gate.feeds_view(e.now)
+        return self._observe(live, feeds)
+
+    def _observe(self, live: dict[str, Any], feeds: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        e = self.engine
+        behind = {s: e.gate.observed_as_of(s, e.now) for s in SOURCES}
+        behind = {s: a for s, a in behind.items() if a < e.now - 1e-9}
+        out = dict(live)
+        if behind:
+            obs, counts = self._received_patients(live["patients"])
+            out["patients"], out["zones"], out["counts"] = obs, self._zones_for(obs), counts
+            res = dict(live["resources"])
+            sp, rs = dict(res["ed_spaces"]), dict(res["resus_spaces"])
+            staff = dict(res["staff"])
+            if "queues" in behind:
+                c = self._sample_at(behind["queues"])
+                res["triage_desk"] = c["resources"]["triage_desk"]
+                res["clinician_slots"] = c["resources"]["clinician_slots"]
+            if "spaces" in behind:
+                c = self._sample_at(behind["spaces"])["resources"]
+                for k in ("occupied", "awaiting_space", "general_occupied", "held_space_ids"):
+                    sp[k] = c["ed_spaces"][k]
+                for k in ("occupied", "awaiting"):
+                    rs[k] = c["resus_spaces"][k]
+            if "staffing" in behind:
+                staff = dict(self._sample_at(behind["staffing"])["resources"]["staff"])
+            if "spaces" in behind or "staffing" in behind or "queues" in behind:
+                # Rebuild what depends on several feeds from the observed pieces.
+                held = set(sp["held_space_ids"])
+                on_duty = set(staff["on_duty_nurses"])
+                cover = {s: n["id"] for n in staff["nurses"] for s in n["covers"]}
+                unstaffed = [s for s in cover if cover[s] not in on_duty]
+                empty_unstaffed = sorted(s for s in unstaffed if s not in held)
+                general = [s for s in cover if s.startswith("S")]
+                resus = [s for s in cover if s.startswith("R")]
+                sp["staffed_total"] = len(cover) - len(unstaffed)
+                sp["unstaffed_total"] = len(unstaffed)
+                sp["unstaffed_empty"] = len(empty_unstaffed)
+                sp["available_staffed"] = sum(1 for s in general if s not in held and cover[s] in on_duty)
+                rs["unstaffed_empty"] = sum(1 for s in empty_unstaffed if s.startswith("R"))
+                rs["available"] = sum(1 for s in resus if s not in held and cover[s] in on_duty)
+                holder = {p["clinician_id"]: p["id"] for p in out["patients"] if p["clinician_id"]}
+                off = staff["off_duty_nurses"]
+                staff["doctors"] = [{**d, "patient_id": holder.get(d["id"])} for d in staff["doctors"]]
+                staff["nurses"] = [
+                    {
+                        **n,
+                        "occupied": sum(1 for s in n["covers"] if s in held),
+                        "empty": sum(1 for s in n["covers"] if s not in held),
+                    }
+                    for n in staff["nurses"]
+                ]
+                staff["unstaffed_empty_spaces"] = {
+                    "count": len(empty_unstaffed),
+                    "space_ids": empty_unstaffed,
+                    "reason": (
+                        None
+                        if not empty_unstaffed
+                        else "Empty but not usable: no covering nurse on duty (" + ", ".join(off) + ")."
+                    ),
+                }
+            if "diagnostics" in behind:
+                res["diagnostics"] = self._sample_at(behind["diagnostics"])["resources"]["diagnostics"]
+            if "disposition" in behind:
+                res["disposition"] = self._sample_at(behind["disposition"])["resources"]["disposition"]
+            res["ed_spaces"], res["resus_spaces"], res["staff"] = sp, rs, staff
+            out["resources"] = res
+            if "ambulance" in behind:
+                c = self._sample_at(behind["ambulance"])
+                arrived_from = {p["ambulance_id"] for p in out["patients"] if p["ambulance_id"]}
+                # An ambulance whose patients are already in the ED is not still inbound.
+                inbound = [a for a in c["inbound_ambulances"] if a["id"] not in arrived_from]
+                out["inbound_ambulances"] = inbound
+                out["ambulance_announcements"] = c["ambulance_announcements"]
+                out["inbound_summary"] = {
+                    "ambulances": len(inbound),
+                    "patients": sum(a["patient_count"] for a in inbound),
+                    "delayed": sum(1 for a in inbound if a["status"] == "delayed"),
+                    "feed_last_update_min": c["inbound_summary"]["feed_last_update_min"],
+                }
+                known = dict(live["incoming_demand"]["known"])
+                known["ambulances"] = len(inbound)
+                known["patients"] = out["inbound_summary"]["patients"]
+                known["arrivals"] = [x for x in c["incoming_demand"]["known"]["arrivals"]
+                                     if x["ambulance_id"] not in arrived_from]
+                out["incoming_demand"] = {**live["incoming_demand"], "known": known}
+
+        self._mask_missing(out)
+
+        essential = [s for s, spec in SOURCES.items() if spec["essential"]]
+        bad = [s for s in essential if feeds[s]["status"] != "fresh"]
+        assessable = not bad
+        ages = [feeds[s]["age_min"] for s in essential if feeds[s]["age_min"] is not None]
+        status = dict(live["overall_status"])
+        status["assessable"] = assessable
+        status["reasons"] = [feeds[s]["guidance"] for s in bad]
+        if not assessable:
+            status["last_valid_label"] = status["label"]
+            status["label"] = "Cannot assess"
+        out["overall_status"] = status
+        out["freshness"] = {
+            "state_updated_at_min": round(e.now, 3),
+            "age_min": 0.0,
+            "stale_after_min": STALE_AFTER_MIN,
+            "heartbeat_every_min": HEARTBEAT_MIN,
+            "oldest_essential_age_min": max(ages) if ages else None,
+            "essential_ok": assessable,
+            "note": "The replay clock heartbeat is separate from each source below; it never refreshes a stopped source.",
+        }
+        out["feeds"] = feeds
+        gaps = e.gate.sequence_gaps()
+        out["data_quality"] = {
+            "assessable": assessable,
+            "reasons": status["reasons"],
+            "essential_sources": essential,
+            "stale_after_min": STALE_AFTER_MIN,
+            "heartbeat_every_min": HEARTBEAT_MIN,
+            "counts": dict(e.gate.counts),
+            "sequence_gaps": gaps,
+            "recent": list(reversed(e.gate.log[-20:])),
+        }
+        return out
 
     # -- one zone, versioned ---------------------------------------------------------------
     def zone_detail(self, zone_id: int) -> dict[str, Any] | None:
@@ -650,13 +921,16 @@ class ReplaySession:
         }
 
         def rates(sid: str, inputs_ok: bool) -> dict[str, Any]:
-            entries = [t for t in e.work_entries.get(sid, []) if t > now - window]
-            done = [t for t in e.work_done.get(sid, []) if t > now - window]
-            known = inputs_ok and window > 0
-            lam = round(len(entries) * 60.0 / window, 2) if known else None
-            through = round(len(done) * 60.0 / window, 2) if known else None
+            # A stopped or delayed feed's rates describe the window its newest data ends at.
+            asof = e.gate.observed_as_of(SERVICE_SOURCE[sid], now)
+            win = window if asof >= now - 1e-9 else min(asof, float(rule["rate_window_minutes"]))
+            entries = [t for t in e.work_entries.get(sid, []) if asof - win < t <= asof + 1e-9]
+            done = [t for t in e.work_done.get(sid, []) if asof - win < t <= asof + 1e-9]
+            known = inputs_ok and win > 0
+            lam = round(len(entries) * 60.0 / win, 2) if known else None
+            through = round(len(done) * 60.0 / win, 2) if known else None
             out: dict[str, Any] = {
-                "window_min": round(window, 1),
+                "window_min": round(max(win, 0.0), 1),
                 "received_per_hour": lam,
                 "recent_throughput_per_hour": through,
             }
@@ -802,18 +1076,37 @@ class ReplaySession:
     def events(self, since: int = 0) -> dict[str, Any]:
         with self.lock:
             e = self.engine
+            e.gate.flush(e.now)
             return {
                 "replay_id": self.id,
                 "version": self.version,
                 "sim_time_min": round(e.now, 3),
-                "total": len(e.events),
+                "total": len(e.gate.received),
                 "since": since,
-                "events": e.events[since:],
+                "events": e.gate.received[since:],
+            }
+
+    def ingest(self) -> dict[str, Any]:
+        """Everything that was refused, ignored or flagged, with the reason."""
+        with self.lock:
+            e = self.engine
+            e.gate.flush(e.now)
+            return {
+                "api_version": API_VERSION,
+                "replay_id": self.id,
+                "run_number": self.run_number,
+                "version": self.version,
+                "sim_time_min": round(e.now, 3),
+                "counts": dict(e.gate.counts),
+                "log": list(e.gate.log),
+                "sequence_gaps": e.gate.sequence_gaps(),
+                "feeds": e.gate.feeds_view(e.now),
             }
 
     def export(self) -> dict[str, Any]:
         with self.lock:
             e = self.engine
+            e.gate.flush(e.now)
             return {
                 "api_version": API_VERSION,
                 "synthetic": True,
@@ -824,7 +1117,13 @@ class ReplaySession:
                 "scenario": self.scenario,
                 "seed": self.seed,
                 "sim_time_min": round(e.now, 3),
-                "events": list(e.events),
+                "events": list(e.gate.received),
+                "ingest": {
+                    "counts": dict(e.gate.counts),
+                    "log": list(e.gate.log),
+                    "sequence_gaps": e.gate.sequence_gaps(),
+                    "feeds": e.gate.feeds_view(e.now),
+                },
                 "patients": [p.timestamps(e.now) for p in e.patients.values()],
                 "time_summary": self._time_summary(),
                 "unfinished": [
