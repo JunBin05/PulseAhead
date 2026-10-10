@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PulseAhead is a hackathon MVP: a synthetic 3D operational digital twin of one fictional 24-space emergency department (ED). Patient dots move through four zones. The app forecasts sustained congestion, compares six staff-approved operational actions against no action, and routes each approval to the resource owner.
 
+**Scope amendment (2026-10-11, final build):** the spec's "Scope amendment" section overrides the rest of the spec. Two action presets only (ward coordination, diagnostic reserve slot), a lite ranking rule, one merged evidence ticket (18), a lite UX ticket (20). Tickets 12, 13, 15, 16 are descoped; 19 is merged into 18. The index is `PulseAhead-Tickets/docs/PULSEAHEAD_3D_TICKET_PLAN.md` ("Amended breakdown").
+
 Ticket status lives in each ticket file and in `evidence/NN-*.md`; `HANDOFF.md` describes where the last session stopped. Code: `backend/pulseahead/` (`profile.py`, `engine.py`, `replay.py`, `api.py`) and `frontend/src/` (`App.tsx`, `Scene.tsx`, `layout.ts`, `api.ts`). All planning docs are under `PulseAhead-Tickets/docs/`:
 
 - `PULSEAHEAD_3D_MVP_SPEC.md` is the canonical spec and the source of truth for every rule. `PULSEAHEAD_3D_MVP_SPEC.md` at the `Real/` root is an identical copy; treat the docs copy as authoritative.
@@ -16,7 +18,7 @@ Ticket status lives in each ticket file and in `evidence/NN-*.md`; `HANDOFF.md` 
 
 - Start with ticket 01. Start a later ticket only after every blocker listed for it is complete.
 - Each ticket is a vertical slice: simulation state, a versioned API, a usable UI, and Playwright MCP evidence, delivered together. Do not build a frontend-only mock or an engine with no UI.
-- Leave acceptance-criteria checkboxes unchecked until real Playwright MCP evidence supports them. For each check, record pass, fail, or not-run, plus the fixture/version and the expected and actual values.
+- Leave acceptance-criteria checkboxes unchecked until real evidence supports them (tickets 01-10: Playwright MCP; from ticket 11 on: the API smoke check or the final Playwright MCP journey, see "Testing"). For each check, record pass, fail, or not-run, plus the fixture/version and the expected and actual values.
 
 ## Stack and commands
 
@@ -44,7 +46,14 @@ Playwright MCP resolves relative screenshot paths from `C:\Users\Vaas\Documents\
 
 ## Testing: Playwright MCP only
 
-All testing and verification goes through **Playwright MCP** against the running app. This is a settled user decision; do not reopen it.
+**Amended by the user on 2026-10-11 for the final build (tickets 11 onward):**
+- Each ticket is verified by an API smoke script against the real running app on :8000. Use node `fetch` or curl, keep it in `evidence/NN-smoke.mjs`, and run it with `node`. No mocks and no unit-test files.
+- Each ticket gets a short `evidence/NN-<slug>.md` marked "smoke-verified, not per-criterion".
+- One Playwright MCP end-to-end journey (plus regression 01) runs on the final build in ticket 20.
+- Tick only what the smoke check or that journey covered.
+- The rules below still apply to tickets 01-10 and to that final journey.
+
+All testing and verification goes through **Playwright MCP** against the running app (tickets 01-10).
 
 - Do not add pytest, Jest, Vitest, or standalone API test runners, and do not mock the engine.
 - Check numbers by inspecting real API responses, event histories, and exported artifacts through Playwright MCP. A screenshot alone does not prove a number is correct.

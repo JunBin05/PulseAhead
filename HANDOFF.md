@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-11 on a second machine. Tickets 01-10 are done and committed; the **ticket 10 code-review gate is next** (see "Start here in a new session"). Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`; the first PC used `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`). **Nothing from this machine has been pushed; push only when the user asks.** Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and committed, including the ticket 10 review gate (`4342089`). **The scope was cut for the final ~5 hours of build** (spec "Scope amendment", commit `docs: scope amendment for the final build`). **Next: ticket 11.** Branch `pulseahead-mvp`; the repo root is the clone itself (here `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead`). **Nothing has been pushed; push only when the user asks.** Read `CLAUDE.md` first, then "Start here in a new session" at the bottom of this file.
 
 ## Goal and rules
 
@@ -28,8 +28,13 @@ Updated 2026-10-11 on a second machine. Tickets 01-10 are done and committed; th
 | 07 Zone drawers and camera | **done**: 7/7 pass (no review gate due) | `evidence/07-zone-drawers-and-camera.md`, `evidence/07-zones.playwright-mcp.js`, `evidence/07-ease.playwright-mcp.js`, `evidence/shots/07-*.png` |
 | 08 Fresh, noisy, missing and invalid inputs | **done**: 7/7 pass (no review gate due) | `evidence/08-received-data-and-robustness.md`, `evidence/08-feeds.playwright-mcp.js` (PART `A` and `B`), `evidence/shots/08-*.png` |
 | 09 Generate varied shifts and reproduce saved replays | **done**: 7/7 pass (no review gate due); two caveats owned by later tickets (no-effective-action ranking, empty choices/forecast settings) | `evidence/09-synthetic-scenarios-and-save-load.md`, `evidence/09-scenarios.playwright-mcp.js` (PART `A`, `B`), `evidence/09-save-load-ui.playwright-mcp.js`, `evidence/09-saved-persistence.playwright-mcp.js` (PART `A`, `B`), `evidence/09-critical-bypass.playwright-mcp.js`, `evidence/shots/09-diagnostic-zone3-overload.png` |
-| 10 Predict bottlenecks and explain the time remaining | **done**: 9/9 pass (criteria 7 and 9 with caveats); code-review gate pending | `evidence/10-forecast-and-alert-panel.md`, `evidence/10-*.playwright-mcp.js`, `evidence/shots/10-zone3-forecast.png` |
-| 11–22 | not started | n/a |
+| 10 Predict bottlenecks and explain the time remaining | **done**: 9/9 pass (criteria 7 and 9 with caveats); review gate closed (10 findings: 8 fixed, 1 partly, 1 not actionable) | `evidence/10-forecast-and-alert-panel.md` (incl. "Review-gate fixes"), `evidence/10-*.playwright-mcp.js` |
+| 11 Ward coordination + shared action machinery | **next**, not started | n/a |
+| 12, 13, 15, 16 | **descoped** (scope amendment) | n/a |
+| 14 Diagnostic reserve slot (reduced) | not started | n/a |
+| 17 Ranking (lite), 18 Evidence (merged with 19), 20 UX (lite) | not started | n/a |
+| 19 | **merged into 18** | n/a |
+| 21 Deployment, 22 Rehearsal | stop and ask the user (21); 22 stays with the user | n/a |
 
 Tickets 01 to 09 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
 
@@ -248,6 +253,7 @@ The `code-review` skill ran two reviewers (Standards, Spec) over `e69ceb6...3ecc
 
 - **Backend:** `forecast.py` (Monte Carlo futures from a received snapshot plus received events), `replay.py` `forecast()` / `forecast_explain()`, `api.py` `POST /api/v1/replays/{id}/forecast` and `/forecast/explain`, `tests_required` in the public patient record, and `settings.forecast` in saved records (samples, model version, horizon, tail, refresh, seed, warning threshold; `save()` takes `forecast_samples`, the request body `forecast.samples`).
 - **Frontend:** `Forecast.tsx` (`useForecast`, `useExplanation`, `ForecastStrip`, `AlertList`, `ZoneForecast`), a forecast line on each zone button, the 50/100 selector in the Demo panel, Load restores the selector.
+- **Review gate:** closed in `4342089` (see `evidence/10-forecast-and-alert-panel.md` "Review-gate fixes": zone warning = service warning rule, overloaded zone shown by the service least likely to clear, explanation reuses cached futures, cache under the session lock with a reset guard, Load refuses records made under other forecast settings, no-alert zones labelled "Forecast detail for this zone (no alert)"). Regression 01 and the other `10-*` snippets were **not** re-run on the gate build.
 - **Evidence:** 9/9 criteria pass, re-run on the second machine (isolation 10/10, horizon 21/21, scan 9/9 + 9/9, inputs 7/7, ui-agreement 7/7, ui-states 8/8 + 5/5, bench 3/3 + 2/2, save-settings 7/7). Regressions 01 to 07 and `06-*` pass; the numbers and the build each ran on are in `evidence/10-forecast-and-alert-panel.md`.
 - **Found and fixed:** `useExplanation` asked for the requested sample count (409 when switching 50 to 100 with a drawer open) and now uses the on-screen forecast's own count; `07-zones` hidden-field regex no longer lists `tests_required` (it is a received field now). Both are in Q10.
 - **Measured on the second machine (Intel Core Ultra 5 125H):** 50 futures about 0.11 s compute, 100 about 0.22 s; a 12 h shift at 50 futures every 5 min takes 17.5 s (first machine: 0.26 s, 0.52 s, 43 s). Predeclared evaluation size in Q10: 14 tuning + 28 test shifts, fallback 7 + 7; re-confirm in ticket 18 once the comparison cost exists.
@@ -273,24 +279,69 @@ Ticket file: `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-a
 - `diagnostic-delay` seed 2033 at T+80: imaging 68% chance, median in 35 min (range 5 to 70), real onset T+82; with one more imaging slot the same futures give 10%. At T+100 imaging is Overloaded (0% clears), overall 0% (stable).
 - The UI at T+100 shows the strip, the zone button forecast lines and the Recovery alert list correctly (see `shots/10-first-look.png`).
 
-## Start here in a new session (2026-10-11, second machine)
+## Final build plan (scope amendment, 2026-10-11)
 
-**Machine.** Repo root `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead` (branch `pulseahead-mvp`; CLAUDE.md, backend/, frontend/, evidence/ are at that root, there is no `Real/` folder). The Claude Code session was started in its parent, `C:\Users\xuzhe\Documents\PulseAhead`, so Playwright MCP's `.playwright-mcp/` and relative screenshot paths resolve there. Python 3.12 venv at `backend/.venv` (`py -3.12 -m venv`), `npm install` done. Playwright MCP is installed at user scope; its tools only appear after Claude Code is restarted.
+The user cut scope with about five hours of build time left. The source of truth is the spec's "Scope amendment (2026-10-11, final build)" section at the top of `PulseAhead-Tickets/docs/PULSEAHEAD_3D_MVP_SPEC.md` (byte-identical copy at the repo root). The index is in `PULSEAHEAD_3D_TICKET_PLAN.md` under "Amended breakdown", and each remaining ticket file has a "Criteria (scope amendment, final build)" list.
 
-**Git.** Commit with `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit` and the attribution trailer from the session's system reminder. The first PC's `git push` got a 403 (account `Srinivaas-only` has no write access); nothing has been pushed from this machine either. Push only when the user asks; do not change the remote or guess credentials.
+**Order and time budget:**
+1. 11, about 1.5 to 2 h
+2. 14 reduced, about 30 min
+3. 17 lite, about 40 min
+4. 18 merged, about 40 min (cut this first if time runs short)
+5. 20 lite, about 40 min, ending with the one Playwright MCP journey
 
-**First commands.** `git status` and `git log --oneline | head -5` (expect the ticket 10 commit on top and a clean tree), then start the backend: `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000` from the repo root (no `--reload`), confirm `/api/health`. Rebuild first after any `frontend/src` change (`cd frontend && npx tsc --noEmit && npm run build`); the backend reads `dist` only at startup. To restart the backend: stop every `python.exe` whose command line contains `uvicorn pulseahead.api:app`.
+Stop and ask before 21.
 
-**Snippet staging (rewrite the helper, it lived in the old scratchpad).** A few lines of node: copy `evidence/NN-name.playwright-mcp.js` to `<session working dir>/.playwright-mcp/<name>[-PART].js`, strip the leading `//` lines, replace the first PC's screenshot prefix `C:/Users/Vaas/Documents/Prototype/PulseAhead/Real/` with the clone path (`C:/Users/xuzhe/Documents/PulseAhead/PulseAhead/`), set `PART` (`06-pressure`: `engine`, `seed7`; `09-scenarios`, `10-scan`, `10-ui-states`, `10-bench`: `A`, `B`), write UTF-8 without BOM. Then run `mcp__playwright__browser_run_code_unsafe` with `filename: ".playwright-mcp/<file>.js"`, **one snippet per turn**. `09-save-load-ui` needs its `COMPLETED` constant set to the completed saved-run id that `09-scenarios` PART `B` prints (`backend/saved_runs/` is git-ignored and starts empty on a new machine).
+**Verification (amended rule in `CLAUDE.md`).**
+- Per ticket: `cd frontend && npx tsc --noEmit && npm run build`, restart the backend, then run an API smoke script `evidence/NN-smoke.mjs` (node `fetch` against the real :8000; no mocks).
+- Write a short `evidence/NN-<slug>.md` saying "smoke-verified, not per-criterion", and tick only what was covered.
+- One Playwright MCP end-to-end journey plus regression 01 runs in ticket 20.
 
-**Housekeeping after runs.** `02-intake` writes its screenshot to a relative `PulseAhead/Real/...` path, which creates a stray `Real/` folder inside the clone: delete it. Regression snippets rewrite tracked screenshots in `evidence/shots`: `git checkout -- evidence/shots` unless the screenshot is new evidence. `npm install` drops the `libc` entries from `frontend/package-lock.json`: `git checkout` it before committing.
+**Design pointers for ticket 11 (shared machinery reused by 14):**
+- **Comparison.**
+  - `forecast.Future(inp, k, base, adj, scale, extra)` already adds capacity per service: `extra={"allocation": 1}` or `{"lab": 1}` / `{"imaging": 1}` (`backend/pulseahead/forecast.py` ~295-325; `run_future` ~700).
+  - For the action, the extra slot must start only after review + setup and end after 60 min. Hold it with a top-priority dummy request until activation, then re-acquire it at expiry so occupied work drains. The plan for this is in `PLAN_TICKETS_10_TO_20.md`.
+  - Futures are keyed `fc:{seed}:{k}:{patient}`, so the no-action and action branches are paired.
+  - `Future.outcome()` must also export per-patient total ED time and urgent initial wait for the cohort (present at the decision plus 90 min of arrivals, capped follow-up).
+  - The forecast cache already keeps the sampled futures (`ReplaySession._fc` holds `(result, inp, snap, futures)`), so the no-action branch can reuse them.
+- **Replay effect.**
+  - `engine.py` builds fixed-capacity `simpy.PriorityResource`s (~507-517; allocation units `free_allocation` = `WA1..`). Use the same dummy-request trick in the engine, and emit `action_requested/approved/review/setup/active/draining/completed/blocked` events through the ingest gate so `/events`, `/export` and saved `choices` see them.
+  - Bump `ENGINE_VERSION` (`profile.py` ~183, now `flow-3`).
+  - The no-action path must stay bit-identical: seed 7 normal gives 705 events and 59 patients.
+- **Owners.** `PROFILE["owners"]` in `profile.py` (~78): `ward_allocation` → "Ward supervisor / bed manager", `lab` → "Lab manager", `imaging` → "Radiology manager". Add the declared reserves: a ward-allocation coordinator, a reserve lab slot and a reserve imaging slot.
+- **Requests.**
+  - Live in `ReplaySession` (`replay.py`): versioned, with required owner roles, per-role idempotent decisions, approve/reject/defer, wrong role refused, stale version 409, one action in flight.
+  - API: `POST /api/v1/replays/{id}/compare`, `POST .../requests`, `POST .../requests/{rid}/decision` (names are free; keep `api_version` v1 and `expected_version`).
+- **UI.**
+  - A comparison panel opened from an alert or the zone drawer. It pauses the replay and shows its source time, with Refresh when stale.
+  - A demo-role switcher in the header (the "Demo role" label already exists), approve/reject/defer buttons, and action progress in the drawer and on the map.
+  - Follow `DESIGN.md`. Status colours always come with text and an icon.
+- **Saved runs.** Decisions go into `choices` (`replay.py` `save()` / `ReplayStore.load`). Load must replay the decisions at their times and reproduce the event digest.
 
-**Next, in order:**
-1. **Run the `code-review` gate for ticket 10** (subagents allowed for gates only), fix the in-scope findings, rebuild and restart, re-run the affected snippets plus `01`, write the fixes into `evidence/10-forecast-and-alert-panel.md` ("Review-gate fixes") and commit `review: fixes after ticket 10 gate`.
-2. Continue 11 (gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (gate) -> 18 -> 19 (gate) -> 20, one commit per ticket (`ticket NN: <title>`). The plan and the design notes for 11 (shared action machinery, paired futures, requests and owners, saved `choices`) are in `PLAN_TICKETS_10_TO_20.md` at the repo root. Re-run regression 01 each ticket, plus 02-07 and `06-label-geometry` when flow, response shapes or labels/layout change.
-3. **Stop and ask before ticket 21** (hosting); ticket 22's rehearsal and the organizer check stay with the user.
+## Start here in a new session
 
-**Carry to ticket 20.** Regression 01 measured 10x playback at 9.9 sim min/s on this machine (9.49 on the first PC) while forecasts ran; the forecast competes for the Python GIL. Ticket 20 must measure interaction and frame rate while forecast work runs.
+**Machine.**
+- Repo root `C:\Users\xuzhe\Documents\PulseAhead\PulseAhead` (branch `pulseahead-mvp`; no `Real/` folder).
+- The Claude Code session normally starts in its parent `C:\Users\xuzhe\Documents\PulseAhead`, which is where Playwright MCP's `.playwright-mcp/` and relative paths resolve.
+- Python 3.12 venv at `backend/.venv` and `npm install` are done. Playwright MCP is installed at user scope.
+
+**Git.** Commit with `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit` plus the attribution trailer from the session's system reminder. One commit per ticket: `ticket NN: <title>`. No push unless the user asks; the first PC's push got a 403.
+
+**First commands (from the repo root).**
+1. `git status` and `git log --oneline | head -5`. Expect the docs scope-amendment commit on top of `4342089 review: fixes after ticket 10 gate`, and a clean tree.
+2. Start the backend: `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000` (no `--reload`), and check `/api/health`.
+3. After any `frontend/src` change: `cd frontend && npx tsc --noEmit && npm run build`, then restart the backend (it reads `dist` only at startup).
+4. To stop the backend, stop every `python.exe` whose command line contains `uvicorn pulseahead.api:app`.
+
+**Then:** build ticket 11 per its amended criteria and the pointers above, then 14, 17, 18, 20. Update this file after each ticket.
+
+**Housekeeping.**
+- `npm install` drops `libc` entries from `frontend/package-lock.json`; `git checkout` it.
+- Playwright snippets rewrite `evidence/shots`; `git checkout -- evidence/shots` unless the screenshot is new evidence.
+- `02-intake` creates a stray `Real/` folder inside the clone; delete it.
+- Snippet staging: copy `evidence/NN.playwright-mcp.js` to `<session dir>/.playwright-mcp/`, strip the leading `//` lines, replace `C:/Users/Vaas/Documents/Prototype/PulseAhead/Real/` with the clone path, set `PART`, write UTF-8 without BOM, and run it with `browser_run_code_unsafe` and `filename`. Run one snippet per turn.
+
+**Carry to ticket 20.** 10x playback measured 9.9 sim min/s while forecasts ran (the forecast competes for the Python GIL). Measure interaction under forecast load as best-effort.
 
 ## Tool quirks seen this session
 

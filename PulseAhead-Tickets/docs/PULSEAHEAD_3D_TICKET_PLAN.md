@@ -4,6 +4,28 @@ Status: approved on 10 October 2026. The user selected local files as the tracke
 
 The [active spec](PULSEAHEAD_3D_MVP_SPEC.md) is the source of shared rules. [UX direction](PULSEAHEAD_3D_UX.md), [build checkpoints](PULSEAHEAD_3D_BUILD_PLAN.md), and [rubric map](PULSEAHEAD_RUBRIC_MAP.md) explain presentation, timing, and judge-facing evidence. Previous dashboard-first context is historical.
 
+## Amended breakdown (2026-10-11, final build)
+
+The spec's "Scope amendment" applies. Ticket states after it:
+
+| Ticket | State in this build | Blocked by |
+|---|---|---|
+| 01-10 | done (10 including its review gate) | as below |
+| 11 Ward coordination and owner approval | active; builds the shared comparison, request and lifecycle machinery | 10 |
+| 12 Cleared discharge support | **descoped** (not modeled in this build) | n/a |
+| 13 Staffed surge spaces | **descoped** | n/a |
+| 14 Diagnostic reserve slot | active, **reduced** to the reserve lab/imaging slot; donor reallocation descoped | 11 |
+| 15 Surge triage desk | **descoped** | n/a |
+| 16 Reserve physician | **descoped** | n/a |
+| 17 Rank actions (lite) | active, lite ranking rule | 11, 14 |
+| 18 Forecast and policy evidence (merged with 19) | active, merged and reduced | 11, 17 |
+| 19 Decision benefit and value | **merged into 18** | n/a |
+| 20 Decision journey and fallback (lite) | active, lite | 17 |
+| 21 Deployment | unchanged; needs the user's authorized hosting target | 18, 20 |
+| 22 Rubric evidence and rehearsal | unchanged; stays with the user | 18, 21 |
+
+Verification is an API smoke check per ticket plus one Playwright MCP end-to-end journey on the final build (spec amendment, "Verification"). The breakdown below is the original reference.
+
 ## Approved breakdown
 
 Each ticket is a complete path through real simulation/state, API, visible interaction, and Playwright MCP evidence. A finished ticket is demoable on its own; implementation details must not be substituted for external behavior checks.

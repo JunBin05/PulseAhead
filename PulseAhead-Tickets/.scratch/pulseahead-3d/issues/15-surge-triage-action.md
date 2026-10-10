@@ -4,14 +4,17 @@
 
 **Blocked by:** 11 — Compare ward coordination and route supervisor approval.
 
-**Status:** ready-for-agent
+**Status:** descoped (scope amendment 2026-10-11): not modeled in this build
 
 **Rubric focus:** Phase 1 actionability; incoming-demand value.
 
-- [ ] Add one triage slot with a declared reserve team after five-minute review and ten-minute setup; preserve shared activation/expiry/resource rules.
-- [ ] Use resource-owned triage approval and the common paired comparison/request lifecycle. Never auto-divert patients or infer clinical triage decisions.
-- [ ] Show reduced triage backlog alongside downstream assessment/bed consequences; earlier triage can worsen another queue and is not guaranteed to help overall ED time.
-- [ ] Compare known received ambulance/walk-in demand consistently; critical-bypass patients do not consume ordinary registration slots.
-- [ ] The zone 1 scene/drawer shows actual queued patients, added staffing, setup, and costs from received backend state.
-- [ ] Playwright MCP checks useful backlog, missing reserve, critical bypass, downstream no-help/harm, all staff choices, and capacity/timing agreement.
+See the spec's "Scope amendment (2026-10-11, final build)". The surge triage desk is listed in the catalog as not modeled and cannot be requested.
 
+### Original criteria (not in this build)
+
+- Add one triage slot with a declared reserve team after five-minute review and ten-minute setup; preserve shared activation/expiry/resource rules.
+- Use resource-owned triage approval and the common paired comparison/request lifecycle. Never auto-divert patients or infer clinical triage decisions.
+- Show reduced triage backlog alongside downstream assessment/bed consequences; earlier triage can worsen another queue and is not guaranteed to help overall ED time.
+- Compare known received ambulance/walk-in demand consistently; critical-bypass patients do not consume ordinary registration slots.
+- The zone 1 scene/drawer shows actual queued patients, added staffing, setup, and costs from received backend state.
+- Playwright MCP checks useful backlog, missing reserve, critical bypass, downstream no-help/harm, all staff choices, and capacity/timing agreement.

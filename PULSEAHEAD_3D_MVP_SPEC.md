@@ -2,6 +2,53 @@
 
 Status: ready-for-agent. The user approved the 22-ticket breakdown and local-file tracker on 10 October 2026. This active spec incorporates the user's 3D proposal, handwritten wireframe, and supplied judging rubric; previous context is historical. No application code, deployment, or measured results exist yet. All application testing and verification remains through Playwright MCP.
 
+## Scope amendment (2026-10-11, final build)
+
+Decided by the user with about five hours of build time left. **Where this section and the text below disagree, this section wins.** The text below stays as the reference design. Tickets 01-10 are built to the full text.
+
+**Actions: two presets are built.** Both use the shared lifecycle below.
+1. **Ward coordination** (ticket 11): a declared reserve ward-allocation coordinator adds one ward-allocation slot. Owner: Ward supervisor / bed manager. Review 5 min, setup 10 min. It never creates a ward bed or a clinical clearance.
+2. **Diagnostic reserve slot** (ticket 14, reduced): one declared reserve lab slot or one declared reserve imaging slot. Owner: Lab manager (lab) or Radiology manager (imaging). Review 5 min, setup 15 min. Tests are never shortened and results are never manufactured.
+
+**Shared lifecycle.**
+- Review (5 min) → setup → active (60 min) → draining (occupied work finishes) → completed or blocked.
+- One action in flight at a time.
+- Every required resource-owner grant must arrive before any effect; partial grants reserve nothing.
+- Requests are versioned (stale version → 409), decisions are idempotent per role, and a wrong role is refused.
+- Approvers are resolved from resource ownership, not from the clicked zone.
+
+**Not modeled in this build.** Cleared discharge support (12), staffed surge spaces (13), surge triage desk (15), reserve physician (16), diagnostic donor reallocation (part of 14) and command-center escalation are not built. The catalog lists them as "not modeled in this build", and they cannot be requested.
+
+**Ranking (ticket 17, lite).**
+- Each feasible action is compared with no action on the same keyed futures (paired demand).
+- **Best action** requires all of:
+  - a positive mean saving in total ED patient-minutes,
+  - a positive normal-approximation 90% lower bound (mean - 1.645 x sd / sqrt(n) over the paired futures),
+  - an urgent-delay check that passes: the mean change in urgent initial wait is at most +5 simulated min and the mean change in the overdue-urgent count is at most 0.
+- Fewer than 20 futures with a complete urgent outcome gives **Needs review**.
+- Otherwise the result is No action shown to help, Needs review, Urgent delay check failed or Cannot assess. **There is never a forced winner.**
+- Order: feasibility, urgent check, supported saving, resource-hours.
+- The whole-future bootstrap, nearest-rank p90 and donor checks are dropped.
+
+**Evidence (ticket 18, merged with 19).** One evaluation run from the app:
+- 7 families x 1 held-out test seed (`seed_partitions.test[0]`), scored window T+120 to T+600.
+- Forecast every 15 simulated min at 50 futures, with the provisional warning threshold 0.4 (not tuned; disclosed).
+- Forecast results: episodes warned before confirmation, misses, false warnings per shift, lead time.
+- Policy results: the PulseAhead policy (a simulated owner approves a current Best action through the real review and setup) vs no action. Reported in total ED patient-minutes, urgent initial wait, resource-hours and unfinished stays. Unfavourable results are kept.
+- Descriptive only (one shift per family).
+- Dropped: threshold tuning, the noise suite, reactive/simple-flow and fixed simple-policy baselines, bootstrap uncertainty and monetary costs.
+
+**UX (ticket 20, lite).**
+- The full journey: start → alert → focus → compare → owner review → progress → effect.
+- Keyboard operation, reduced motion, and a 2D list view with the same data and approvals.
+- Widths 375 to 1440 px, and guards for stale, late and failed responses.
+- The 200-dot / 30 fps measurement is best-effort.
+
+**Verification.**
+- Each remaining ticket is checked with an API smoke script against the real running app (no mocks, no unit-test files) and gets a short evidence note marked "smoke-verified".
+- One Playwright MCP end-to-end journey runs on the final build.
+- A box is ticked only when the smoke check or that journey covered it.
+
 ## Problem Statement
 
 ED shift coordinators and bed managers need to know when a growing queue is likely to become sustained congestion, what is holding up patient flow, and which available action can help in time. Full beds or a short arrival surge alone do not answer that question.

@@ -4,14 +4,17 @@
 
 **Blocked by:** 11 — Compare ward coordination and route supervisor approval.
 
-**Status:** ready-for-agent
+**Status:** descoped (scope amendment 2026-10-11): not modeled in this build
 
 **Rubric focus:** Actionability; operational benefit.
 
-- [ ] Add one discharge-processing slot using declared reserve support, with five-minute review, ten-minute setup, and the shared 60-minute/expiry rules.
-- [ ] Only already-cleared ED discharges with completed prerequisites are eligible; this is not inpatient clinical discharge or manufactured ward-bed release.
-- [ ] Route to the profile's owner role and use common versioned requests, decisions, resource checks, pairing, and incomplete-follow-up rules.
-- [ ] Show departure-delay/total ED changes, urgent effects, resources, and preventive/recovery timing in the shared panel.
-- [ ] Physical departure still frees the ED bed; extra capacity does not shorten clinical tasks or instantly complete discharge.
-- [ ] Playwright MCP checks useful/blocked/ineffective cases, uncleared patients, missing support, owner approvals, setup boundaries, and paired departure/time records.
+See the spec's "Scope amendment (2026-10-11, final build)". Cleared discharge support is listed in the catalog as not modeled and cannot be requested.
 
+### Original criteria (not in this build)
+
+- Add one discharge-processing slot using declared reserve support, with five-minute review, ten-minute setup, and the shared 60-minute/expiry rules.
+- Only already-cleared ED discharges with completed prerequisites are eligible; this is not inpatient clinical discharge or manufactured ward-bed release.
+- Route to the profile's owner role and use common versioned requests, decisions, resource checks, pairing, and incomplete-follow-up rules.
+- Show departure-delay/total ED changes, urgent effects, resources, and preventive/recovery timing in the shared panel.
+- Physical departure still frees the ED bed; extra capacity does not shorten clinical tasks or instantly complete discharge.
+- Playwright MCP checks useful/blocked/ineffective cases, uncleared patients, missing support, owner approvals, setup boundaries, and paired departure/time records.
