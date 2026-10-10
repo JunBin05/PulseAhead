@@ -519,32 +519,48 @@ export function App() {
   const ageSec = lastValidAt ? Math.max(0, Math.round((Date.now() - lastValidAt) / 1000)) : null;
 
   return (
-    <div className="app">
+    <div className="app app--stage">
       <header className="app-header">
-        <h1 className="app-title">
-          <span className="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 32 32" width="28" height="28">
-              <path d="M2 17h7l3-8 5 15 4-11 2 4h7" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span>
-            PulseAhead
-            <small>ED congestion early warning · operational twin</small>
-          </span>
-        </h1>
-        <div className="meta-row">
+        <div className="brand-row">
+          <h1 className="app-title">
+            <span className="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32" width="28" height="28">
+                <path d="M2 17h7l3-8 5 15 4-11 2 4h7" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span>
+              PulseAhead
+              <small>ED congestion early warning · operational twin</small>
+            </span>
+          </h1>
           <span className="synthetic-chip" data-testid="synthetic-label">
             Synthetic demo
           </span>
+          {snap && (
+            <span className="scenario-line">
+              {snap.scenario_name} · seed {snap.seed} · run {snap.run_number} · v{snap.version}
+            </span>
+          )}
+        </div>
+        <div className="hud-cluster">
+          <RoleSwitcher roles={snap?.actions.roles ?? ['ED shift coordinator']} value={role} onChange={setRole} />
           <div className="meta">
-            <span className="meta-label">Simulated time</span>
+            <span className="meta-label">Sim time</span>
             <span className="meta-value" data-testid="sim-time">
               {snap ? formatClock(snap.sim_time_min) : 'T+00:00'}
             </span>
           </div>
-          <RoleSwitcher roles={snap?.actions.roles ?? ['ED shift coordinator']} value={role} onChange={setRole} />
+          {snap && (
+            <div className="meta">
+              <span className="meta-label">Free staffed</span>
+              <span className="meta-value">
+                {snap.resources.ed_spaces.available_staffed === null ? 'Not current' : snap.resources.ed_spaces.available_staffed}
+                <small> of {snap.resources.ed_spaces.total}</small>
+              </span>
+            </div>
+          )}
+          <StatusBadge snap={snap} />
         </div>
-        <StatusBadge snap={snap} />
       </header>
 
       <KpiRow snap={snap} view={fcView} />

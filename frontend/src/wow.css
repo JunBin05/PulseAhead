@@ -433,3 +433,179 @@ body {
 }
 
 .stage .alert-spine .alert-spine-kind { display: none; }
+
+/* =====================================================================================
+   Mission control (wide screens): the map is full-bleed; the header, two rails, the alert spine and
+   the replay dock float over it as glass. Same DOM, same hooks; only positions change.
+   ===================================================================================== */
+@media (min-width: 1181px) {
+  .app--stage {
+    position: relative;
+    height: 100dvh;
+    min-height: 720px;
+    overflow: hidden;
+    background: radial-gradient(1100px 620px at 50% 46%, #14386a 0%, #0c274a 58%, #081c37 100%);
+  }
+
+  /* Header: brand, chip and scenario on the left; one glass cluster on the right. */
+  .app--stage .app-header {
+    position: absolute;
+    top: 16px;
+    left: 32px;
+    right: 32px;
+    z-index: 6;
+    height: 56px;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-4);
+  }
+
+  .brand-row { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
+  .app--stage .app-title small { display: none; }
+  .scenario-line {
+    font-size: 12px;
+    color: var(--ink-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hud-cluster {
+    display: flex;
+    align-items: center;
+    height: 52px;
+    background: var(--glass);
+    border: 1px solid var(--glass-line);
+    border-radius: 14px;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+  .hud-cluster > .meta {
+    padding: 0 var(--s-4);
+    border-left: 1px solid var(--glass-line);
+    justify-content: center;
+  }
+  .hud-cluster > .meta:first-child { border-left: 0; }
+  .hud-cluster .meta-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .hud-cluster .meta-value { font-size: 1rem; }
+  .hud-cluster .meta-value small { font-size: 12px; color: var(--ink-faint); font-weight: 500; }
+  .hud-cluster .role-select { min-height: 28px; border: 0; background: transparent; padding: 0; font-weight: 600; }
+  .hud-cluster .status { min-height: 28px; padding: 0 var(--s-2); font-size: var(--text-sm); }
+
+  /* The headline tiles are folded into the cluster and the rails; the strip stays in the DOM. */
+  .app--stage .kpi-row { display: none; }
+
+  /* Connection banners float where the alert spine would be. */
+  .app--stage [aria-live='polite'] {
+    position: absolute;
+    top: 84px;
+    left: 372px;
+    right: 372px;
+    z-index: 8;
+  }
+  .app--stage [aria-live='polite'] .banner { margin: 0 0 var(--s-2); }
+
+  /* Stage: nothing in normal flow. */
+  .app--stage .stage {
+    position: static;
+    display: block;
+    height: auto;
+    padding: 0;
+  }
+
+  .app--stage .stage-center {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .app--stage .stage-center > .scene-wrap {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: hidden;
+  }
+
+  .app--stage .scene-canvas { height: 100%; }
+
+  .app--stage .stage > .rail {
+    position: absolute;
+    top: 100px;
+    bottom: 212px;
+    width: 296px;
+    z-index: 4;
+  }
+  .app--stage .stage > .rail-left { left: 32px; }
+  .app--stage .stage > .drawer-col { right: 32px; }
+
+  .app--stage .stage > .stage-dock {
+    position: absolute;
+    left: 32px;
+    right: 32px;
+    bottom: 24px;
+    height: 172px;
+    max-height: none;
+    z-index: 4;
+    display: grid;
+    grid-template-columns: 296px minmax(0, 1fr);
+    gap: var(--s-3);
+  }
+
+  /* Replay controls: three buttons on one row, speeds on the next. */
+  .stage-dock > .run-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: space-between;
+    gap: var(--s-2);
+    padding: var(--s-3);
+  }
+  .stage-dock > .run-bar .field-label,
+  .stage-dock > .run-bar .run-note.muted { display: none; }
+  .stage-dock > .run-bar > .btn { min-height: 44px; padding: 0 var(--s-3); flex: 1 1 auto; }
+  .stage-dock > .run-bar .segmented { flex: 1 1 100%; display: flex; }
+  .stage-dock > .run-bar .segmented button { flex: 1 1 0; }
+  .stage-dock > .run-bar .btn-hero { flex: 1 1 100%; }
+  .stage-dock > .run-bar p.run-note { flex: 1 1 100%; font-size: 12px; margin: 0; }
+
+  .stage-dock > .fc-strip { overflow: auto; }
+
+  /* Spine: top centre, exactly under the header. */
+  .app--stage .alert-spine {
+    top: 84px;
+    bottom: auto;
+    left: 372px;
+    right: 372px;
+    transform: none;
+    justify-content: center;
+    z-index: 5;
+  }
+
+  /* 2D list toggle and focus callout sit just clear of the left rail. */
+  .app--stage .scene-wrap .view-toggle {
+    top: auto;
+    right: auto;
+    bottom: 212px;
+    left: 360px;
+    z-index: 5;
+  }
+  .app--stage .camera-callout { top: 150px; left: 360px; z-index: 5; }
+  .app--stage .overflow-note { z-index: 5; }
+}
+
+/* Absolutely positioned children of the grid container must not inherit the old grid lines. */
+@media (min-width: 1181px) {
+  .app--stage .stage-center,
+  .app--stage .stage > .rail,
+  .app--stage .stage > .stage-dock {
+    grid-area: auto;
+  }
+}

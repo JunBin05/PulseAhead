@@ -17,7 +17,7 @@ export const EXITS = {
   ward: { center: [16.2, 2.6] as [number, number], label: 'Ward / ICU' },
 };
 
-interface Area {
+export interface Area {
   zone: number;
   /** local origin on the platform */
   origin: [number, number];
@@ -37,7 +37,7 @@ const ROWS_PER_LAYER = 2;
 const LAYER_HEIGHT = 0.6;
 
 /** Dot areas. Phases that share one waiting line or one doctor share one area (see PHASE_AREA). */
-const AREAS = {
+export const AREAS = {
   in_triage: { zone: 1, origin: [-2.1, -1.9], cols: 1, step: 0.7, text: 'At triage desk' },
   awaiting_triage: { zone: 1, origin: [-2.1, 0.4], cols: 8, step: 0.62, text: 'Triage queue' },
   awaiting_space: { zone: 2, origin: [-2.1, -2.8], cols: 8, step: 0.62, text: 'Awaiting space' },
