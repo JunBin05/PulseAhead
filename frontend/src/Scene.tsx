@@ -13,7 +13,7 @@ import {
 } from './layout';
 import { IconOctagon, IconUnknown } from './icons';
 import { ZONE_LOOK, type ZoneDisplay } from './status';
-import { ZONE_NAMES, type Urgency } from './types';
+import type { Urgency } from './types';
 
 // Platform fills mirror the --status-*-tint tokens (three.js needs literal colours). The state comes
 // from the received queues and resources, never from how many dots are drawn.
@@ -202,7 +202,7 @@ function LabelLayer({
                   {ZONE_LOOK[state].icon}
                   <span className={compact ? 'sr-only' : undefined}>{ZONE_LOOK[state].label}</span>
                 </span>
-                <span>{compact ? z : `${z} · ${ZONE_NAMES[z]} · ${counts[z] ?? 0}`}</span>
+                <span>{compact ? z : `${z} · ${counts[z] ?? 0}`}</span>
                 {alert && (
                   <span className="alert-bubble" data-testid={`alert-${z}`} data-state={state}>
                     {state === 'overloaded' ? <IconOctagon /> : <IconUnknown />}
@@ -212,7 +212,7 @@ function LabelLayer({
               </div>
             );
           })}
-          {!compact && AREA_LABELS.map((a) => {
+          {!compact && focusZone !== null && AREA_LABELS.filter((a) => a.zone === focusZone).map((a) => {
             const [cx, cz] = ZONE_CENTERS[a.zone];
             return (
               <div
@@ -285,6 +285,50 @@ function Platform({
       </lineSegments>
     </group>
   );
+}
+
+/**
+ * Presentation-only cue on a zone that the pressure model already reports as overloaded: a light
+ * column and two expanding rings. It reads state; it never changes it. Reduced motion draws it still.
+ */
+function Threat({ center, color, reduced }: { center: [number, number]; color: string; reduced: boolean }) {
+  const rings = useRef<(THREE.Mesh | null)[]>([]);
+  useFrame(({ clock }) => {
+    rings.current.forEach((m, i) => {
+      if (!m) return;
+      const phase = reduced ? 0.35 + i * 0.3 : (clock.elapsedTime / 2.4 + i * 0.5) % 1;
+      const s = 3.2 + phase * 2.6;
+      m.scale.set(s, s, 1);
+      (m.material as THREE.MeshBasicMaterial).opacity = (1 - phase) * 0.55;
+    });
+  });
+  return (
+    <group position={[center[0], 0.3, center[1]]}>
+      <mesh position={[0, 4.5, 0]}>
+        <cylinderGeometry args={[1.0, 2.4, 9, 24, 1, true]} />
+        <meshBasicMaterial color={color} transparent opacity={0.13} depthWrite={false} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} />
+      </mesh>
+      {[0, 1].map((i) => (
+        <mesh key={i} ref={(m) => { rings.current[i] = m; }} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+          <ringGeometry args={[0.96, 1, 64]} />
+          <meshBasicMaterial color={color} transparent opacity={0.4} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Faint floor grid under the platforms (decorative). */
+function FloorGrid() {
+  const grid = useMemo(() => {
+    const g = new THREE.GridHelper(80, 40, '#22d3ee', '#22d3ee');
+    const m = g.material as THREE.LineBasicMaterial;
+    m.transparent = true;
+    m.opacity = 0.09;
+    m.depthWrite = false;
+    return g;
+  }, []);
+  return <primitive object={grid} position={[3, -0.45, 0]} />;
 }
 
 function ExitPad({ center }: { center: [number, number] }) {
@@ -375,6 +419,10 @@ function World({ scene, selectedZone, zoneStates, onSelectZone, view }: ScenePro
       <ambientLight intensity={1.1} />
       <directionalLight position={[8, 14, 6]} intensity={1.4} />
       <pointLight position={[0, 9, 0]} intensity={30} distance={40} color="#22d3ee" />
+      <FloorGrid />
+      {[1, 2, 3, 4].filter((z) => zoneStates[z] === 'overloaded').map((z) => (
+        <Threat key={`t${z}`} center={ZONE_CENTERS[z]} color={STATE_EDGE.overloaded} reduced={reduced} />
+      ))}
       {[1, 2, 3, 4].map((z) => (
         <Platform key={z} zone={z} selected={selectedZone === z} state={zoneStates[z]} onSelect={onSelectZone} />
       ))}

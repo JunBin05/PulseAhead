@@ -1,0 +1,272 @@
+/* =====================================================================================
+   Command-center finish. Loaded last. Presentation only: no layout order, copy or test hooks change.
+   Rules: one radius family (12 / 16), 1px hairlines, glass surfaces over a dim grid ground,
+   Space Grotesk for display numerals, one accent, status always icon + word.
+   ===================================================================================== */
+:root {
+  --font-display: 'Space Grotesk', var(--font);
+  --glass: rgba(10, 18, 32, 0.78);
+  --glass-line: rgba(120, 210, 220, 0.18);
+  --hot: #ff6b7a;
+  --radius: 14px;
+}
+
+body {
+  background:
+    radial-gradient(1100px 620px at 50% 38%, rgba(15, 36, 56, 0.9) 0%, transparent 70%),
+    var(--ground);
+}
+
+/* ---- header: one slim glass bar ---------------------------------------------------------- */
+.app-header {
+  background: var(--glass);
+  border-bottom: 1px solid var(--glass-line);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.app-title,
+.meta-value,
+.kpi-value {
+  font-family: var(--font-display);
+}
+
+.synthetic-chip {
+  background: rgba(251, 191, 36, 0.14);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fcd34d;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+/* ---- KPI strip: one container, equal cells, hairline dividers ------------------------------ */
+.kpi-row {
+  gap: 0;
+  padding: 0;
+  margin: var(--s-4) var(--s-4) 0;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 16px;
+  overflow: hidden;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.kpi {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--glass-line);
+  border-radius: 0;
+  padding: var(--s-3) var(--s-4);
+}
+
+.kpi:first-child {
+  border-left: 0;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.kpi-value {
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* ---- surfaces ---------------------------------------------------------------------------- */
+.panel,
+.run-bar,
+.fc-strip,
+.banner {
+  background: var(--glass);
+  border-color: var(--glass-line);
+  border-radius: 16px;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.run-bar {
+  margin: var(--s-3) var(--s-4) 0;
+}
+
+.btn {
+  border-radius: 12px;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.btn-primary {
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.28);
+}
+
+/* ---- workspace: rails stay put, the map is the hero -------------------------------------- */
+.workspace {
+  grid-template-columns: 296px minmax(0, 1fr) 320px;
+  gap: var(--s-4);
+}
+
+.rail-left {
+  top: var(--s-4);
+}
+
+.tablist {
+  border-bottom-color: var(--glass-line);
+}
+
+.tab {
+  border-radius: 8px 8px 0 0;
+  transition: color var(--dur) var(--ease);
+}
+
+/* ---- the scene ---------------------------------------------------------------------------- */
+.scene-wrap {
+  border-color: var(--glass-line);
+  border-radius: 18px;
+  background:
+    radial-gradient(700px 360px at 50% 42%, rgba(34, 211, 238, 0.09), transparent 70%),
+    radial-gradient(500px 260px at 72% 70%, rgba(248, 113, 113, 0.07), transparent 70%),
+    #060b16;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.scene-canvas {
+  height: clamp(400px, 56vh, 640px);
+}
+
+.zone-bar {
+  background: rgba(8, 14, 26, 0.9);
+  border-top-color: var(--glass-line);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+}
+
+@container scene (max-width: 560px) {
+  .zone-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.zone-btn {
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid var(--glass-line);
+  background: transparent;
+  box-shadow: none;
+  transition: background var(--dur) var(--ease);
+}
+
+.zone-btn:first-child {
+  border-left: 0;
+}
+
+.zone-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.zone-btn[aria-pressed='true'] {
+  background: rgba(34, 211, 238, 0.1);
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+.zone-num {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.zone-count {
+  font-family: var(--font-display);
+}
+
+/* ---- zone pins: compact glass chip, ALERT sits inline so nothing hangs into a neighbour ---- */
+.zone-label {
+  border-radius: 10px;
+  background: rgba(8, 16, 30, 0.9);
+  border-color: var(--glass-line);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.zone-label--stacked {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.zone-label--stacked .zone-label-status {
+  padding-right: 8px;
+  border-right: 1px solid var(--glass-line);
+}
+
+.zone-label .alert-bubble,
+.zone-label[data-bubble-side='above'] .alert-bubble,
+.zone-label[data-bubble-side='left'] .alert-bubble {
+  position: static;
+  transform: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.zone-label:has(.alert-bubble[data-state='overloaded']) {
+  border-color: var(--hot);
+  box-shadow: 0 0 18px rgba(255, 107, 122, 0.35);
+}
+
+.area-label {
+  background: rgba(8, 16, 30, 0.85);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--ink);
+}
+
+/* ---- forecast strip: overload state gets a soft red edge ----------------------------------- */
+.fc-strip[data-state='overload'] {
+  border-color: rgba(255, 107, 122, 0.55);
+  box-shadow: 0 0 30px rgba(255, 107, 122, 0.12);
+}
+
+.fc-strip[data-state='pressure'] {
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+/* ---- motion: quiet by default, gone when asked --------------------------------------------- */
+@keyframes wow-breathe {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 107, 122, 0.2); }
+  50% { box-shadow: 0 0 22px rgba(255, 107, 122, 0.5); }
+}
+
+.zone-label:has(.alert-bubble[data-state='overloaded']) {
+  animation: wow-breathe 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zone-label:has(.alert-bubble[data-state='overloaded']) { animation: none; }
+  .btn, .zone-btn, .tab { transition: none; }
+}
+
+@media (max-width: 1180px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .kpi-row { margin-inline: var(--s-3); }
+}
+
+/* ---- reading order on the centre column: the map first, then forecast, then the story ------------ */
+.workspace > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.workspace > section > .fc-strip { order: -1; }
+.workspace > section > .scene-wrap { order: -2; }
+.workspace > section > * { margin-top: 0; margin-bottom: 0; }
