@@ -44,11 +44,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   /** `scenario` is only set by the test-only `?fixture=` URL parameter; staff use the default. */
-  create: (scenario?: string) =>
+  create: (scenario?: string, seed?: number) =>
     request<Snapshot>('/replays', {
       method: 'POST',
-      body: JSON.stringify(scenario === undefined ? {} : { scenario }),
+      body: JSON.stringify({
+        ...(scenario === undefined ? {} : { scenario }),
+        ...(seed === undefined ? {} : { seed }),
+      }),
     }),
+  /** Received events (the replay's own record), for evidence such as which unit completed a test. */
+  events: (id: string) =>
+    request<{ events: { type: string; event_time_min: number; payload: Record<string, unknown> }[] }>(
+      `/replays/${id}/events`,
+    ),
   state: (id: string) => request<Snapshot>(`/replays/${id}/state`),
   /** One zone's roster, assigned staff, queues and capacity at the replay's current version. */
   zone: (id: string, zone: number) => request<ZoneDetail>(`/replays/${id}/zones/${zone}`),

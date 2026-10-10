@@ -1109,3 +1109,42 @@ p {
   border-radius: var(--radius);
   padding: 0 var(--s-2);
 }
+
+/* ---- guided demo ------------------------------------------------------------------------ */
+.demo-bar {
+  border-color: var(--accent);
+}
+
+.demo-caption {
+  margin: var(--s-2) 0;
+  padding: var(--s-3);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.demo-buttons {
+  flex-wrap: wrap;
+}
+
+.demo-buttons .btn {
+  flex: 1 1 auto;
+}
+
+.cmp-table th,
+.cmp-table td {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.cmp-table {
+  table-layout: fixed;
+}
+
+.cmp-table thead th {
+  font-size: var(--text-xs);
+}
+
+.cmp-table th:first-child {
+  width: 34%;
+}

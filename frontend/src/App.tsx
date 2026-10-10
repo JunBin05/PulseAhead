@@ -16,6 +16,7 @@ import {
 } from './icons';
 import { ZONE_LOOK, type ZoneDisplay } from './status';
 import { ActionChip, ComparePanel, RoleSwitcher } from './Actions';
+import { DemoBar, type DemoController } from './Demo';
 import {
   AlertList,
   ForecastStrip,
@@ -520,6 +521,29 @@ export function App() {
     window.setTimeout(() => compareReturnRef.current?.focus(), 0);
   }, []);
 
+  // The guided demo drives the real API itself; this hands it the app's own snapshot, selection and panels.
+  const demoCtl = useMemo<DemoController>(
+    () => ({
+      adopt: (s2, fresh) => {
+        if (fresh) {
+          epochRef.current += 1;
+          idRef.current = null;
+          versionRef.current = 0;
+          clearSelection();
+          setCompareOpen(false);
+          setPlaying(false);
+          setLastCmp(null);
+        }
+        apply(s2);
+      },
+      focusZone: (z) => selectAlert(z),
+      setRole,
+      openCompare,
+      currentReplayId: () => idRef.current,
+    }),
+    [apply, clearSelection, selectAlert, openCompare],
+  );
+
   const scene = useMemo(() => buildScene(snap), [snap]);
   const zoneCounts = scene.perZone;
   const zone = snap && selectedZone ? snap.zones.find((z) => z.id === selectedZone) : undefined;
@@ -585,6 +609,7 @@ export function App() {
 
       <main className="workspace">
         <aside aria-label="Controls and feeds">
+          <DemoBar ctl={demoCtl} />
           <section className="panel" aria-labelledby="controls-h">
             <h2 id="controls-h">Simulation controls</h2>
             {!snap ? (

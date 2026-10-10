@@ -1,0 +1,21 @@
+PASS  step 1: fresh replay, diagnostic-delay seed 7, Stable at T+0  -- Stable
+PASS  step 2: a zone 3 alert appears from the forecast (early detection)  -- Imaging building 82% at T+65
+PASS  step 2: the alert came before the imaging service was overloaded in the ED status (still stable overall)  -- Stable
+PASS  step 3: two actions are feasible but only one can run at a time  -- diagnostic_reserve:lab,diagnostic_reserve:imaging at T+100
+PASS  step 4: priority list is ordered and every label has its rule inputs  -- #1 diagnostic_reserve:imaging best_action; #2 diagnostic_reserve:lab supported_not_top
+PASS  step 4: impact per reserve unit-hour is shown from the backend
+PASS  step 5: what-if A instead of B from the paired futures  -- Doing Diagnostic reserve slot (imaging) first instead of Diagnostic reserve slot (lab) changes the total ED ti
+PASS  step 5: no forced winner (top label is supported by its own lower bound)  -- diagnostic_reserve:imaging best_action lb 362.736
+PASS  step 6: request routed to the resource owner  -- Radiology manager
+PASS  step 6: wrong owner refused (403)  -- Lab manager: Lab manager cannot decide this request: it needs Radiology m
+PASS  step 6: owner approves
+PASS  step 6: review stage, capacity unchanged
+PASS  step 7: capacity 1 -> 2 when active  -- 1 -> 2 at T+120; queue 2 -> 1
+PASS  step 7: active exactly review + setup after approval  -- approved T+100, active seen at T+120
+PASS  step 8: capacity back to 1 after the window  -- 1
+PASS  step 8: all action events appear in /events  -- action_requested action_decision action_approved action_review action_setup action_active action_draining action_completed
+PASS  step 8: setup +5, active +review+setup, draining +review+setup+60
+NOTE  reserve unit I2 completed 1 test(s); detection at T+65, decision at T+100
+PASS  no-action seed 7 normal: 705 events, 59 patients
+
+ALL PASS
