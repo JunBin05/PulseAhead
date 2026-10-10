@@ -37,7 +37,13 @@ interface EvalProgress {
   results: {
     aggregate: EvalAggregate;
     shifts: { family: string; name: string; seed: number; policies: Record<string, PolicyTotals & { cohort_patients: number }> }[];
-    settings: { warning_threshold: number; threshold_tuned: boolean; limits: string[]; matching_rule: string };
+    settings: {
+      warning_threshold: number;
+      threshold_tuned: boolean;
+      reactive_trigger?: string;
+      limits: string[];
+      matching_rule: string;
+    };
   };
 }
 
@@ -105,7 +111,10 @@ export function EvaluationPanel() {
     <section className="panel" aria-labelledby="eval-h" data-testid="eval-panel">
       <h2 id="eval-h">Evaluation (held-out shifts)</h2>
       <p className="muted">
-        Synthetic, 7 shifts (one held-out seed per family), descriptive only. Warning threshold 0.4, not tuned.
+        Synthetic, 7 shifts (one held-out test seed per family), descriptive only.
+        {job
+          ? ` Warning threshold ${job.results.settings.warning_threshold}, ${job.results.settings.threshold_tuned ? 'chosen on development/tuning seeds and frozen' : 'not tuned'}; reactive trigger ${job.results.settings.reactive_trigger ?? 'n/a'}.`
+          : ''}
       </p>
       <div className="btn-row">
         <button className="btn btn-primary" onClick={() => void start()} disabled={running} data-testid="eval-start">

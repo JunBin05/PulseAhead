@@ -1,0 +1,188 @@
+{
+ "kind": "tuning_results",
+ "engine_version": "flow-4",
+ "forecast_model_at_run": "mc-flow-1",
+ "partitions": [
+  "development",
+  "tuning"
+ ],
+ "shifts": 21,
+ "elapsed_s": 92.4,
+ "thresholds": {
+  "0.4": {
+   "summary": {
+    "shifts": 21,
+    "episodes": 42,
+    "early_warned": 35,
+    "early_30_min_or_more": 22,
+    "late_only": 7,
+    "missed": 0,
+    "lead_median_min": 44.0,
+    "false_warning_runs": 41,
+    "false_warnings_per_shift": 1.95
+   },
+   "per_shift_false_runs": [
+    1,
+    0,
+    0,
+    2,
+    1,
+    4,
+    3,
+    2,
+    3,
+    6,
+    0,
+    4,
+    0,
+    3,
+    2,
+    2,
+    0,
+    3,
+    3,
+    0,
+    2
+   ]
+  },
+  "0.6": {
+   "summary": {
+    "shifts": 21,
+    "episodes": 42,
+    "early_warned": 25,
+    "early_30_min_or_more": 14,
+    "late_only": 14,
+    "missed": 3,
+    "lead_median_min": 31.0,
+    "false_warning_runs": 18,
+    "false_warnings_per_shift": 0.86
+   },
+   "per_shift_false_runs": [
+    0,
+    0,
+    0,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    0,
+    1,
+    1,
+    0,
+    0,
+    0,
+    3,
+    0,
+    2
+   ]
+  },
+  "0.8": {
+   "summary": {
+    "shifts": 21,
+    "episodes": 42,
+    "early_warned": 17,
+    "early_30_min_or_more": 9,
+    "late_only": 20,
+    "missed": 5,
+    "lead_median_min": 31.0,
+    "false_warning_runs": 4,
+    "false_warnings_per_shift": 0.19
+   },
+   "per_shift_false_runs": [
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0
+   ]
+  }
+ },
+ "reactive_triggers": {
+  "overloaded": {
+   "total_ed_patient_min": 90185.0,
+   "unfinished_stays": 259,
+   "resource_hours": 45.332,
+   "actions_approved": 34,
+   "saving_vs_no_action_by_shift": [
+    0.0,
+    0.0,
+    298.6,
+    0.0,
+    92.7,
+    353.7,
+    0.0,
+    153.4,
+    300.5,
+    198.9,
+    263.9,
+    284.7,
+    0.0,
+    0.0,
+    0.0,
+    518.3,
+    376.4,
+    246.1,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "building": {
+   "total_ed_patient_min": 89173.3,
+   "unfinished_stays": 252,
+   "resource_hours": 49.331,
+   "actions_approved": 37,
+   "saving_vs_no_action_by_shift": [
+    0.0,
+    0.0,
+    378.1,
+    4.7,
+    82.0,
+    371.7,
+    0.0,
+    159.3,
+    300.5,
+    198.9,
+    884.4,
+    328.5,
+    0.0,
+    0.0,
+    0.0,
+    742.8,
+    285.1,
+    331.6,
+    31.3,
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "no_action_total_ed_patient_min": 93272.2,
+ "chosen": {
+  "warning_threshold": 0.6,
+  "false_warning_target_met": true,
+  "reactive_trigger": "building"
+ },
+ "rule": "Choose the warning threshold and the reactive trigger on development and tuning seeds only.\n\nRun: `backend/.venv/Scripts/python.exe -m pulseahead.tune` from `backend/`.\n\nOne no-action replay per shift (21 shifts: 1 development + 2 tuning seeds x 7 families) is forecast every\n15 simulated minutes at 50 futures; the raw chance of each service and of the overall ED is recorded, and the\ncandidate thresholds (0.4, 0.6, 0.8) are applied afterwards, which gives exactly the alerts a forecast with\nthat threshold would have shown (an alert is a Normal service whose chance is at or above the threshold).\nForecasts and episodes never see the test partition. The reactive baseline is run on the same shifts with\neach trigger (act when the service is Building / when it is Overloaded). Nothing here changes the engine.\n\nRule, fixed before the run: the threshold is the one that keeps false warnings per shift at or below 1 and,\namong those, warns the most episodes early (ties: lower threshold); if none is at or below 1 the one with the\nfewest false warnings is chosen and the target is reported as not met. The trigger is the one with the lower\ntotal ED patient-minutes (ties: Overloaded).\n"
+}

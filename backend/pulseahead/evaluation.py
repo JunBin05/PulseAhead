@@ -38,6 +38,14 @@ TRUTH_EXTENSION_MIN = 110  # so a warning near the end of the window can still m
 EARLY_LEAD_MIN = 30.0
 COORDINATOR = act.DEMO_COORDINATOR
 
+# The held-out partition is "test"; seed index 0 was evaluated and its results seen before any tuning, so
+# the one frozen-settings evaluation uses index 1.
+TEST_SEED_INDEX = 1
+PARTITIONS = ("development", "tuning", "test")
+# Reactive baseline: the owner approves a feasible action once its service is at one of these states.
+REACTIVE_TRIGGER = "building"  # chosen with the threshold on development/tuning seeds (evidence/tuning-results.md)
+REACTIVE_STATES = {"overloaded": {"overloaded"}, "building": {"building", "overloaded"}}
+
 EVAL_DIR = Path(__file__).resolve().parents[1] / "saved_runs" / "evaluations"
 
 JOBS: dict[str, "EvalJob"] = {}
@@ -55,6 +63,8 @@ class EvalJob:
         self.status = "running"  # running | done | cancelled | failed
         self.cancel = threading.Event()
         self.families: list[str] = []
+        self.partition = "test"
+        self.seed_index = TEST_SEED_INDEX
         self.done: list[dict[str, Any]] = []
         self.current: dict[str, Any] | None = None
         self.error: str | None = None
@@ -67,12 +77,16 @@ class EvalJob:
         with self.lock:
             return {
                 "api_version": "v1", "kind": "evaluation", "id": self.id, "status": self.status,
-                "synthetic": True, "created": self.created, "families_total": len(self.families),
+                "synthetic": True, "created": self.created, "partition": self.partition, "seed_index": self.seed_index, "families_total": len(self.families),
                 "families_done": len(self.done), "current": self.current, "error": self.error,
                 "elapsed_s": round((self.finished or time.time()) - self.started, 1),
                 "complete": self.status == "done",
                 "label": (
-                    "Synthetic, 7 shifts (1 held-out seed per family), descriptive only"
+                    (
+                        "Synthetic, 7 shifts (1 held-out seed per family), descriptive only"
+                        if self.partition == "test"
+                        else f"Synthetic, 7 shifts on {self.partition} seeds: NOT held-out evidence, descriptive only"
+                    )
                     if self.status == "done"
                     else "Unfinished: partial results are not a complete evaluation"
                 ),
@@ -81,14 +95,14 @@ class EvalJob:
 
     def results(self) -> dict[str, Any]:
         shifts = list(self.done)
-        return {"shifts": shifts, "aggregate": aggregate(shifts), "settings": settings(), "complete": self.status == "done"}
+        return {"shifts": shifts, "aggregate": aggregate(shifts), "settings": settings(self.partition, self.seed_index), "complete": self.status == "done"}
 
 
-def settings() -> dict[str, Any]:
+def settings(partition: str = "test", seed_index: int = TEST_SEED_INDEX) -> dict[str, Any]:
     return {
-        "families": list(SCENARIOS), "partition": "test (first seed of each family)", "warmup_min": WARMUP_MIN,
+        "families": list(SCENARIOS), "partition": f"{partition} (seed index {seed_index} of each family)", "warmup_min": WARMUP_MIN,
         "scored_min": SCORED_MIN, "forecast_every_min": STEP_MIN, "forecast_samples": SAMPLES,
-        "warning_threshold": fcast.WARNING_THRESHOLD, "threshold_tuned": False,
+        "warning_threshold": fcast.WARNING_THRESHOLD, "threshold_tuned": fcast.THRESHOLD_TUNED, "reactive_trigger": REACTIVE_TRIGGER,
         "engine_version": ENGINE_VERSION, "forecast_model": fcast.MODEL_VERSION, "forecast_seed": fcast.FORECAST_SEED,
         "matching_rule": (
             "An early warning is a forecast-risk alert (chance at or above the threshold) for a service, or the "
@@ -101,16 +115,17 @@ def settings() -> dict[str, Any]:
         ),
         "policies": {
             "no_action": "No action is ever requested.",
-            "reactive": "Same catalog, owners and delays; the owner approves a feasible action only once its service is Overloaded. No comparison is used.",
+            "reactive": f"Same catalog, owners and delays; the owner approves a feasible action once its service is {REACTIVE_TRIGGER.capitalize()} (trigger chosen on development/tuning seeds). No comparison is used.",
             "pulseahead": "Every 15 min with no action in flight, compare actions; the owner approves the top action only if it is labelled Best action.",
         },
         "exposure": (
-            "Test seed [0] of every family was evaluated by an earlier run and its results were seen: it is exposed, "
-            "not an untouched final test. No setting was tuned on it in this build."
+            "Test seed [0] of every family was evaluated by an earlier run (threshold 0.4, reactive trigger Overloaded) and its "
+            "results were seen: it is exposed, not an untouched final test. The warning threshold and the reactive trigger "
+            "were then chosen on development/tuning seeds only and frozen; the held-out run uses test seed [1], evaluated once."
         ),
         "limits": [
             "One shift per family: results are descriptive and carry no confidence interval.",
-            "The warning threshold 0.4 is the provisional starting value and was not tuned.",
+            f"Warning threshold {fcast.WARNING_THRESHOLD} and reactive trigger {REACTIVE_TRIGGER} were chosen on development/tuning seeds only (21 shifts, 42 episodes) and frozen; a tuning choice made on few shifts may not transfer.",
             "Total ED minutes accrue unfinished stays to T+600 and count them apart.",
             "Synthetic scenarios and disclosed assumptions only; not a hospital validation.",
         ],
@@ -306,7 +321,9 @@ def _approve(s: ReplaySession, preset: str, target: str, owner: str, tag: str) -
         return False
 
 
-def _policy_run(job: EvalJob, family: str, seed: int, policy: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _policy_run(job: EvalJob, family: str, seed: int, policy: str, trigger: str | None = None
+                ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    states = REACTIVE_STATES[trigger or REACTIVE_TRIGGER]
     s = ReplaySession(seed, family)
     t = 0.0
     log: list[dict[str, Any]] = []
@@ -335,11 +352,11 @@ def _policy_run(job: EvalJob, family: str, seed: int, policy: str) -> tuple[dict
             snap = s.snapshot()
             press = snap["pressure"]["services"]
             for c in snap["actions"]["catalog"]:
-                if c["feasible"] and press.get(c["service"], {}).get("state") == "overloaded":
+                if c["feasible"] and press.get(c["service"], {}).get("state") in states:
                     if _approve(s, c["preset"], c["target"], c["owners"][0], policy):
                         log.append({"at_min": round(t, 3), "preset": c["preset"], "target": c["target"],
                                     "review_min": c["review_min"], "setup_min": c["setup_min"],
-                                    "active_min": c["active_min"], "label": "service already overloaded"})
+                                    "active_min": c["active_min"], "label": f"service {press[c['service']]['state']} (reactive trigger)"})
                     break
     rows = _cohort(s)
     return {"metrics": policy_metrics(rows, log), "actions": log, "records": rows}, rows
@@ -349,7 +366,7 @@ def run_job(job: EvalJob) -> None:
     try:
         for family in job.families:
             _check(job)
-            seed = SCENARIOS[family]["seed_partitions"]["test"][0]
+            seed = SCENARIOS[family]["seed_partitions"][job.partition][job.seed_index]
             fc, _ = _forecast_run(job, family, seed)
             pulse, _ = _policy_run(job, family, seed, "pulseahead")
             react, _ = _policy_run(job, family, seed, "reactive")
@@ -400,17 +417,19 @@ def latest_saved() -> dict[str, Any] | None:
             rec = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if rec.get("status") == "done" and (best is None or rec.get("created", "") > best.get("created", "")):
+        # Only held-out (test partition) evaluations count as "the latest evaluation" for the demo.
+        if rec.get("status") == "done" and rec.get("partition", "test") == "test" and (best is None or rec.get("created", "") > best.get("created", "")):
             best = rec
     return best
 
 
-def start(families: list[str] | None = None) -> EvalJob:
+def start(families: list[str] | None = None, partition: str = "test", seed_index: int = TEST_SEED_INDEX) -> EvalJob:
     with _JOBS_LOCK:
         if any(j.status == "running" for j in JOBS.values()):
             raise RuntimeError("an evaluation is already running")
         job = EvalJob()
         job.families = [f for f in (families or list(SCENARIOS)) if f in SCENARIOS]
+        job.partition, job.seed_index = partition, seed_index
         JOBS[job.id] = job
     threading.Thread(target=run_job, args=(job,), daemon=True, name=f"eval-{job.id}").start()
     return job

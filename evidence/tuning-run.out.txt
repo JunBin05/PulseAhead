@@ -1,0 +1,64 @@
+forecast pass normal development 7
+forecast pass normal tuning 1001
+forecast pass normal tuning 1002
+forecast pass busy-recovers development 7
+forecast pass busy-recovers tuning 1011
+forecast pass busy-recovers tuning 1012
+forecast pass arrival-surge development 7
+forecast pass arrival-surge tuning 1021
+forecast pass arrival-surge tuning 1022
+forecast pass diagnostic-delay development 7
+forecast pass diagnostic-delay tuning 1031
+forecast pass diagnostic-delay tuning 1032
+forecast pass boarding-blockage development 7
+forecast pass boarding-blockage tuning 1041
+forecast pass boarding-blockage tuning 1042
+forecast pass mixed-cascade development 7
+forecast pass mixed-cascade tuning 1051
+forecast pass mixed-cascade tuning 1052
+forecast pass no-effective-action development 7
+forecast pass no-effective-action tuning 1061
+forecast pass no-effective-action tuning 1062
+reactive[overloaded] normal 7
+reactive[overloaded] normal 1001
+reactive[overloaded] normal 1002
+reactive[overloaded] busy-recovers 7
+reactive[overloaded] busy-recovers 1011
+reactive[overloaded] busy-recovers 1012
+reactive[overloaded] arrival-surge 7
+reactive[overloaded] arrival-surge 1021
+reactive[overloaded] arrival-surge 1022
+reactive[overloaded] diagnostic-delay 7
+reactive[overloaded] diagnostic-delay 1031
+reactive[overloaded] diagnostic-delay 1032
+reactive[overloaded] boarding-blockage 7
+reactive[overloaded] boarding-blockage 1041
+reactive[overloaded] boarding-blockage 1042
+reactive[overloaded] mixed-cascade 7
+reactive[overloaded] mixed-cascade 1051
+reactive[overloaded] mixed-cascade 1052
+reactive[overloaded] no-effective-action 7
+reactive[overloaded] no-effective-action 1061
+reactive[overloaded] no-effective-action 1062
+reactive[building] normal 7
+reactive[building] normal 1001
+reactive[building] normal 1002
+reactive[building] busy-recovers 7
+reactive[building] busy-recovers 1011
+reactive[building] busy-recovers 1012
+reactive[building] arrival-surge 7
+reactive[building] arrival-surge 1021
+reactive[building] arrival-surge 1022
+reactive[building] diagnostic-delay 7
+reactive[building] diagnostic-delay 1031
+reactive[building] diagnostic-delay 1032
+reactive[building] boarding-blockage 7
+reactive[building] boarding-blockage 1041
+reactive[building] boarding-blockage 1042
+reactive[building] mixed-cascade 7
+reactive[building] mixed-cascade 1051
+reactive[building] mixed-cascade 1052
+reactive[building] no-effective-action 7
+reactive[building] no-effective-action 1061
+reactive[building] no-effective-action 1062
+{"warning_threshold": 0.6, "false_warning_target_met": true, "reactive_trigger": "building"}

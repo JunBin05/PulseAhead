@@ -1,35 +1,9 @@
-PASS  case: available, a development/tuning seed, labelled a demo case  -- busy-recovers seed 1011 (tuning), service lab, alert T+105
-PASS  case: the baseline is labelled retrospective and was read from a no-action replay  -- onset T+145, confirmed T+155
-PASS  beat A: replay is at the recorded alert time on the recorded seed
-PASS  beat A: counts and status come from /state (in ED, staffed spaces, overall label)  -- 13 in ED, 12/24 staffed spaces free, status "Stable"
-PASS  beat B: forecast, drivers and state share one version  -- v5
-PASS  beat B: the supported drivers match the scan (and two are not relabelled as three)  -- diagnostics, arrivals
-PASS  beat B: diagnostics evidence equals /state and names the real service  -- Lab queue 2
-PASS  beat B: announced-arrival evidence equals /state (patients due within 30 min)  -- 2 patients on 1 ambulance(s)
-PASS  beat C: a forecast-risk alert (not Building, not Overloaded) exists for the case service at the alert time  -- Lab 42% (threshold 0.4)
-PASS  beat C: onset range is ordered and expected-in matches  -- 38 min (17 to 72)
-PASS  beat C: scope is local; overall status is whatever was received  -- overall "Stable", overall chance 0%
-PASS  beat C: predicted wait rows are forecasts (forecast minutes, p90 >= median where both exist), not elapsed waits  -- 2 patient(s) waiting for lab: medium median 10.8 p90 21.4 (elapsed 12.23); medium median 22.3 p90 35 (elapsed 3.97)
-PASS  beat C: the counts-based onset equals an independent no-action replay episode  -- onset T+145
-PASS  beat C: the forecast-risk alert preceded the counts onset by at least 30 min  -- lead 40 min (alert T+105, onset T+145)
-PASS  beat D: comparison is for the same version
-PASS  beat D: priority list ordered, every row labelled with its rule inputs and an impact per reserve unit-hour  -- #1 diagnostic_reserve:lab best_action
-PASS  beat D: top action is supported by its own lower bound (no forced winner) and targets the alerted service  -- diagnostic_reserve:lab lb 131.136
-PASS  beat D: deadline, owner and setup timing are present  -- too_late, latest start 97, owner Lab manager, review 5 + setup 15
-NOTE  only one action is feasible: no A-vs-B what-if at this moment
-NOTE  ward coordination: No decided Ward/ICU patient is waiting for allocation work.
-PASS  beat E: request routed to the resource owner  -- Lab manager
-PASS  beat E: a wrong owner is refused (403)  -- ED attending lead
-PASS  beat E: the owner approves
-PASS  beat E: review stage, capacity unchanged  -- capacity 2
-PASS  beat E: capacity +1 only when active, exactly review + setup after approval  -- 2 -> 3 at T+125; queue 2 -> 2
-PASS  beat E: capacity back after the window  -- 2
-PASS  beat E: every action event is in /events  -- action_requested action_decision action_approved action_review action_setup action_active action_draining action_completed
-NOTE  reserve unit L3 completed 3 test(s); observed lab queue 2 at approval, 1 at the end; model saving 166.536 (lb 131.136)
-PASS  beat F: /evaluations/latest is the newest saved file, complete  -- fa28fc4b74 2026-10-10T19:52:29+00:00
-PASS  beat F: episodes = early + late + missed; targets stated  -- 16 = 12+2+2; false warnings 2.71/shift
+PASS  case: unavailable is stated with its reason (no invented early warning)  -- No demo case qualified under the frozen settings (forecast model mc-flow-2, warning thresh
+PASS  beat F: /evaluations/latest is the newest saved file, complete  -- 73ec843aaf 2026-10-10T20:01:56+00:00
+PASS  beat F: episodes = early + late + missed; targets stated  -- 29 = 12+11+6; false warnings 0.29/shift
+PASS  beat F: the latest evaluation is the frozen-settings held-out run on test seed index 1  -- threshold 0.6, reactive trigger building, seeds 2002,2012,2022,2032,2042,2052,2062
 PASS  beat F: three policies reported on the same shifts
-PASS  beat F: test-seed exposure is disclosed  -- Test seed [0] of every family was evaluated by an earlier run and its 
+PASS  beat F: test-seed exposure is disclosed  -- Test seed [0] of every family was evaluated by an earlier run (thresho
 PASS  beat F: the saved numbers equal the export of that evaluation id (when still in memory)
 PASS  no-action seed 7 normal: 705 events, 59 patients
 

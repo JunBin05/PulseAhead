@@ -2,6 +2,8 @@
 
 **Status: smoke-verified (`evidence/demo-smoke.mjs`, `demo-smoke.out.txt`) and browser-checked with Playwright MCP on the production build; not per-criterion, not rehearsed, not deployed.**
 
+> **Update after tuning:** the case below was found at warning threshold 0.4. With the frozen threshold 0.6 no case qualifies, so the live demo stops at beat A and shows beat F. See evidence/heldout-test1.md.
+
 ## What the demo is
 `frontend/src/Demo.tsx` drives the real backend through the brief's six beats: A current condition, B received pressures, C predict and explain (with the retrospective counts baseline), D fix first, E act and watch, F evidence and limits, closing "Act before the queue." Every figure on screen comes from an API response at the state version shown. Nothing is hard-coded: scenario, seed, service and alert time come from `GET /api/v1/demo/case`. Deck numbers (12 waiting, 76 vs 48, 38 min, ...) are not used.
 

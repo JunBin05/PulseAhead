@@ -148,7 +148,22 @@ def main() -> int:
     }
     (EVIDENCE / "demo-case-scan.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     if not cands:
-        log("NO qualifying candidate; demo_case.json not written")
+        # A stale case from other settings must not linger: the demo then says plainly that none qualifies.
+        if demo_case.CASE_FILE.exists():
+            demo_case.CASE_FILE.unlink()
+        reasons: dict[str, int] = {}
+        for sh in shifts:
+            for c in sh["candidates"]:
+                reasons[c["reason"]] = reasons.get(c["reason"], 0) + 1
+        (EVIDENCE / "demo-case-scan.md").write_text(
+            "# Demo case scan (development and tuning seeds only)\n\n"
+            f"Scanned {len(shifts)} shifts at warning threshold {fcast.WARNING_THRESHOLD} (model {fcast.MODEL_VERSION}). "
+            "**No episode qualified** (lead >= 30 min, >= 2 supported drivers, a feasible supported action). "
+            "No demo case is written; the demo reports that honestly.\n\n"
+            + "\n".join(f"- {n} early-warned episode(s): {r}" for r, n in sorted(reasons.items())) + "\n",
+            encoding="utf-8",
+        )
+        log("NO qualifying candidate; demo_case.json removed")
         return 1
     best = cands[0]
     top = best["top_action"]

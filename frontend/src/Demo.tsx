@@ -60,6 +60,8 @@ interface BeatView {
   lines: Line[];
   cards?: Card[];
   close?: string;
+  /** The story cannot continue honestly: the remaining story beats are skipped, the evidence beat stays. */
+  halt?: boolean;
 }
 
 const num = (x: number | null | undefined, d = 1): string => (x === null || x === undefined ? 'n/a' : x.toFixed(d));
@@ -188,16 +190,16 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
     return s;
   }, [ctl]);
 
-  const stop = (text: string, id: string, title: string, at: string): BeatView => {
-    stoppedRef.current = true;
-    return { id, title, at, lines: [{ tag: 'Note', text }] };
-  };
+  const stop = (text: string, id: string, title: string, at: string): BeatView => ({
+    id, title, at, halt: true, lines: [{ tag: 'Note', text }],
+  });
 
   const doBeat = useCallback(
     async (n: number, draft: (v: BeatView) => void): Promise<BeatView> => {
       const c = ctx.current;
       if (n > 0 && c.snap && ctl.currentReplayId() !== c.snap.replay_id) {
-        return stop('The replay was changed outside the demo. Press Reset demo to start again.', BEATS[n].id, BEATS[n].name, '');
+        stoppedRef.current = true;
+        return { id: BEATS[n].id, title: BEATS[n].name, at: '', lines: [{ tag: 'Note', text: 'The replay was changed outside the demo. Press Reset demo to start again.' }] };
       }
       const B = BEATS[n];
       switch (n) {
@@ -468,7 +470,7 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
           return { id: B.id, title: B.name, at: clock(s.sim_time_min), lines };
         }
         default: {
-          const s = c.snap!;
+          const s = c.snap;
           let ev: SavedEvaluation | null = null;
           try {
             ev = await api.latestEvaluation();
@@ -530,22 +532,24 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
               title: 'Predict',
               text: a
                 ? `${a.name}: ${pct(a.chance)} chance within 90 min${a.onset ? `, expected in about ${num(a.onset.expected_in_min, 0)} min (${num(a.onset.low_in_min, 0)} to ${num(a.onset.high_in_min, 0)})` : ''}.`
-                : 'No forecast in this run.',
+                : 'No prediction was shown: the demo story stopped before it (no qualifying case or alert).',
             },
             {
               title: 'Explain',
               text: a
                 ? `${a.category_label}${c.drivers && c.drivers.drivers.length ? `, with ${c.drivers.drivers.map((d) => d.label.toLowerCase()).join(' and ')}` : ''}.`
-                : 'No bottleneck in this run.',
+                : 'No bottleneck was explained in this run.',
             },
             {
               title: 'Act',
               text: c.acted
                 ? `${c.acted.name}, approved by ${c.acted.owner}; modeled saving ${c.acted.saving}.`
-                : 'No action was started: none was shown to help.',
+                : a
+                  ? 'No action was started: none was shown to help.'
+                  : 'No action was started: the story stopped before the decision beat.',
             },
           ];
-          return { id: BEATS[5].id, title: BEATS[5].name, at: clock(s.sim_time_min), lines, cards, close: 'Act before the queue.' };
+          return { id: BEATS[5].id, title: BEATS[5].name, at: s ? clock(s.sim_time_min) : '', lines, cards, close: 'Act before the queue.' };
         }
       }
     },
@@ -565,12 +569,27 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
         setViews((vs) => [...vs.slice(0, n), v]);
         setViewIdx(n);
       });
-      doneRef.current = n + 1;
-      setDone(n + 1);
-      setViews((vs) => [...vs.slice(0, n), view]);
-      setViewIdx(n);
-      // A beat that stopped honestly leaves the evidence beat reachable.
-      if (stoppedRef.current && n < BEATS.length - 1) setNotice('The story stopped here honestly; nothing further is invented.');
+      const last = BEATS.length - 1;
+      if (view.halt && n < last) {
+        // The story stops honestly here. The beats that need it are marked, and the evidence beat stays reachable.
+        const pads: BeatView[] = [];
+        for (let k = n + 1; k < last; k++) {
+          pads.push({
+            id: BEATS[k].id, title: BEATS[k].name, at: '',
+            lines: [{ tag: 'Note', text: `Not shown: beat ${BEATS[n].id} could not be told truthfully, so there is nothing real to show here.` }],
+          });
+        }
+        doneRef.current = last;
+        setDone(last);
+        setViews((vs) => [...vs.slice(0, n), view, ...pads]);
+        setViewIdx(n);
+        setNotice('The story stopped here honestly; nothing is invented. Press Next for the measured evidence and limits.');
+      } else {
+        doneRef.current = n + 1;
+        setDone(n + 1);
+        setViews((vs) => [...vs.slice(0, n), view]);
+        setViewIdx(n);
+      }
     } catch (e) {
       const m = e instanceof ApiError ? e.message : 'The demo step failed.';
       setError(m);
@@ -647,7 +666,7 @@ export function DemoBar({ ctl, onRunning }: { ctl: DemoController; onRunning?: (
         {finished
           ? 'Demo finished'
           : `Next: beat ${nextBeat!.id} of ${BEATS.length}, ${nextBeat!.name}`}
-        {' · '}Synthetic data, live backend. Demo case from a development seed, not held-out evidence.
+        {' · '}Synthetic data, live backend. A demo case is a development/tuning seed, not held-out evidence.
       </p>
       <nav className="demo-beats" aria-label="Demo beats">
         {BEATS.map((b, i) => (

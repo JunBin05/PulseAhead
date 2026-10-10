@@ -274,11 +274,23 @@ def decide_action_request(replay_id: str, request_id: str, body: DecisionBody) -
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
+class EvaluationBody(BaseModel):
+    # Default: the frozen-settings held-out run on the second test seed of every family. A development or
+    # tuning partition is for checking the machinery and is labelled as not held-out evidence.
+    partition: Literal["development", "tuning", "test"] = "test"
+    seed_index: int | None = Field(default=None, ge=0, le=3)
+
+
 @app.post("/api/v1/evaluations")
-def start_evaluation() -> dict:
-    """One small held-out evaluation, run in the background (see evaluation.py). Progress via GET."""
+def start_evaluation(body: EvaluationBody | None = None) -> dict:
+    """One small evaluation, run in the background (see evaluation.py). Progress via GET."""
+    body = body or EvaluationBody()
+    idx = body.seed_index if body.seed_index is not None else (evaluation.TEST_SEED_INDEX if body.partition == "test" else 0)
+    sizes = {"development": 1, "tuning": 2, "test": 4}
+    if idx >= sizes[body.partition]:
+        raise HTTPException(status_code=422, detail=f"{body.partition} has {sizes[body.partition]} seed(s) per family")
     try:
-        job = evaluation.start()
+        job = evaluation.start(None, body.partition, idx)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return job.progress()

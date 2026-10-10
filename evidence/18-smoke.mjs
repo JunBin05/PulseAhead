@@ -16,9 +16,10 @@ const check = (name, ok, detail = '') => {
 };
 const WARMUP = 120, END = 600, STEP = 15, HORIZON = 90;
 
-const started = await j('/evaluations', {});
+// The machinery check runs on a TUNING seed so it never spends the held-out test seeds.
+const started = await j('/evaluations', { partition: 'tuning', seed_index: 0 });
 check('evaluation started as a background job', started.s === 200 && started.status === 'running' && started.families_total === 7, started.id);
-const dup = await j('/evaluations', {});
+const dup = await j('/evaluations', { partition: 'tuning', seed_index: 0 });
 check('a second evaluation while one runs -> 409', dup.s === 409);
 let sawPartial = false;
 let cur = started;
@@ -34,9 +35,10 @@ while (cur.status === 'running' && Date.now() - t0 < 25 * 60 * 1000) {
 console.log('');
 check('job finished', cur.status === 'done', `${cur.status} in ${cur.elapsed_s}s ${cur.error ?? ''}`);
 check('unfinished work never looked complete while running', sawPartial || cur.families_total === 7);
-check('7 shifts, one held-out test seed each', cur.results.shifts.length === 7 && cur.results.shifts.every((s) => s.seed >= 2000),
+check('7 shifts, one tuning seed each, labelled not held-out', cur.results.shifts.length === 7 && cur.results.shifts.every((s) => s.seed >= 1000 && s.seed < 2000) && /NOT held-out/.test(cur.label),
   cur.results.shifts.map((s) => `${s.family}:${s.seed}`).join(' '));
-check('labelled synthetic, descriptive only, threshold untuned', /descriptive only/.test(cur.label) && cur.results.settings.threshold_tuned === false && cur.results.settings.warning_threshold === 0.4);
+check('labelled synthetic, descriptive only, settings stated', /descriptive only/.test(cur.label) && typeof cur.results.settings.threshold_tuned === 'boolean' && [0.4, 0.6, 0.8].includes(cur.results.settings.warning_threshold),
+  `threshold ${cur.results.settings.warning_threshold}, tuned ${cur.results.settings.threshold_tuned}, reactive ${cur.results.settings.reactive_trigger}`);
 
 const ex = await get(`/evaluations/${started.id}/export`);
 check('export carries format, settings and every shift', ex.format === 'pulseahead-evaluation' && ex.results.shifts.length === 7);
@@ -102,7 +104,7 @@ for (const pol of ['reactive', 'pulseahead']) {
 console.log(`NOTE  episodes ${agg.episodes}: early ${agg.early_warned}, late-only ${agg.late_only}, missed ${agg.missed}; lead ${JSON.stringify(agg.lead_min)}; false warnings/shift ${agg.false_warnings_per_shift}`);
 
 // Cancel works: start another job and cancel it quickly.
-const j2 = await j('/evaluations', {});
+const j2 = await j('/evaluations', { partition: 'tuning', seed_index: 0 });
 await new Promise((r) => setTimeout(r, 1500));
 await j(`/evaluations/${j2.id}/cancel`, {});
 let c2 = await get(`/evaluations/${j2.id}`);

@@ -1,5 +1,9 @@
 # HANDOFF: PulseAhead build
 
+## Priority 2 outcome (read first): tuned and frozen, held-out run done, demo has no qualifying case
+
+Threshold 0.6 and reactive trigger Building were chosen on development/tuning seeds only and frozen (forecast model mc-flow-2; engine flow-4 unchanged). The held-out run on test seed [1] (once, id 73ec843aaf) is in `evidence/heldout-test1.md`: false warnings 0.29 per shift (met), 12 of 29 episodes early, 11 late only, 6 missed; PulseAhead 34,331.1 vs reactive 33,584.3 vs no action 36,785.2 patient-min, so PulseAhead beats no action but not the tuned reactive baseline. Test [1] is now seen. **Decision for the user:** with threshold 0.6 the demo scan finds no qualifying case, so beat A stops honestly and beat F shows the measured evidence. Options: keep that, or accept a demo case from a provisional-threshold scan (busy-recovers 1011, evidence/demo-case-scan-threshold-0.4.md, labelled as not the frozen model), or relax the two-driver rule. Not done silently. Regression 01 passed on the final build. Saved replays from mc-flow-1 no longer load (by design).
+
 ## Demo rework status (2026-10-11, after the final build) - read this first
 
 **The Demo bar now tells the brief's six beats A to F** (`frontend/src/Demo.tsx`, `evidence/demo-story.md`, `evidence/demo-smoke.mjs`). The case comes from `GET /api/v1/demo/case`, chosen by `python -m pulseahead.demo_scan` (run from `backend/`) over development/tuning seeds only: one qualifying case, `busy-recovers` tuning seed 1011, Lab, alert T+01:45, counts onset T+02:25. It is a demo case, not held-out evidence. New API: `/demo/case`, `/replays/{id}/demo/drivers`, `/evaluations/latest` (finished evaluations are saved to git-ignored `backend/saved_runs/evaluations/`; run one from the Evaluation panel on a fresh checkout or beat F says none exists). No engine change; `flow-4`, seed 7 normal 705 / 59.

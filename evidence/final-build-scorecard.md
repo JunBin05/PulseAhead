@@ -28,3 +28,8 @@ Statuses are `evidenced`, `partial` or `not-run`. They are not awarded points. E
 
 - The demo case is a scanned development/tuning seed (1 qualifying case of 35 early-warned episodes). It is a demo case, not evidence of performance.
 - Keyboard (Enter/Space on Next, chips, Reset), reduced-motion emulation, Quick auto-play and Skip were checked in Playwright; regression 01 was not re-run.
+
+## Update: tuned and frozen settings (2026-10-11)
+
+- Threshold 0.6 and reactive trigger Building chosen on development/tuning seeds; held-out test seed [1], run once: false warnings 0.29/shift (target 1 met); 12/29 episodes early, 11 late only, 6 missed; PulseAhead does not beat the tuned reactive baseline (34,331.1 vs 33,584.3) but beats no action (36,785.2) in 5 of 7 shifts, same in 2. See evidence/heldout-test1.md. This supersedes the 2.71 false-warnings and 12-of-16 figures above, which were threshold 0.4 on exposed test seed [0].
+- Regression 01 re-run: pass.

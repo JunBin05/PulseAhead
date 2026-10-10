@@ -25,14 +25,21 @@ const queue = (s, svc) => (svc === 'allocation' ? s.resources.disposition.alloca
 
 // ---- The case ----------------------------------------------------------------------------------
 const demo = await get('/demo/case');
-check('case: available, a development/tuning seed, labelled a demo case',
-  demo.available === true && ['development', 'tuning'].includes(demo.partition) && /not held-out/i.test(demo.label),
-  `${demo.scenario} seed ${demo.seed} (${demo.partition}), service ${demo.service}, alert T+${demo.alert_time_min}`);
-check('case: the baseline is labelled retrospective and was read from a no-action replay',
-  demo.retrospective.kind === 'retrospective_no_action_replay' && /retrospective/i.test(demo.retrospective.label) &&
-  demo.retrospective.onset_min === demo.scan.onset_min,
-  `onset T+${demo.retrospective.onset_min}, confirmed T+${demo.retrospective.confirmed_min}`);
+if (demo.available) {
+  check('case: available, a development/tuning seed, labelled a demo case',
+    ['development', 'tuning'].includes(demo.partition) && /not held-out/i.test(demo.label),
+    `${demo.scenario} seed ${demo.seed} (${demo.partition}), service ${demo.service}, alert T+${demo.alert_time_min}`);
+  check('case: the baseline is labelled retrospective and was read from a no-action replay',
+    demo.retrospective.kind === 'retrospective_no_action_replay' && /retrospective/i.test(demo.retrospective.label) &&
+    demo.retrospective.onset_min === demo.scan.onset_min,
+    `onset T+${demo.retrospective.onset_min}, confirmed T+${demo.retrospective.confirmed_min}`);
+}
 
+if (!demo.available) {
+  // Under the frozen settings no scanned case qualifies: the story must stop honestly, not invent an alert.
+  check('case: unavailable is stated with its reason (no invented early warning)', demo.available === false && /No demo case qualified/.test(demo.reason), demo.reason.slice(0, 90));
+}
+if (demo.available) {
 // ---- Beat A: start and current condition -----------------------------------------------------------
 let st = await j('/replays', { scenario: demo.scenario, seed: demo.seed });
 const id = st.replay_id;
@@ -134,6 +141,7 @@ check('beat E: every action event is in /events',
 const used = ev.filter((e) => e.type === 'test_completed' && e.payload.unit === top.reserve.unit).length;
 console.log(`NOTE  reserve unit ${top.reserve.unit} completed ${used} test(s); observed ${top.service} queue ${queue0} at approval, ${queue(st, top.service)} at the end; model saving ${top.comparison.total_saving_patient_min.mean} (lb ${top.comparison.total_saving_patient_min.lower_90})`);
 
+}
 // ---- Beat F: evidence ------------------------------------------------------------------------------------
 const lat = await get('/evaluations/latest');
 const dir = join(ROOT, 'backend', 'saved_runs', 'evaluations');
@@ -144,6 +152,9 @@ const g = lat.results.aggregate;
 check('beat F: episodes = early + late + missed; targets stated',
   g.episodes === g.early_warned + g.late_only + g.missed && g.target_false_warnings_per_shift === 1,
   `${g.episodes} = ${g.early_warned}+${g.late_only}+${g.missed}; false warnings ${g.false_warnings_per_shift}/shift`);
+check('beat F: the latest evaluation is the frozen-settings held-out run on test seed index 1',
+  lat.partition === 'test' && lat.seed_index === 1 && lat.results.settings.threshold_tuned === true && [0.4, 0.6, 0.8].includes(lat.results.settings.warning_threshold),
+  `threshold ${lat.results.settings.warning_threshold}, reactive trigger ${lat.results.settings.reactive_trigger}, seeds ${lat.results.shifts.map((x) => x.seed).join(',')}`);
 check('beat F: three policies reported on the same shifts', ['no_action', 'reactive', 'pulseahead'].every((p) => g.policies[p]?.total_ed_patient_min > 0));
 check('beat F: test-seed exposure is disclosed', /exposed|seen/i.test(lat.results.settings.exposure ?? ''), (lat.results.settings.exposure ?? '').slice(0, 70));
 const exp = await get(`/evaluations/${lat.id}/export`);

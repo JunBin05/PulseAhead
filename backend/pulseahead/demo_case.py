@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from . import forecast as fcast
 from .pressure import SERVICES
 from .profile import SCENARIOS
 
@@ -143,7 +144,12 @@ def case() -> dict[str, Any]:
     rec = load_case_file()
     if rec is None:
         return {"api_version": "v1", "kind": "demo_case", "available": False,
-                "reason": "No demo case qualified in the development/tuning scan (or the scan was not run)."}
+                "reason": (
+                    "No demo case qualified under the frozen settings (forecast model "
+                    f"{fcast.MODEL_VERSION}, warning threshold {fcast.WARNING_THRESHOLD}) in the development/tuning scan, "
+                    "or the scan was not run (evidence/demo-case-scan.md). The early-warning story is not told with a case "
+                    "that does not exist."
+                )}
     with _lock:
         if "retro" not in _cache or _cache.get("key") != (rec["scenario"], rec["seed"], rec["alert_time_min"]):
             _cache["retro"] = _retrospective(rec)

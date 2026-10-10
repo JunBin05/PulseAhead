@@ -27,15 +27,17 @@ from .engine import CongestionMonitor, SpacePool, WardBeds
 from .pressure import CATEGORY_LABEL, SERVICES, LocalMonitor
 from .profile import CRITICAL_RANK, PROFILE, URGENCY_RANK
 
-MODEL_VERSION = "mc-flow-1"
+MODEL_VERSION = "mc-flow-2"  # mc-flow-2: warning threshold 0.6 chosen on development/tuning seeds and frozen
 # Independent of every replay seed and of any hidden completion value (spec: forecast seeds).
 FORECAST_SEED = 7310004
 HORIZON_MIN = 90.0
 TAIL_MIN = 20.0
 REFRESH_MIN = 5.0
 DEFAULT_SAMPLES = 50
-# Provisional warning threshold (spec: start with 0.4, 0.6, 0.8; tuned on tuning shifts in ticket 18).
-WARNING_THRESHOLD = 0.4
+# Warning threshold, chosen from 0.4 / 0.6 / 0.8 on development and tuning seeds only (evidence/tuning-results.md,
+# rule: at most 1 false warning per shift, then most episodes warned early) and frozen before the held-out run.
+WARNING_THRESHOLD = 0.6
+THRESHOLD_TUNED = True
 REVIEW_MIN = 5.0
 MARGIN_MIN = 5.0
 # Action comparison (paired futures): the follow-up cap and the cohort window (spec: patients present

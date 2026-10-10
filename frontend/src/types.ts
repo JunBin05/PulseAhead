@@ -931,6 +931,7 @@ export interface SavedEvaluation {
     settings: {
       warning_threshold: number;
       threshold_tuned: boolean;
+      reactive_trigger?: string;
       exposure?: string;
       partition?: string;
       limits: string[];
