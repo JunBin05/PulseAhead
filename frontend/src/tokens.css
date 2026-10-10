@@ -1,0 +1,66 @@
+/* PulseAhead design tokens.
+   Scene: a coordinator at a ward workstation under bright, even lighting, scanning for the
+   one place flow is stuck. Light, cool-neutral surfaces; one accent; status always carries
+   text and an icon in addition to colour. */
+:root {
+  /* Neutrals, tinted toward the accent hue */
+  --ground: #f2f5f7;
+  --surface: #ffffff;
+  --surface-sunken: #e9eef2;
+  --line: #d3dae1;
+  --line-strong: #b4bfca;
+  --ink: #15202b;
+  --ink-muted: #46535f;
+  --ink-faint: #5c6874;
+
+  /* Accent: primary actions and current selection only */
+  --accent: #0a6680;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcecf1;
+  --focus: #0a6680;
+
+  /* Status: each pairs a text colour (>=4.5:1 on its tint) with a tint and a fixed icon */
+  --status-normal-ink: #14663e;
+  --status-normal-tint: #e0f1e7;
+  --status-pressure-ink: #7a4d00;
+  --status-pressure-tint: #fdf0cc;
+  --status-overload-ink: #a4231a;
+  --status-overload-tint: #fce6e3;
+  --status-unknown-ink: #44505b;
+  --status-unknown-tint: #e6eaee;
+
+  /* Patient urgency groups (also distinguished by dot size and the legend text) */
+  --urgency-urgent: #b4281f;
+  --urgency-medium: #b8700a;
+  --urgency-lower: #1f6f8f;
+
+  /* Scene */
+  --scene-ground: #e4eaef;
+  --scene-platform: #f8fafb;
+  --scene-platform-edge: #c4ced7;
+  --scene-selected: #0a6680;
+
+  /* Type: system stack, fixed rem scale (ratio ~1.15) */
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.3125rem;
+
+  /* Spacing, 4px base */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow-panel: 0 1px 2px rgba(21, 32, 43, 0.06), 0 4px 14px rgba(21, 32, 43, 0.06);
+  --target: 44px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 180ms;
+}
