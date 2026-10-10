@@ -61,3 +61,18 @@ Spec: "Save patient stage timestamps for the three mutually exclusive parts of t
 **Ward/ICU bed pool (demo assumptions):** 6 ward beds (WD1-WD6) and 2 ICU beds (IC1, IC2); WD1, WD2 and IC1 are free at the start, the others are occupied by inpatients and released at 90, 150, 240, 420 min (ward) and 200 min (ICU). Ward and ICU beds are not interchangeable. A bed given to an ED patient stays occupied for the rest of the run.
 
 **Alternative not taken:** splitting awaiting departure into discharge processing and boarding as two exclusive parts.
+
+## Q6. What counts as "necessary capacity unavailable", and how are the rates windowed? (ticket 06)
+
+Spec §Zone pressure: local overload occurs when the queue reaches its threshold, "or necessary capacity is unavailable while eligible work waits", for ten continuous minutes; λ uses the previous 30 minutes and μ comes from finite staffed slots and disclosed task durations.
+
+**Working decision:**
+- *Necessary capacity unavailable* means no suitable free capacity while a patient waits for it: no free staffed general space while a general patient awaits one (or no free resuscitation space while a critical patient does), and no suitable free Ward/ICU bed while a transfer awaits one. Busy units alone are not "unavailable"; a queue at threshold covers that case.
+- The staffed-space and Ward/ICU-bed services have no queue threshold. They alarm only on unavailable capacity (one waiter is enough, for 10 minutes).
+- Discharge processing, ward allocation and transport use the same threshold, 3 (the spec gives one "departure processing/allocation" value).
+- λ is entries into the service's queue in the previous 30 simulated minutes (the window is shorter early in the run), per hour. The first queue is entered at arrival. μ is servers × 60 / mean task minutes, using the mean of the disclosed triangular assumptions (lab and imaging: the disclosed medians). Recent throughput is completions in the same window, shown apart.
+- A service whose inputs are missing shows Cannot assess. A building interval is no longer continuous and is dropped. An episode that is already confirmed stays open (it is not cleared and its zone keeps the red state), because missing inputs cannot establish recovery.
+- Zone state is the worst of its services: Overloaded, then Pressure building, then Cannot assess, then Normal.
+
+**Alternative not taken:** treat any fully busy unit as capacity unavailable (this would raise an alert at normal load); show a zone as Cannot assess as soon as one service is missing, even with a confirmed episode.
+

@@ -132,6 +132,19 @@ def _boarding_script() -> dict[str, Any]:
     return {"walk_ins": walk_ins, "ambulances": []}
 
 
+def _surge_script() -> dict[str, Any]:
+    # Twenty-four walk-ins at one instant against one triage desk: the triage queue is far above its
+    # threshold and more than one row of dots. Spaces never run out, so only the triage zone alarms.
+    urgencies = ["urgent"] * 2 + ["medium"] * 8 + ["lower"] * 14
+    scores = {"urgent": 2, "medium": 3, "lower": 4}
+    return {
+        "walk_ins": [
+            (2.5, f"Q{i:02d}", _walk_in(u, scores[u])) for i, u in enumerate(urgencies, start=1)
+        ],
+        "ambulances": [],
+    }
+
+
 def _congestion_script() -> dict[str, Any]:
     return {
         # Two urgent walk-ins whose long stabilization tasks keep the only two staffed general
@@ -187,6 +200,13 @@ FIXTURES: dict[str, dict[str, Any]] = {
             (0.0, "N1", False), (0.0, "N2", False), (0.0, "N3", False),
             (0.0, "N4", False), (0.0, "N5", False),
         ],
+    },
+    "fixture-queue-surge": {
+        "id": "fixture-queue-surge",
+        "name": "Fixture: 24 walk-ins at once, a triage-only overload (overall ED status stays Stable)",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _surge_script,
     },
     "fixture-diagnostics-gap": {
         "id": "fixture-diagnostics-gap",

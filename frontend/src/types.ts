@@ -111,6 +111,78 @@ export interface DiagService {
 
 export type CongestionState = 'stable' | 'building' | 'confirmed';
 
+export type LocalState = 'normal' | 'building' | 'overloaded' | 'unknown';
+
+export type FailureCategory =
+  | 'triage_arrival'
+  | 'physician_space'
+  | 'lab_imaging'
+  | 'departure_ward_transport';
+
+export interface ServiceRates {
+  window_min: number;
+  /** Received work (lambda) over the window; null when inputs are missing. */
+  received_per_hour: number | null;
+  /** Completed work over the same window; shown apart from capacity. */
+  recent_throughput_per_hour: number | null;
+  unit: string;
+  servers?: number;
+  capacity_per_hour: number | null;
+  mean_task_min?: number;
+  /** Lambda above mu: a pressure signal only, never a countdown. */
+  pressure_signal: boolean | null;
+  free_beds?: { ward: number; icu: number };
+}
+
+export interface PressureService {
+  id: string;
+  zone: number;
+  name: string;
+  category: FailureCategory;
+  state: LocalState;
+  queue: number | null;
+  queue_label: string;
+  threshold: number | null;
+  capacity_unavailable: boolean | null;
+  inputs_ok: boolean;
+  onset_min: number | null;
+  confirmed_min: number | null;
+  elapsed_min: number | null;
+  confirms_in_min: number | null;
+  recovery_since_min: number | null;
+  rates: ServiceRates;
+}
+
+export interface PressureAlert {
+  service: string;
+  zone: number;
+  state: 'building' | 'overloaded';
+  category: FailureCategory;
+  category_label: string;
+  affected_patients: number | null;
+  urgent_group_waiting: number;
+  onset_min: number | null;
+  confirmed_min: number | null;
+  evidence: string;
+}
+
+export interface Pressure {
+  rule: {
+    confirm_after_minutes: number;
+    clear_after_minutes: number;
+    thresholds: Record<string, number>;
+    rate_window_minutes: number;
+    note: string;
+  };
+  services: Record<string, PressureService>;
+  zones: { zone: number; state: LocalState; label: string; services: string[] }[];
+  alerts: PressureAlert[];
+  mixed: boolean;
+  mixed_label: string | null;
+  any_unknown: boolean;
+  episodes: Record<string, { onset_min: number; confirmed_min: number; cleared_min: number | null }[]>;
+}
+
 export type AmbulanceStatus = 'en_route' | 'delayed' | 'cancelled' | 'arrived';
 
 export interface Announcement {
@@ -144,7 +216,12 @@ export interface Snapshot {
     label: string;
     onset_min: number | null;
     confirmed_min: number | null;
+    recovering: boolean;
+    recovery_since_min: number | null;
+    /** A zone is locally overloaded. Independent of the overall ED rule. */
+    local_alert: boolean;
   };
+  pressure: Pressure;
   resources: {
     ed_spaces: {
       total: number;

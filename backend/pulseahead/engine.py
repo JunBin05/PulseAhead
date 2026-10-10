@@ -745,6 +745,8 @@ class EDEngine:
             phase_since_min=self.now,
         )
         self.patients[pid] = p
+        # The first queue is entered at arrival, not through _set_phase: it counts as received work.
+        self.work_entries.setdefault(WAIT_SERVICE[p.phase], []).append(self.now)
         self._emit(
             "arrival",
             pid,

@@ -13,7 +13,15 @@ import {
   IconTriangle,
   IconUnknown,
 } from './icons';
-import { ZONE_NAMES, type CongestionState, type Phase, type Snapshot, type Urgency } from './types';
+import {
+  ZONE_NAMES,
+  type CongestionState,
+  type LocalState,
+  type Phase,
+  type PressureService,
+  type Snapshot,
+  type Urgency,
+} from './types';
 
 const SPEEDS = [1, 2, 5, 10] as const;
 
@@ -65,6 +73,14 @@ function formatClock(min: number): string {
   return `T+${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function zoneState(snap: Snapshot | null, zone: number): LocalState {
+  return snap?.pressure.zones.find((z) => z.zone === zone)?.state ?? 'normal';
+}
+
+function minutes(n: number): string {
+  return `${n.toFixed(1)} min`;
+}
+
 function patientCount(n: number): string {
   return `${n} ${n === 1 ? 'patient' : 'patients'}`;
 }
@@ -86,6 +102,25 @@ const STATUS_LOOK: Record<CongestionState, { tone: string; icon: ReactNode }> = 
   confirmed: { tone: 'overload', icon: <IconOctagon /> },
 };
 
+// Local zone state: green Normal, yellow Pressure building, red Overloaded, gray Cannot assess.
+// Colour is never the only signal; every state has its own icon and text.
+const LOCAL_LOOK: Record<LocalState, { tone: string; icon: ReactNode; label: string }> = {
+  normal: { tone: 'normal', icon: <IconCheck />, label: 'Normal' },
+  building: { tone: 'pressure', icon: <IconTriangle />, label: 'Pressure building' },
+  overloaded: { tone: 'overload', icon: <IconOctagon />, label: 'Overloaded' },
+  unknown: { tone: 'unknown', icon: <IconUnknown />, label: 'Cannot assess' },
+};
+
+function LocalChip({ state, testid }: { state: LocalState; testid?: string }) {
+  const look = LOCAL_LOOK[state];
+  return (
+    <span className="status" data-tone={look.tone} data-state={state} data-testid={testid}>
+      {look.icon}
+      <span>{look.label}</span>
+    </span>
+  );
+}
+
 function StatusBadge({ snap }: { snap: Snapshot | null }) {
   // The label text comes from the backend; only tone and icon are chosen here.
   const look = snap ? STATUS_LOOK[snap.overall_status.state] : { tone: 'unknown', icon: <IconUnknown /> };
@@ -94,9 +129,17 @@ function StatusBadge({ snap }: { snap: Snapshot | null }) {
   return (
     <div className="meta">
       <span className="meta-label">Overall status</span>
-      <span className="status" data-tone={tone} data-testid="overall-status">
-        {icon}
-        <span>{label}</span>
+      <span className="status-line">
+        <span className="status" data-tone={tone} data-testid="overall-status">
+          {icon}
+          <span>{label}</span>
+        </span>
+        {snap?.overall_status.local_alert && (
+          <span className="status" data-tone="overload" data-testid="local-alert">
+            <IconOctagon />
+            <span>Local alert</span>
+          </span>
+        )}
       </span>
     </div>
   );
@@ -506,6 +549,13 @@ export function App() {
                 home: snap?.counts.departed_home ?? 0,
                 ward: snap?.counts.departed_ward ?? 0,
               }}
+              areaCounts={scene.perArea}
+              zoneStates={{
+                1: zoneState(snap, 1),
+                2: zoneState(snap, 2),
+                3: zoneState(snap, 3),
+                4: zoneState(snap, 4),
+              }}
               selectedZone={selectedZone}
               onSelectZone={toggleZone}
             />
@@ -528,6 +578,7 @@ export function App() {
                   <span className="zone-count" data-testid={`zone-${z}-count`}>
                     {patientCount(snap ? snap.zones.find((q) => q.id === z)?.patient_count ?? 0 : 0)}
                   </span>
+                  <LocalChip state={zoneState(snap, z)} testid={`zone-${z}-status`} />
                 </button>
               ))}
             </div>
@@ -674,6 +725,7 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
           {snap.resources.diagnostics.imaging.median_turnaround_min} min (demo assumptions).
         </p>
       )}
+      <PressureSection snap={snap} zoneId={zone.id} />
       {(zone.id === 2 || zone.id === 3) && <StaffingSummary snap={snap} />}
       {patients.length > 0 && (
         <>
@@ -708,6 +760,164 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
         </>
       )}
     </div>
+  );
+}
+
+function rate(value: number | null, unit: string): string {
+  return value === null ? 'Unknown' : `${value} ${unit}`;
+}
+
+function ServiceCard({ svc, now, rule }: { svc: PressureService; now: number; rule: Snapshot['pressure']['rule'] }) {
+  const r = svc.rates;
+  const id = svc.id;
+  const unit = r.unit.replace(' per hour', '/h');
+  const confirmedClock = svc.confirmed_min !== null ? formatClock(svc.confirmed_min) : null;
+  const recoveryElapsed = svc.recovery_since_min !== null ? now - svc.recovery_since_min : null;
+  let signal = 'Unknown (inputs missing)';
+  if (r.pressure_signal === true) {
+    signal = 'Incoming work exceeds staffed capacity: a pressure signal only, not a countdown';
+  } else if (r.pressure_signal === false) {
+    signal = 'Incoming work is within staffed capacity';
+  } else if (svc.inputs_ok) {
+    signal = 'No per-hour capacity model for this service';
+  }
+  return (
+    <li
+      data-testid={`svc-${id}`}
+      data-state={svc.state}
+      data-queue={svc.queue ?? ''}
+      data-lambda={r.received_per_hour ?? ''}
+      data-mu={r.capacity_per_hour ?? ''}
+      data-throughput={r.recent_throughput_per_hour ?? ''}
+    >
+      <div className="svc-head">
+        <strong>{svc.name}</strong>
+        <LocalChip state={svc.state} testid={`svc-${id}-state`} />
+      </div>
+      <p className="svc-sub">Queue: {svc.queue_label}</p>
+      <dl className="kv">
+        <dt>Waiting</dt>
+        <dd data-testid={`svc-${id}-queue`}>
+          {svc.queue === null ? 'Unknown' : svc.queue}
+          {svc.threshold !== null && ` (threshold ${svc.threshold})`}
+        </dd>
+        <dt>No capacity free</dt>
+        <dd data-testid={`svc-${id}-blocked`}>
+          {svc.capacity_unavailable === null ? 'Unknown' : svc.capacity_unavailable ? 'Yes' : 'No'}
+        </dd>
+        {svc.state === 'building' && svc.onset_min !== null && (
+          <>
+            <dt>Started</dt>
+            <dd data-testid={`svc-${id}-onset`}>
+              {formatClock(svc.onset_min)} · {minutes(svc.elapsed_min ?? 0)} so far
+            </dd>
+            <dt>Confirms in</dt>
+            <dd data-testid={`svc-${id}-confirms-in`}>
+              {svc.confirms_in_min !== null ? minutes(svc.confirms_in_min) : 'Unknown'} if it persists
+            </dd>
+          </>
+        )}
+        {svc.state === 'overloaded' && (
+          <>
+            <dt>Started, confirmed</dt>
+            <dd data-testid={`svc-${id}-onset`}>
+              {svc.onset_min !== null ? formatClock(svc.onset_min) : '—'}, {confirmedClock ?? '—'}
+            </dd>
+            <dt>Recovery</dt>
+            <dd data-testid={`svc-${id}-recovery`}>
+              {recoveryElapsed !== null
+                ? `${minutes(recoveryElapsed)} of ${rule.clear_after_minutes} min below threshold with capacity`
+                : 'Not recovering'}
+            </dd>
+          </>
+        )}
+        {svc.state === 'unknown' && (
+          <>
+            {svc.confirmed_min !== null && (
+              <>
+                <dt>Open episode</dt>
+                <dd data-testid={`svc-${id}-open`}>
+                  Confirmed {confirmedClock}; stays open while inputs are missing
+                </dd>
+              </>
+            )}
+            <dt>Recovery</dt>
+            <dd data-testid={`svc-${id}-recovery`}>Cannot be established while inputs are missing</dd>
+          </>
+        )}
+        <dt>Received work (λ, last {r.window_min} min)</dt>
+        <dd data-testid={`svc-${id}-lambda`}>{rate(r.received_per_hour, unit)}</dd>
+        <dt>Staffed capacity (μ)</dt>
+        <dd data-testid={`svc-${id}-mu`}>
+          {r.capacity_per_hour === null && r.free_beds
+            ? `${r.free_beds.ward} ward, ${r.free_beds.icu} ICU beds free`
+            : r.capacity_per_hour === null
+              ? 'Not modelled per hour'
+              : rate(r.capacity_per_hour, unit)}
+        </dd>
+        {r.capacity_per_hour !== null && (
+          <>
+            <dt>Capacity basis</dt>
+            <dd data-testid={`svc-${id}-basis`}>
+              {r.servers} × 60 / {r.mean_task_min} min
+            </dd>
+          </>
+        )}
+        <dt>Recent throughput (completed)</dt>
+        <dd data-testid={`svc-${id}-throughput`}>{rate(r.recent_throughput_per_hour, unit)}</dd>
+      </dl>
+      <p className="muted" style={{ marginTop: 'var(--s-2)' }} data-testid={`svc-${id}-signal`}>
+        {signal}
+      </p>
+    </li>
+  );
+}
+
+function PressureSection({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
+  const pr = snap.pressure;
+  const zoneInfo = pr.zones.find((z) => z.zone === zoneId)!;
+  const alerts = pr.alerts.filter((a) => a.zone === zoneId);
+  return (
+    <section data-testid="pressure" aria-labelledby="pressure-h" style={{ marginBottom: 'var(--s-4)' }}>
+      <h3 id="pressure-h" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--s-2)' }}>
+        Zone pressure
+      </h3>
+      <p style={{ marginBottom: 'var(--s-2)' }}>
+        <LocalChip state={zoneInfo.state} testid="drawer-zone-state" />
+      </p>
+      {alerts.length > 0 && (
+        <ul className="svc-list" data-testid="alert-list" style={{ marginBottom: 'var(--s-3)' }}>
+          {alerts.map((a) => (
+            <li key={a.service} data-testid={`alert-item-${a.service}`} data-category={a.category}>
+              <div className="svc-head">
+                <strong>{a.category_label}</strong>
+                <LocalChip state={a.state} />
+              </div>
+              <p className="svc-sub">
+                {a.evidence}. Affected: {a.affected_patients ?? 'unknown'} · urgent group waiting:{' '}
+                {a.urgent_group_waiting}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {pr.mixed && (
+        <p data-testid="mixed-note" style={{ marginBottom: 'var(--s-2)' }}>
+          {pr.mixed_label}: more than one failure category is active across the ED.
+        </p>
+      )}
+      <ul className="svc-list">
+        {zoneInfo.services.map((sid) => (
+          <ServiceCard key={sid} svc={pr.services[sid]} now={snap.sim_time_min} rule={pr.rule} />
+        ))}
+      </ul>
+      <p className="muted" data-testid="pressure-note" style={{ marginTop: 'var(--s-3)' }}>
+        A local zone overload is not overall ED congestion. Overall ED status: {snap.overall_status.label}.
+        Local overload is confirmed after {pr.rule.confirm_after_minutes} min and clears after{' '}
+        {pr.rule.clear_after_minutes} min below its threshold with capacity available. Demo thresholds,
+        not clinical standards.
+      </p>
+    </section>
   );
 }
 

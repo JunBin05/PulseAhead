@@ -10,7 +10,23 @@ import {
   type DotTarget,
   type RenderedScene,
 } from './layout';
-import { ZONE_NAMES, type Urgency } from './types';
+import { IconOctagon, IconUnknown } from './icons';
+import { ZONE_NAMES, type LocalState, type Urgency } from './types';
+
+// Platform fills mirror the --status-*-tint tokens (three.js needs literal colours). The state comes
+// from the received queues and resources, never from how many dots are drawn.
+const STATE_FILL: Record<LocalState, string> = {
+  normal: '#e0f1e7',
+  building: '#fdf0cc',
+  overloaded: '#fce6e3',
+  unknown: '#e6eaee',
+};
+const STATE_EDGE: Record<LocalState, string> = {
+  normal: '#14663e',
+  building: '#7a4d00',
+  overloaded: '#a4231a',
+  unknown: '#44505b',
+};
 
 // three.js materials need literal colours; these mirror the urgency, accent and scene tokens in
 // tokens.css (see DESIGN.md).
@@ -72,9 +88,13 @@ const COMPACT_BELOW_PX = 560;
 
 function LabelLayer({
   counts,
+  areaCounts,
+  zoneStates,
   exitCounts,
 }: {
   counts: Record<number, number>;
+  areaCounts: Record<string, number>;
+  zoneStates: Record<number, LocalState>;
   exitCounts: { home: number; ward: number };
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -117,6 +137,23 @@ function LabelLayer({
               </div>
             );
           })}
+          {[1, 2, 3, 4].map((z) => {
+            const state = zoneStates[z];
+            if (state !== 'overloaded' && state !== 'unknown') return null;
+            const [cx, cz] = ZONE_CENTERS[z];
+            return (
+              <div
+                key={`a${z}`}
+                className="alert-bubble"
+                data-testid={`alert-${z}`}
+                data-state={state}
+                style={place(cx, 0.4, cz + PLATFORM_SIZE / 2 + 2.6)}
+              >
+                {state === 'overloaded' ? <IconOctagon /> : <IconUnknown />}
+                {state === 'overloaded' ? 'ALERT' : 'Cannot assess'}
+              </div>
+            );
+          })}
           {!compact && AREA_LABELS.map((a) => {
             const [cx, cz] = ZONE_CENTERS[a.zone];
             return (
@@ -125,7 +162,7 @@ function LabelLayer({
                 className="area-label"
                 style={place(cx + a.local[0], 0.3, cz + a.local[1], 'start')}
               >
-                {a.text}
+                {a.text} · {areaCounts[a.key] ?? 0}
               </div>
             );
           })}
@@ -153,10 +190,12 @@ function LabelLayer({
 function Platform({
   zone,
   selected,
+  state,
   onSelect,
 }: {
   zone: number;
   selected: boolean;
+  state: LocalState;
   onSelect: (zone: number) => void;
 }) {
   const [cx, cz] = ZONE_CENTERS[zone];
@@ -172,11 +211,11 @@ function Platform({
         onPointerOut={() => (document.body.style.cursor = '')}
       >
         <boxGeometry args={[PLATFORM_SIZE, 0.5, PLATFORM_DEPTH]} />
-        <meshStandardMaterial color={selected ? '#dcecf1' : '#f8fafb'} />
+        <meshStandardMaterial color={STATE_FILL[state]} />
       </mesh>
       <lineSegments position={[0, 0.251, 0]}>
         <edgesGeometry args={[new THREE.BoxGeometry(PLATFORM_SIZE, 0.001, PLATFORM_DEPTH)]} />
-        <lineBasicMaterial color={selected ? '#0a6680' : '#b3bec8'} />
+        <lineBasicMaterial color={selected ? '#0a6680' : STATE_EDGE[state]} />
       </lineSegments>
     </group>
   );
@@ -217,6 +256,10 @@ function Dot({ dot, instant }: { dot: DotTarget; instant: boolean }) {
 interface SceneProps {
   scene: RenderedScene;
   counts: Record<number, number>;
+  /** Exact patients per dot area, for the area labels. */
+  areaCounts: Record<string, number>;
+  /** Local zone state from the pressure model (platform tint and ALERT bubble). */
+  zoneStates: Record<number, LocalState>;
   /** Patients who have physically left through each exit so far. */
   exitCounts: { home: number; ward: number };
   selectedZone: number | null;
@@ -230,15 +273,26 @@ function MeshCounter() {
   useFrame(() => {
     if (frame.current++ % 15 !== 0) return;
     let n = 0;
+    const positions: { id: string; x: number; y: number; z: number }[] = [];
     scene.traverse((o) => {
-      if (o.userData.patientId) n += 1;
+      if (o.userData.patientId) {
+        n += 1;
+        positions.push({
+          id: o.userData.patientId,
+          x: Math.round(o.position.x * 100) / 100,
+          y: Math.round(o.position.y * 100) / 100,
+          z: Math.round(o.position.z * 100) / 100,
+        });
+      }
     });
     gl.domElement.dataset.patientMeshes = String(n);
+    // Rendered positions, for the layout check (a test hook; not used by the UI).
+    gl.domElement.dataset.meshPositions = JSON.stringify(positions);
   });
   return null;
 }
 
-function World({ scene, selectedZone, onSelectZone }: SceneProps) {
+function World({ scene, selectedZone, zoneStates, onSelectZone }: SceneProps) {
   const reduced = usePrefersReducedMotion();
   return (
     <>
@@ -247,7 +301,7 @@ function World({ scene, selectedZone, onSelectZone }: SceneProps) {
       <ambientLight intensity={1.7} />
       <directionalLight position={[8, 14, 6]} intensity={1.5} />
       {[1, 2, 3, 4].map((z) => (
-        <Platform key={z} zone={z} selected={selectedZone === z} onSelect={onSelectZone} />
+        <Platform key={z} zone={z} selected={selectedZone === z} state={zoneStates[z]} onSelect={onSelectZone} />
       ))}
       <ExitPad center={EXITS.home.center} />
       <ExitPad center={EXITS.ward.center} />
@@ -284,7 +338,12 @@ export function Scene(props: SceneProps) {
         <Canvas orthographic flat dpr={[1, 2]} camera={{ near: 0.1, far: 200 }}>
           <World {...props} />
         </Canvas>
-        <LabelLayer counts={props.counts} exitCounts={props.exitCounts} />
+        <LabelLayer
+          counts={props.counts}
+          areaCounts={props.areaCounts}
+          zoneStates={props.zoneStates}
+          exitCounts={props.exitCounts}
+        />
       </div>
     </SceneBoundary>
   );
