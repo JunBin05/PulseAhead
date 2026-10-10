@@ -8,6 +8,14 @@
 
 **Honest results to know before the pitch:** forecast early warning 12 of 16 episodes (median lead 48 min) but 2.71 false warnings per shift (target 1, not met); PulseAhead beats no action in 7 of 7 shifts but **not the reactive baseline in aggregate** (one seed per family, descriptive only). Two of six interventions are built.
 
+**Next session, read first:** `PROBLEM_AND_SOLUTION.md` (the product brief) and the pitch deck text
+(`pdftotext -layout "C:\Users\xuzhe\Downloads\Pulse Ahead — Dormathon 2026 Pitch.pdf" -`).
+The Demo bar must be reworked into the brief's six beats A to F. Known defects to fix there: `Demo.tsx`
+hard-codes "Imaging is about to back up." at T+0 (an outcome stated before evidence); the seed 7 demo case's
+first imaging alert is already "Building", so it shows no early warning; captions do not distinguish local
+from overall. The held-out test seed [0] of every family has been evaluated and seen: treat it as exposed
+and use the unused test seeds after freezing any tuning.
+
 **Not done / owned elsewhere:** ticket 20 full UX pass (keyboard-only and reduced-motion not browser-verified, regression 01 not re-run), threshold tuning, noise suite, simple-flow baseline, 200-dot / 30 fps measurement, **ticket 21 hosting (needs an authorized target: ask the user)**, **ticket 22 rehearsal (the user's)**. The code-review gates after 11 and 17 were skipped for time.
 
 **How to run:** backend `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000` (no `--reload`), after `cd frontend && npm run build`; open `http://127.0.0.1:8000/` and use the Guided demo panel (Next, Auto-play, Skip to result, Reset demo). Windows quirk: a stale Playwright Chrome may lock its profile; stop only the chrome.exe whose command line holds that profile directory.
