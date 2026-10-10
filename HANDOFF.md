@@ -41,11 +41,13 @@ Updated 2026-10-11 (second machine, end of session). Tickets 01-10 are done and 
 | 08 Fresh, noisy, missing and invalid inputs | **done**: 7/7 pass (no review gate due) | `evidence/08-received-data-and-robustness.md`, `evidence/08-feeds.playwright-mcp.js` (PART `A` and `B`), `evidence/shots/08-*.png` |
 | 09 Generate varied shifts and reproduce saved replays | **done**: 7/7 pass (no review gate due); two caveats owned by later tickets (no-effective-action ranking, empty choices/forecast settings) | `evidence/09-synthetic-scenarios-and-save-load.md`, `evidence/09-scenarios.playwright-mcp.js` (PART `A`, `B`), `evidence/09-save-load-ui.playwright-mcp.js`, `evidence/09-saved-persistence.playwright-mcp.js` (PART `A`, `B`), `evidence/09-critical-bypass.playwright-mcp.js`, `evidence/shots/09-diagnostic-zone3-overload.png` |
 | 10 Predict bottlenecks and explain the time remaining | **done**: 9/9 pass (criteria 7 and 9 with caveats); review gate closed (10 findings: 8 fixed, 1 partly, 1 not actionable) | `evidence/10-forecast-and-alert-panel.md` (incl. "Review-gate fixes"), `evidence/10-*.playwright-mcp.js` |
-| 11 Ward coordination + shared action machinery | **done (smoke-verified)**; UI box open until the ticket 20 journey | `evidence/11-ward-action-and-owner-approval.md`, `evidence/11-smoke.mjs` |
+| 11 Ward coordination + shared action machinery | **done**: smoke-verified, UI browser-checked through the demo | `evidence/11-ward-action-and-owner-approval.md`, `evidence/11-smoke.mjs` |
 | 12, 13, 15, 16 | **descoped** (scope amendment) | n/a |
-| 14 Diagnostic reserve slot (reduced) | **done (smoke-verified)**; UI covered by ticket 20 | `evidence/14-diagnostic-reserve-slot.md`, `evidence/14-smoke.mjs` |
-| 17 Ranking (lite) | **backend done (smoke-verified)**; panel/alert UI not browser-checked | `evidence/17-rank-actions-lite.md`, `evidence/17-smoke.mjs` |
-| 18 Evidence (merged with 19), 20 UX (lite) | **paused** (time) | n/a |
+| 14 Diagnostic reserve slot (reduced) | **done**: smoke-verified, browser-checked through the demo | `evidence/14-diagnostic-reserve-slot.md`, `evidence/14-smoke.mjs` |
+| 17 Ranking (lite) | **done**: smoke-verified, priority list / what-if / alert impact browser-checked | `evidence/17-rank-actions-lite.md`, `evidence/17-smoke.mjs` |
+| 18 Evidence (merged with 19) | **done with unmet targets**: one run, descriptive; false warnings 2.71/shift (target 1) and the reactive baseline not beaten | `evidence/18-evaluation-merged.md`, `evidence/18-smoke.mjs` |
+| Demo bar, predicted waits (FR-03), 2D list toggle | **done** (not numbered tickets) | `evidence/demo-smoke.mjs`, `evidence/waits-predicted-waits.md`, `evidence/final-build-scorecard.md` |
+| 20 UX (lite) | **partly**: widths, list view and demo journey browser-checked; keyboard-only, reduced motion and regression 01 not run | `evidence/final-build-scorecard.md` |
 | 19 | **merged into 18** | n/a |
 | 21 Deployment, 22 Rehearsal | stop and ask the user (21); 22 stays with the user | n/a |
 
@@ -356,7 +358,7 @@ Stop and ask before 21.
 3. After any `frontend/src` change: `cd frontend && npx tsc --noEmit && npm run build`, then restart the backend (it reads `dist` only at startup).
 4. To stop the backend, stop every `python.exe` whose command line contains `uvicorn pulseahead.api:app`.
 
-**Then:** build ticket 11 per its amended criteria and the pointers above, then 14, 17, 18, 20. Update this file after each ticket.
+**Then (as of the final build):** tickets 11, 14, 17, 18 and the demo are built; read "Final build status" at the top. Remaining work, in order of score impact: (1) tune the warning threshold on tuning-partition shifts only and re-run the held-out evaluation once; (2) revisit the Best-action gate against the reactive baseline using tuning shifts; (3) keyboard-only, reduced-motion and regression 01 passes; (4) 200-dot / 30 fps measurement; (5) ticket 21 hosting (ask the user for an authorized target); (6) ticket 22 rehearsal (the user's). Update this file after each slice.
 
 **Housekeeping.**
 - `npm install` drops `libc` entries from `frontend/package-lock.json`; `git checkout` it.
