@@ -27,6 +27,11 @@ class SuppliedInputs:
     ambulance_id: str | None = None
     # Supplied stabilization task length. It stays hidden until the task completes.
     care_task_min: float | None = None
+    # Supplied test needs as (kind, turnaround minutes), run in order after first assessment. Empty
+    # means the direct 2 to 4 route. Turnaround stays hidden until the test completes.
+    tests: tuple[tuple[str, float], ...] = ()
+    # Supplied clinical decision that arrives before required tests are done (premature clearance).
+    early_decision: bool = False
 
 
 @dataclass
@@ -71,6 +76,21 @@ def _care_task_min(seed: int, key: str, urgency: str) -> float | None:
     return round(rng.triangular(spec["min"], spec["max"], spec["mode"]), 3)
 
 
+def _tests(seed: int, key: str, urgency: str, critical: bool) -> tuple[tuple[str, float], ...]:
+    """Supplied test needs and turnaround for one patient (demo assumptions, keyed by identity)."""
+    a = PROFILE["assumptions"]
+    rng = random.Random(f"{seed}:{key}:tests")
+    prob = a["test_need_probability"]["critical" if critical else urgency]
+    out: list[tuple[str, float]] = []
+    for kind, spec_key in (("lab", "lab_turnaround_minutes"), ("imaging", "imaging_turnaround_minutes")):
+        need = rng.random() < prob[kind]
+        spec = a[spec_key]
+        minutes = round(rng.triangular(spec["min"], spec["max"], spec["mode"]), 3)
+        if need:
+            out.append((kind, minutes))
+    return tuple(out)
+
+
 def walk_in_inputs(seed: int, patient_id: str) -> SuppliedInputs:
     rng = random.Random(f"{seed}:{patient_id}:supplied")
     a = PROFILE["assumptions"]
@@ -82,6 +102,7 @@ def walk_in_inputs(seed: int, patient_id: str) -> SuppliedInputs:
         critical_bypass=False,
         arrival_mode="walk-in",
         care_task_min=_care_task_min(seed, patient_id, urgency),
+        tests=_tests(seed, patient_id, urgency, False),
     )
 
 
@@ -98,6 +119,7 @@ def ambulance_patient_inputs(seed: int, run_id: str, index: int) -> SuppliedInpu
         arrival_mode="ambulance",
         ambulance_id=run_id,
         care_task_min=_care_task_min(seed, f"{run_id}:{index}", urgency),
+        tests=_tests(seed, f"{run_id}:{index}", urgency, critical),
     )
 
 

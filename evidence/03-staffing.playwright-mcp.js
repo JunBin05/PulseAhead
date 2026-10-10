@@ -27,10 +27,11 @@ async (page) => {
     // waiting intervals and grants
     const spaceWait = {}; const clinWait = {};
     const grants = []; const clinGrants = [];
-    const spaceHold = {}; const docHold = {};
+    const spaceHold = {}; const docHold = {}; const openDoc = {};
     for (const e of ev) {
       if (e.type !== 'phase_change') continue;
       const to = e.payload.to; const pid = e.patient_id; const t = e.event_time_min;
+      if (openDoc[pid]) { openDoc[pid].to = t; delete openDoc[pid]; }
       if (to === 'awaiting_space') spaceWait[pid] = { start: t, id: e.id };
       if (to === 'awaiting_clinician') { // space granted
         grants.push({ pid, t, id: e.id, space: e.resources.ed_space, start: spaceWait[pid]?.start ?? t });
@@ -43,7 +44,9 @@ async (page) => {
       }
       if (to === 'assessment_active') {
         clinGrants.push({ pid, t, doc: e.resources.clinician_slot, start: clinWait[pid]?.start ?? t });
-        (docHold[e.resources.clinician_slot] ??= []).push({ pid, from: t, to: null });
+        const hold = { pid, from: t, to: null };
+        (docHold[e.resources.clinician_slot] ??= []).push(hold);
+        openDoc[pid] = hold;
       }
       if (to === 'departed') { const h = spaceHold[e.resources.ed_space]?.find(x => x.pid === pid && x.to === null); if (h) h.to = t; else bad(`${e.id} departure without hold`); }
     }
@@ -72,7 +75,6 @@ async (page) => {
       if (e.type === 'phase_change' && e.payload.to === 'disposition_processing') dispo[e.patient_id] = e;
     }
     for (const [doc, hs] of Object.entries(docHold)) {
-      for (const h of hs) { const d = decision[h.pid]; h.to = d ? d.event_time_min : null; }
       hs.sort((a, b) => a.from - b.from);
       for (let i = 1; i < hs.length; i++) if (hs[i - 1].to === null || hs[i].from < hs[i - 1].to) bad(`doctor ${doc} overlap ${hs[i - 1].pid}/${hs[i].pid}`);
     }

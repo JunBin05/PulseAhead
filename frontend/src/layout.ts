@@ -23,35 +23,49 @@ interface Area {
   origin: [number, number];
   cols: number;
   step: number;
+  text: string;
 }
 
-const AREAS: Record<Phase, Area> = {
-  in_triage: { zone: 1, origin: [-2.1, -1.9], cols: 1, step: 0.7 },
-  awaiting_triage: { zone: 1, origin: [-2.1, 0.4], cols: 5, step: 0.7 },
-  awaiting_space: { zone: 2, origin: [-2.1, -2.8], cols: 5, step: 0.7 },
-  awaiting_clinician: { zone: 2, origin: [-2.1, -0.9], cols: 5, step: 0.7 },
-  awaiting_care_completion: { zone: 2, origin: [-2.1, 1.0], cols: 5, step: 0.7 },
-  assessment_active: { zone: 2, origin: [-1.8, 2.9], cols: 4, step: 1.2 },
-  disposition_processing: { zone: 4, origin: [-2.1, -1.0], cols: 5, step: 0.85 },
-};
+/** Dot areas. Phases that share one waiting line or one doctor share one area (see PHASE_AREA). */
+const AREAS = {
+  in_triage: { zone: 1, origin: [-2.1, -1.9], cols: 1, step: 0.7, text: 'At triage desk' },
+  awaiting_triage: { zone: 1, origin: [-2.1, 0.4], cols: 5, step: 0.7, text: 'Triage queue' },
+  awaiting_space: { zone: 2, origin: [-2.1, -2.8], cols: 5, step: 0.7, text: 'Awaiting space' },
+  clinician_queue: { zone: 2, origin: [-2.1, -0.9], cols: 5, step: 0.7, text: 'Awaiting clinician' },
+  care_wait: { zone: 2, origin: [-2.1, 1.0], cols: 5, step: 0.7, text: 'Awaiting care completion' },
+  with_clinician: { zone: 2, origin: [-1.8, 2.9], cols: 4, step: 1.2, text: 'With clinician' },
+  lab_queue: { zone: 3, origin: [-2.1, -2.8], cols: 5, step: 0.7, text: 'Lab queue' },
+  in_lab: { zone: 3, origin: [-1.8, -0.9], cols: 2, step: 1.2, text: 'In lab' },
+  imaging_queue: { zone: 3, origin: [-2.1, 1.0], cols: 5, step: 0.7, text: 'Imaging queue' },
+  in_imaging: { zone: 3, origin: [-1.8, 2.9], cols: 1, step: 1.2, text: 'In imaging' },
+  disposition_processing: { zone: 4, origin: [-2.1, -1.0], cols: 5, step: 0.85, text: 'Processing departure' },
+} satisfies Record<string, Area>;
 
-const AREA_TEXT: Record<Phase, string> = {
-  in_triage: 'At triage desk',
-  awaiting_triage: 'Triage queue',
-  awaiting_space: 'Awaiting space',
-  awaiting_clinician: 'Awaiting clinician',
-  assessment_active: 'With clinician',
-  awaiting_care_completion: 'Awaiting care completion',
-  disposition_processing: 'Processing departure',
+type AreaKey = keyof typeof AREAS;
+
+const PHASE_AREA: Record<Phase, AreaKey> = {
+  in_triage: 'in_triage',
+  awaiting_triage: 'awaiting_triage',
+  awaiting_space: 'awaiting_space',
+  awaiting_clinician: 'clinician_queue',
+  awaiting_result_review: 'clinician_queue',
+  assessment_active: 'with_clinician',
+  result_review_active: 'with_clinician',
+  awaiting_care_completion: 'care_wait',
+  awaiting_lab: 'lab_queue',
+  in_lab: 'in_lab',
+  awaiting_imaging: 'imaging_queue',
+  in_imaging: 'in_imaging',
+  disposition_processing: 'disposition_processing',
 };
 
 // Each label starts just behind the first dot of its own row and stays on its own platform. Rows
 // run down-right on screen, so the row's dots stay below the left-aligned text.
 export const AREA_LABELS: { zone: number; text: string; local: [number, number] }[] = (
-  Object.keys(AREAS) as Phase[]
-).map((phase) => {
-  const a = AREAS[phase];
-  return { zone: a.zone, text: AREA_TEXT[phase], local: [a.origin[0], a.origin[1] - 0.9] };
+  Object.keys(AREAS) as AreaKey[]
+).map((key) => {
+  const a: Area = AREAS[key];
+  return { zone: a.zone, text: a.text, local: [a.origin[0], a.origin[1] - 0.9] };
 });
 
 export interface DotTarget {
@@ -86,8 +100,9 @@ export function buildScene(snap: Snapshot | null): RenderedScene {
   const counters: Record<string, number> = {};
   const dots: DotTarget[] = [];
   for (const p of drawn) {
-    const area = AREAS[p.phase];
-    const idx = (counters[p.phase] = (counters[p.phase] ?? -1) + 1);
+    const areaKey = PHASE_AREA[p.phase];
+    const area: Area = AREAS[areaKey];
+    const idx = (counters[areaKey] = (counters[areaKey] ?? -1) + 1);
     const [lx, lz] = slot(area, idx);
     const [cx, cz] = ZONE_CENTERS[area.zone];
     dots.push({

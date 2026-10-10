@@ -7,6 +7,12 @@ export type Phase =
   | 'awaiting_clinician'
   | 'assessment_active'
   | 'awaiting_care_completion'
+  | 'awaiting_lab'
+  | 'in_lab'
+  | 'awaiting_imaging'
+  | 'in_imaging'
+  | 'awaiting_result_review'
+  | 'result_review_active'
   | 'disposition_processing';
 
 export interface PatientDot {
@@ -24,6 +30,9 @@ export interface PatientDot {
   space_id: string | null;
   clinician_id: string | null;
   nurse_id: string | null;
+  diagnostic_unit: string | null;
+  tests_status: 'not_ordered' | 'none' | 'pending' | 'complete';
+  tests_done: ('lab' | 'imaging')[];
   care_status: 'none' | 'not_started' | 'in_progress' | 'complete';
   decision_received: boolean;
   triage_id: string | null;
@@ -43,7 +52,25 @@ export interface Zone {
   awaiting_space?: number;
   awaiting_clinician?: number;
   awaiting_care_completion?: number;
+  awaiting_result_review?: number;
+  result_review_active?: number;
+  lab_queue?: number;
+  lab_active?: number;
+  imaging_queue?: number;
+  imaging_active?: number;
   capacity: { kind: string; shared_with_zone?: number } | null;
+}
+
+export interface DiagService {
+  servers: number;
+  busy: number;
+  waiting: number;
+  owner: string;
+  median_turnaround_min: number;
+  capacity_tasks_per_hour: number;
+  started_last_30_min: number;
+  completed_last_30_min: number;
+  recent_throughput_tasks_per_hour: number;
 }
 
 export type CongestionState = 'stable' | 'building' | 'confirmed';
@@ -102,6 +129,13 @@ export interface Snapshot {
       unstaffed_empty: number;
       awaiting: number;
       owner: string;
+    };
+    diagnostics: {
+      unit: string;
+      window_min: number;
+      lab: DiagService;
+      imaging: DiagService;
+      note: string;
     };
     staff: {
       doctors: { id: string; name: string; on_duty: boolean; patient_id: string | null; owner: string }[];

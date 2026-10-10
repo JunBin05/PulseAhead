@@ -29,6 +29,12 @@ const PHASE_LABEL: Record<Phase, string> = {
   awaiting_clinician: 'In a space, waiting for a clinician',
   assessment_active: 'With a clinician',
   awaiting_care_completion: 'Decision received, required care not complete (space held)',
+  awaiting_lab: 'Waiting for the lab (keeps the ED space)',
+  in_lab: 'Lab test running (keeps the ED space)',
+  awaiting_imaging: 'Waiting for imaging (keeps the ED space)',
+  in_imaging: 'Imaging running (keeps the ED space)',
+  awaiting_result_review: 'Results back, waiting for a doctor to review',
+  result_review_active: 'With a doctor, reviewing results',
   disposition_processing: 'Cleared, processing departure',
 };
 
@@ -411,6 +417,18 @@ export function App() {
                 <dd data-testid="triage-busy">
                   {snap.resources.triage_desk.busy} of {snap.resources.triage_desk.total}
                 </dd>
+                <dt>Lab busy</dt>
+                <dd data-testid="lab-busy">
+                  {snap.resources.diagnostics.lab.busy} of {snap.resources.diagnostics.lab.servers}
+                  {snap.resources.diagnostics.lab.waiting > 0 &&
+                    ` · ${snap.resources.diagnostics.lab.waiting} waiting`}
+                </dd>
+                <dt>Imaging busy</dt>
+                <dd data-testid="imaging-busy">
+                  {snap.resources.diagnostics.imaging.busy} of {snap.resources.diagnostics.imaging.servers}
+                  {snap.resources.diagnostics.imaging.waiting > 0 &&
+                    ` · ${snap.resources.diagnostics.imaging.waiting} waiting`}
+                </dd>
                 <dt>Doctors busy</dt>
                 <dd>
                   {snap.resources.clinician_slots.busy} of {snap.resources.clinician_slots.total}
@@ -526,8 +544,10 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
             <dd>{zone.awaiting_space ?? 0}</dd>
             <dt>Waiting for a clinician</dt>
             <dd>{zone.awaiting_clinician ?? 0}</dd>
-            <dt>With a clinician</dt>
+            <dt>With a clinician (assessment or result review)</dt>
             <dd>{zone.active}</dd>
+            <dt>Results back, waiting for review</dt>
+            <dd data-testid="drawer-review-wait">{zone.awaiting_result_review ?? 0}</dd>
             <dt>Decision received, care not complete</dt>
             <dd data-testid="drawer-care-wait">{zone.awaiting_care_completion ?? 0}</dd>
           </>
@@ -542,6 +562,32 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
             </dd>
             <dt>Reserve triage team</dt>
             <dd>{snap.resources.triage_desk.reserve_team.active ? 'Active' : 'Declared, not active'}</dd>
+          </>
+        )}
+        {zone.id === 3 && (
+          <>
+            <dt>Waiting for the lab</dt>
+            <dd data-testid="drawer-lab-queue">{zone.lab_queue ?? 0}</dd>
+            <dt>Lab tests running</dt>
+            <dd data-testid="drawer-lab-active">
+              {zone.lab_active ?? 0} of {snap.resources.diagnostics.lab.servers}
+            </dd>
+            <dt>Waiting for imaging</dt>
+            <dd data-testid="drawer-imaging-queue">{zone.imaging_queue ?? 0}</dd>
+            <dt>Imaging running</dt>
+            <dd data-testid="drawer-imaging-active">
+              {zone.imaging_active ?? 0} of {snap.resources.diagnostics.imaging.servers}
+            </dd>
+            <dt>Lab capacity</dt>
+            <dd data-testid="drawer-lab-rate">
+              {snap.resources.diagnostics.lab.capacity_tasks_per_hour} tasks/h ·{' '}
+              {snap.resources.diagnostics.lab.completed_last_30_min} done in 30 min
+            </dd>
+            <dt>Imaging capacity</dt>
+            <dd data-testid="drawer-imaging-rate">
+              {snap.resources.diagnostics.imaging.capacity_tasks_per_hour} tasks/h ·{' '}
+              {snap.resources.diagnostics.imaging.completed_last_30_min} done in 30 min
+            </dd>
           </>
         )}
         {zone.id === 4 && (
@@ -559,7 +605,12 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
           `These patients still occupy their ED space until they physically leave (${sp.occupied} of ${sp.total} spaces occupied).`}
       </p>
       {zone.id === 3 && (
-        <p className="muted">Diagnostic work is not modeled yet, so this zone is empty.</p>
+        <p className="muted" data-testid="diag-note" style={{ marginBottom: 'var(--s-4)' }}>
+          These patients keep their ED space while they wait for or have tests; no doctor is held
+          for the wait. {snap.resources.diagnostics.note} Lab median{' '}
+          {snap.resources.diagnostics.lab.median_turnaround_min} min, imaging median{' '}
+          {snap.resources.diagnostics.imaging.median_turnaround_min} min (demo assumptions).
+        </p>
       )}
       {(zone.id === 2 || zone.id === 3) && <StaffingSummary snap={snap} />}
       {patients.length > 0 && (
@@ -577,6 +628,8 @@ function ZoneDrawer({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
                   {p.triage_id && ` · Desk ${p.triage_id}`}
                   {p.nurse_id && ` · Nurse ${p.nurse_id}`}
                   {p.clinician_id && ` · Doctor ${p.clinician_id}`}
+                  {p.diagnostic_unit && ` · Unit ${p.diagnostic_unit}`}
+                  {p.tests_done.length > 0 && ` · Done: ${p.tests_done.join(', ')}`}
                   {p.care_status === 'in_progress' && ' · Stabilization in progress'}
                   {` · ${p.acuity_system} ${p.acuity_score} (supplied)`}
                   {p.ambulance_id && ` · Ambulance ${p.ambulance_id}`}

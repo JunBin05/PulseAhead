@@ -36,3 +36,15 @@ Spec §Events/patients/resources: "Record doctor/nurse identities, availability,
 - Stabilization is a supplied care task (urgent group and critical bypass only), running from first assessment alongside the doctor's work. It needs no extra worker; the covering nurse is the staffing owner.
 
 **Alternative not taken:** a per-nurse limit on concurrent care tasks.
+
+## Q4. How do diagnostics loop and what does a premature decision look like? (ticket 04)
+
+Spec: "1→2→3→2→4 ... diagnostics/result review can loop without adding duplicate [time components]" and "a premature decision stays ineligible".
+
+**Working decision:**
+- A patient makes one pass through zone 3: their supplied tests run one after another (lab, then imaging), then they return to zone 2 once for result review. Repeated rounds are not modeled.
+- Tests are supplied per patient (kind and turnaround) and stay hidden until the patient's first assessment ends and the tests are ordered.
+- A premature decision is a supplied clinical decision that arrives at the end of first assessment, before the tests are back. It is recorded as received but not eligible; disposition starts only when tests, review and any care task are all done.
+- Lab turnaround is triangular 15/28/50 min (median 30.4) and imaging 25/42/70 min (median 44.9), matching the spec's lab 30 and imaging 45 medians. Test need by urgency group and result review (3/5/8 min) are demo assumptions.
+
+**Alternative not taken:** a second test round after review.

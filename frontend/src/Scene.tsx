@@ -123,14 +123,6 @@ function LabelLayer({ counts }: { counts: Record<number, number> }) {
               </div>
             );
           })}
-          {!compact && (
-            <div
-              className="area-label"
-              style={place(ZONE_CENTERS[3][0], 0.3, ZONE_CENTERS[3][1])}
-            >
-              Not modeled yet
-            </div>
-          )}
           {[EXITS.home, EXITS.ward].map((e) => (
             <div
               key={e.label}

@@ -13,8 +13,10 @@ from .profile import PROFILE
 from .scenario import AmbulanceRun, SuppliedInputs
 
 
-def _walk_in(urgency: str, score: int, care: float | None = None) -> SuppliedInputs:
-    return SuppliedInputs(urgency, PROFILE["acuity_system"], score, False, "walk-in", None, care)
+def _walk_in(urgency: str, score: int, care: float | None = None,
+             tests: tuple[tuple[str, float], ...] = (), early: bool = False) -> SuppliedInputs:
+    return SuppliedInputs(urgency, PROFILE["acuity_system"], score, False, "walk-in", None, care,
+                          tests, early)
 
 
 def _amb(run_id: str, urgency: str, score: int, critical: bool = False,
@@ -83,6 +85,31 @@ def _staffing_script() -> dict[str, Any]:
     }
 
 
+def _diagnostics_script() -> dict[str, Any]:
+    walk_ins = [
+        # Lab: two units, 40-minute turnaround, so a lab queue forms.
+        (2.0, "W01", _walk_in("medium", 3, tests=(("lab", 40.0),))),
+        (2.0, "W02", _walk_in("medium", 3, tests=(("lab", 40.0),))),
+        (2.0, "W03", _walk_in("lower", 4, tests=(("lab", 40.0),))),
+        # Imaging: one unit, 60-minute turnaround.
+        (2.0, "W04", _walk_in("medium", 3, tests=(("imaging", 60.0),))),
+        (2.0, "W05", _walk_in("lower", 5, tests=(("imaging", 60.0),))),
+        # Direct 2 to 4 route: no tests.
+        (2.0, "W06", _walk_in("medium", 3)),
+        (2.0, "W07", _walk_in("lower", 4)),
+        # Both tests in order: lab, then imaging.
+        (2.0, "W08", _walk_in("medium", 3, tests=(("lab", 35.0), ("imaging", 50.0)))),
+        # Clinical decision received before the lab result: ineligible until tests and review end.
+        (2.0, "W09", _walk_in("lower", 4, tests=(("lab", 30.0),), early=True)),
+        (2.0, "W10", _walk_in("urgent", 2, 10.0, tests=(("lab", 30.0),))),
+        (2.0, "W11", _walk_in("medium", 3, tests=(("imaging", 55.0),))),
+        (2.0, "W12", _walk_in("lower", 4, tests=(("lab", 40.0),))),
+        # Arrives while others already wait for the lab: urgent goes first.
+        (30.0, "W13", _walk_in("urgent", 2, tests=(("lab", 20.0),))),
+    ]
+    return {"walk_ins": walk_ins, "ambulances": []}
+
+
 FIXTURES: dict[str, dict[str, Any]] = {
     "fixture-intake": {
         "id": "fixture-intake",
@@ -90,6 +117,13 @@ FIXTURES: dict[str, dict[str, Any]] = {
         "fixture": True,
         "background_arrivals": False,
         "script": _intake_script,
+    },
+    "fixture-diagnostics": {
+        "id": "fixture-diagnostics",
+        "name": "Fixture: lab and imaging queues, result review, direct route and premature decision",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _diagnostics_script,
     },
     "fixture-staffing": {
         "id": "fixture-staffing",

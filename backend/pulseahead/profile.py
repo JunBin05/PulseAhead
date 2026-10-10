@@ -28,6 +28,10 @@ PROFILE: dict[str, Any] = {
     "resus_spaces": 2,
     "clinician_slots": 4,
     "triage_slots": 1,
+    # Finite diagnostic units (spec defaults: two lab, one imaging). They serve patients who keep
+    # their ED space; they are not ED beds.
+    "lab_slots": 2,
+    "imaging_slots": 1,
     "reserve_triage_team": {
         "size": 1,
         "active": False,
@@ -62,6 +66,8 @@ PROFILE: dict[str, Any] = {
         "doctors": "ED attending lead",
         "reserve_physician": "ED attending lead",
         "nurse_coverage": "ED nurse in charge",
+        "lab": "Lab manager",
+        "imaging": "Radiology manager",
         "triage_desk": "Triage charge nurse",
         "reserve_triage_team": "Triage charge nurse",
     },
@@ -81,6 +87,20 @@ PROFILE: dict[str, Any] = {
         # Supplied care task for the urgent group and critical bypass: starts at first assessment and
         # runs alongside the doctor's work. Discharge or transfer needs it complete.
         "stabilization_task_minutes": {"min": 5, "mode": 15, "max": 30},
+        # Test turnaround per task (triangular). Medians follow the spec defaults: lab about 30 min
+        # (triangular 15/28/50 has median 30.4), imaging about 45 min (25/42/70 has median 44.9).
+        "lab_turnaround_minutes": {"min": 15, "mode": 28, "max": 50, "median": 30},
+        "imaging_turnaround_minutes": {"min": 25, "mode": 42, "max": 70, "median": 45},
+        # Doctor work to review returned results before the decision.
+        "result_review_minutes": {"min": 3, "mode": 5, "max": 8},
+        # Supplied test needs by reporting group (critical bypass uses its own row). Patients with
+        # no test take the direct 2 to 4 route.
+        "test_need_probability": {
+            "critical": {"lab": 0.90, "imaging": 0.50},
+            "urgent": {"lab": 0.70, "imaging": 0.30},
+            "medium": {"lab": 0.50, "imaging": 0.15},
+            "lower": {"lab": 0.20, "imaging": 0.05},
+        },
         "walk_in_urgency_mix": {"urgent": 0.08, "medium": 0.40, "lower": 0.52},
         "ambulance_urgency_mix": {"urgent": 0.30, "medium": 0.50, "lower": 0.20},
         "ambulance_critical_given_urgent": 0.35,

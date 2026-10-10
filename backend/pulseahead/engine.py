@@ -39,6 +39,14 @@ PHASE_ZONE = {
     "awaiting_clinician": 2,
     "assessment_active": 2,
     "awaiting_care_completion": 2,
+    # Logical diagnostics (zone 3): the patient keeps the ED space, no doctor is held.
+    "awaiting_lab": 3,
+    "in_lab": 3,
+    "awaiting_imaging": 3,
+    "in_imaging": 3,
+    # Results return to the clinician in zone 2 before the decision.
+    "awaiting_result_review": 2,
+    "result_review_active": 2,
     "disposition_processing": 4,
     "departed": None,
 }
@@ -71,6 +79,13 @@ class Patient:
     clinician_id: str | None = None
     triage_id: str | None = None
     triage_start_min: float | None = None
+    test_unit: str | None = None
+    review_min: float = 5.0
+    tests_ordered: bool = False
+    tests_done: list = field(default_factory=list)
+    results_min: float | None = None
+    review_start_min: float | None = None
+    review_end_min: float | None = None
     first_assessment_min: float | None = None
     # Clinical decision as received. Eligibility needs this and the care prerequisites.
     decision_min: float | None = None
@@ -90,7 +105,16 @@ class Patient:
             "ed_space": self.space_id,
             "clinician_slot": self.clinician_id,
             "nurse": self.nurse_id,
+            "diagnostic_unit": self.test_unit,
         }
+
+    def tests_status(self) -> str:
+        """not_ordered | none | pending | complete. Needs stay hidden until tests are ordered."""
+        if not self.tests_ordered:
+            return "not_ordered"
+        if not self.supplied.tests:
+            return "none"
+        return "complete" if self.results_min is not None else "pending"
 
     def care_status(self) -> str:
         """none (no supplied task) | not_started | in_progress | complete.
@@ -119,8 +143,11 @@ class Patient:
             "space_id": self.space_id,
             "clinician_id": self.clinician_id,
             "nurse_id": self.nurse_id,
+            "diagnostic_unit": self.test_unit,
             "triage_id": self.triage_id,
             "care_status": self.care_status(),
+            "tests_status": self.tests_status(),
+            "tests_done": list(self.tests_done),
             "decision_received": self.decision_min is not None,
             "phase_since_min": round(self.phase_since_min, 2),
             "minutes_in_phase": round(now - self.phase_since_min, 2),
@@ -144,6 +171,12 @@ class Patient:
             "care_task_required": (
                 None if self.first_assessment_min is None else self.supplied.care_task_min is not None
             ),
+            "tests_required": (
+                None if not self.tests_ordered else [kind for kind, _ in self.supplied.tests]
+            ),
+            "results_received_min": r(self.results_min),
+            "review_start_min": r(self.review_start_min),
+            "review_end_min": r(self.review_end_min),
             "care_complete_min": r(self.care_complete_min),
             "effective_disposition_min": r(self.effective_disposition_min),
             "departure_min": r(self.departure_min),
@@ -293,6 +326,13 @@ class EDEngine:
         n_general = PROFILE["regular_spaces"] - n_resus
         self.triage = simpy.PriorityResource(self.env, capacity=PROFILE["triage_slots"])
         self.clinicians = simpy.PriorityResource(self.env, capacity=PROFILE["clinician_slots"])
+        self.lab = simpy.PriorityResource(self.env, capacity=PROFILE["lab_slots"])
+        self.imaging = simpy.PriorityResource(self.env, capacity=PROFILE["imaging_slots"])
+        self.free_lab = [f"L{i}" for i in range(1, PROFILE["lab_slots"] + 1)]
+        self.free_imaging = [f"I{i}" for i in range(1, PROFILE["imaging_slots"] + 1)]
+        # Test start and finish log (kind, time) for recent work and throughput figures.
+        self.test_starts: list[tuple[str, float]] = []
+        self.test_log: list[tuple[str, float]] = []
         # Nurse coverage: every space has one covering nurse; a nurse is on duty unless a supplied
         # staffing roster says otherwise.
         self.nurses = {n["id"]: n for n in PROFILE["nurses"]}
@@ -509,6 +549,7 @@ class EDEngine:
             arrival_min=self.now,
             triage_min=_triangular(rng, a["triage_dwell_minutes"]),
             work_min=_triangular(rng, a["active_assessment_minutes"]),
+            review_min=_triangular(random.Random(f"{self.seed}:{pid}:review"), a["result_review_minutes"]),
             disposition_min=_triangular(rng, a["disposition_processing_minutes"]),
             phase="awaiting_space" if supplied.critical_bypass else "awaiting_triage",
             phase_since_min=self.now,
@@ -532,6 +573,49 @@ class EDEngine:
         self.env.process(self._patient(p))
 
     # -- patient flow --------------------------------------------------------------------
+    def _decide(self, p: Patient) -> None:
+        """The supplied clinical decision is received. Eligibility needs care and tests complete."""
+        p.decision_min = self.now
+        care_done = p.care_complete_min is not None
+        tests_done = (not p.supplied.tests) or p.results_min is not None
+        self._emit(
+            "decision_received",
+            p.id,
+            {
+                "care_complete": care_done,
+                "tests_complete": tests_done,
+                "eligible": care_done and tests_done,
+            },
+            p.resources(),
+        )
+
+    def _tests(self, p: Patient, rank: int):
+        """Run the supplied tests in order. The patient keeps the ED space and holds no doctor."""
+        for kind, minutes in p.supplied.tests:
+            if kind == "lab":
+                res, free, waiting, active = self.lab, self.free_lab, "awaiting_lab", "in_lab"
+            else:
+                res, free, waiting, active = self.imaging, self.free_imaging, "awaiting_imaging", "in_imaging"
+            self._set_phase(p, waiting)
+            req = res.request(priority=rank)
+            yield req
+            p.test_unit = self._take(free)
+            self.test_starts.append((kind, self.now))
+            self._set_phase(p, active)
+            yield self.env.timeout(minutes)
+            res.release(req)
+            free.append(p.test_unit)
+            self.test_log.append((kind, self.now))
+            p.tests_done.append(kind)
+            self._emit(
+                "test_completed",
+                p.id,
+                {"test": kind, "unit": p.test_unit, "elapsed_min": round(minutes, 3)},
+                p.resources(),
+            )
+            p.test_unit = None
+        p.results_min = self.now
+
     def _care_task(self, p: Patient, minutes: float):
         yield self.env.timeout(minutes)
         p.care_complete_min = self.now
@@ -577,19 +661,32 @@ class EDEngine:
             self.env.process(self._care_task(p, p.supplied.care_task_min))
         self._set_phase(p, "assessment_active")
         yield self.env.timeout(p.work_min)
-        # Doctor work ends: the clinician slot is released, the ED space is not.
+        # First assessment ends: the doctor slot is released, the ED space is not.
         self.clinicians.release(clin_req)
         self.free_clinicians.append(p.clinician_id)
         p.clinician_id = None
-        p.decision_min = self.now
-        self._emit(
-            "decision_received",
-            p.id,
-            {"care_complete": p.care_complete_min is not None, "eligible": p.care_complete_min is not None},
-            p.resources(),
-        )
+        p.tests_ordered = True
+        if p.supplied.tests:
+            # Supplied decision that arrives before the tests are done stays ineligible.
+            if p.supplied.early_decision:
+                self._decide(p)
+            yield from self._tests(p, rank)
+            # Results return to the clinician in zone 2 before the decision.
+            self._set_phase(p, "awaiting_result_review")
+            review_req = self.clinicians.request(priority=rank)
+            yield review_req
+            p.clinician_id = self._take(self.free_clinicians)
+            p.review_start_min = self.now
+            self._set_phase(p, "result_review_active")
+            yield self.env.timeout(p.review_min)
+            self.clinicians.release(review_req)
+            self.free_clinicians.append(p.clinician_id)
+            p.clinician_id = None
+            p.review_end_min = self.now
+        if p.decision_min is None:
+            self._decide(p)
         if p.care_complete_min is None:
-            # Premature decision: stays ineligible, holds the space, holds no clinician slot.
+            # Decision received, required care not finished: holds the space, holds no doctor.
             self._set_phase(p, "awaiting_care_completion")
             yield p.care_done
         p.effective_disposition_min = self.now

@@ -67,20 +67,38 @@ class ReplaySession:
                 capacity = {"kind": "triage_desk", "treatment_beds": None}
             elif zid == 2:
                 ids = in_phase(
-                    "awaiting_space", "awaiting_clinician", "assessment_active", "awaiting_care_completion"
+                    "awaiting_space",
+                    "awaiting_clinician",
+                    "assessment_active",
+                    "awaiting_result_review",
+                    "result_review_active",
+                    "awaiting_care_completion",
                 )
                 detail = {
-                    "queue": len(in_phase("awaiting_space", "awaiting_clinician")),
-                    "active": len(in_phase("assessment_active")),
+                    "queue": len(in_phase("awaiting_space", "awaiting_clinician", "awaiting_result_review")),
+                    "active": len(in_phase("assessment_active", "result_review_active")),
                     "awaiting_space": len(in_phase("awaiting_space")),
                     "awaiting_clinician": len(in_phase("awaiting_clinician")),
+                    # Returning from diagnostics: results are waiting for, or under, doctor review.
+                    "awaiting_result_review": len(in_phase("awaiting_result_review")),
+                    "result_review_active": len(in_phase("result_review_active")),
                     # Decision received, required care not finished: holds the space, no doctor.
                     "awaiting_care_completion": len(in_phase("awaiting_care_completion")),
                 }
                 capacity = {"kind": "ed_spaces", "shared_with_zone": 3}
             elif zid == 3:
-                ids = []
-                detail = {"queue": 0, "active": 0}
+                ids = in_phase("awaiting_lab", "in_lab", "awaiting_imaging", "in_imaging")
+                lab_q, lab_a = len(in_phase("awaiting_lab")), len(in_phase("in_lab"))
+                img_q, img_a = len(in_phase("awaiting_imaging")), len(in_phase("in_imaging"))
+                # Logical diagnostic work only: these patients keep their ED space (zone 2/3 pool).
+                detail = {
+                    "queue": lab_q + img_q,
+                    "active": lab_a + img_a,
+                    "lab_queue": lab_q,
+                    "lab_active": lab_a,
+                    "imaging_queue": img_q,
+                    "imaging_active": img_a,
+                }
                 capacity = {"kind": "ed_spaces", "shared_with_zone": 2}
             else:
                 ids = in_phase("disposition_processing")
@@ -159,6 +177,36 @@ class ReplaySession:
             "note": "Shared staff are listed once. Doctors serve zone 2 work; nurses cover spaces for zones 2 and 3.",
         }
 
+        def diag(kind: str, res: Any, starts: list, finished: list, spec: dict, owner: str) -> dict:
+            window = 30.0
+            started = sum(1 for k, t in starts if k == kind and t > now - window)
+            completed = sum(1 for k, t in finished if k == kind and t > now - window)
+            servers = res.capacity
+            return {
+                "servers": servers,
+                "busy": res.count,
+                "waiting": len(res.queue),
+                "owner": owner,
+                "median_turnaround_min": spec["median"],
+                # Staffed service capacity in tasks per hour from the disclosed median turnaround.
+                "capacity_tasks_per_hour": round(servers * 60.0 / spec["median"], 2),
+                "started_last_30_min": started,
+                "completed_last_30_min": completed,
+                # Recent completed throughput, separate from capacity: an idle service completes
+                # nothing without having no capacity.
+                "recent_throughput_tasks_per_hour": round(completed * 60.0 / window, 2),
+            }
+
+        diagnostics = {
+            "unit": "tasks per hour",
+            "window_min": 30,
+            "lab": diag("lab", e.lab, e.test_starts, e.test_log,
+                        PROFILE["assumptions"]["lab_turnaround_minutes"], PROFILE["owners"]["lab"]),
+            "imaging": diag("imaging", e.imaging, e.test_starts, e.test_log,
+                            PROFILE["assumptions"]["imaging_turnaround_minutes"], PROFILE["owners"]["imaging"]),
+            "note": "One patient can need several tests, so lab and imaging are reported as separate task rates.",
+        }
+
         announcements = [a.public(now) for a in sorted(e.announcements.values(), key=lambda a: a.id)]
         inbound = [a for a in announcements if a["status"] in ("en_route", "delayed")]
         inbound_patients = sum(a["patient_count"] for a in inbound)
@@ -215,6 +263,7 @@ class ReplaySession:
                     "owner": PROFILE["owners"]["ed_spaces"],
                 },
                 "staff": staff,
+                "diagnostics": diagnostics,
                 "clinician_slots": {
                     "total": e.clinicians.capacity,
                     "busy": e.clinicians.count,
