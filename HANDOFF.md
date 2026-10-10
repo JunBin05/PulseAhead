@@ -305,6 +305,8 @@ Ticket: `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-alert-
 
 ## Start here in a new session (2026-10-11)
 
+**Another machine.** Paths in this file are from the first PC (`C:UsersVaasDocumentsPrototypePulseAheadReal`). On a new PC use your own clone path. Set up: Python 3.12 venv at `backend/.venv` with `pip install -r backend/requirements.txt`, `cd frontend && npm install`, then build and start the backend as below. Saved runs (`backend/saved_runs/`) and `.playwright-mcp/` are git-ignored and start empty. Playwright MCP must be installed in the Claude Code session; its snippet folder is `.playwright-mcp/` under the session working directory, so adapt the staging paths.
+
 **Git remote.** `origin` is `https://github.com/JunBin05/PulseAhead.git`. `git push -u origin pulseahead-mvp` failed with 403: the signed-in GitHub account `Srinivaas-only` has no write access. Nothing was pushed; all commits are local. The user must add that account as a collaborator, supply another repo, or sign in with another credential. Do not change the remote or guess credentials; ask.
 
 **First commands** (from `Real/`): `git status` and `git log --oneline | head -5` (expect HEAD `48f3619` or a later docs commit and a clean tree), then confirm the servers below.
@@ -323,7 +325,7 @@ Ticket: `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-alert-
 3. Tick the passed boxes in `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-alert-panel.md` (criterion 1 rests on `10-isolation` I4 and `10-inputs` N1, N2), set its status and update the ticket table above.
 4. Commit `ticket 10: Predict bottlenecks and explain the time remaining` with `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit` and the attribution trailer from the session's system reminder.
 5. Run the `code-review` skill gate for ticket 10 (subagents allowed for gates only), fix in-scope findings, re-verify, commit `review: fixes after ticket 10 gate`.
-6. Continue 11 (gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (gate) -> 18 -> 19 (gate) -> 20. Stop and ask before ticket 21 (hosting); ticket 22 stays with the user. The design notes for 11 (shared action machinery) are in `C:\Users\Vaas\.claude\plans\pasted-content-id-7f58-continue-the-async-mccarthy.md`.
+6. Continue 11 (gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (gate) -> 18 -> 19 (gate) -> 20. Stop and ask before ticket 21 (hosting); ticket 22 stays with the user. The plan and the design notes for 11 (shared action machinery) are in `PLAN_TICKETS_10_TO_20.md` at the repo root.
 
 **Carry to ticket 20.** Regression 01 measured 10x playback at 9.49 sim min/s (earlier runs 9.94 to 9.97) while forecasts ran; the forecast competes for the Python GIL. Ticket 20 must measure interaction while forecast work runs.
 
