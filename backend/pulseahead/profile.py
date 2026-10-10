@@ -150,6 +150,22 @@ PROFILE: dict[str, Any] = {
             "Walk-ins plus ambulance patients average about six arrivals per hour."
         ),
     },
+    # Local zone overload (spec initial demo values). Separate from the overall ED rule below.
+    "local_rule": {
+        "confirm_after_minutes": 10,
+        "clear_after_minutes": 5,
+        "thresholds": {
+            "triage": 3,
+            "assessment": 6,
+            "lab": 4,
+            "imaging": 2,
+            "discharge": 3,
+            "allocation": 3,
+            "transport": 3,
+        },
+        "rate_window_minutes": 30,
+        "note": "Departure thresholds apply to discharge, ward allocation and transport queues alike. Fictional demo values.",
+    },
     "congestion_rule": {
         "available_spaces": 0,
         "awaiting_space_at_least": 6,

@@ -11,6 +11,7 @@ import uuid
 from typing import Any
 
 from .engine import EDEngine
+from .pressure import CATEGORY_LABEL, SERVICES
 from .profile import PROFILE, PROFILE_ID, ZONES
 
 MAX_ADVANCE_MIN = 60.0
@@ -155,6 +156,8 @@ class ReplaySession:
             "building": "Building congestion",
             "confirmed": "Congested",
         }[mon.state]
+        if mon.recovering:
+            status_label = "Congested, recovering"
 
         gp, rp = e.general_pool, e.resus_pool
         all_ids = gp.ids + rp.ids
@@ -277,6 +280,8 @@ class ReplaySession:
             "note": "Home processing and ward/ICU transfer constraints are reported separately; one blended rate would hide a blocked ward.",
         }
 
+        pressure = self._pressure(patients, now)
+
         announcements = [a.public(now) for a in sorted(e.announcements.values(), key=lambda a: a.id)]
         inbound = [a for a in announcements if a["status"] in ("en_route", "delayed")]
         inbound_patients = sum(a["patient_count"] for a in inbound)
@@ -306,6 +311,10 @@ class ReplaySession:
                 "label": status_label,
                 "onset_min": mon.onset_min,
                 "confirmed_min": mon.confirmed_min,
+                "recovering": mon.recovering,
+                "recovery_since_min": mon.below_since_min,
+                # The overall rule is separate from local zone alerts; this only flags that one exists.
+                "local_alert": any(z["state"] == "overloaded" for z in pressure["zones"]),
                 "rule": PROFILE["congestion_rule"],
             },
             "resources": {
@@ -394,7 +403,159 @@ class ReplaySession:
                     "note": "Announced ambulances are counted only under known demand.",
                 },
             },
+            "pressure": pressure,
             "event_count": len(e.events),
+        }
+
+    # -- zone pressure ---------------------------------------------------------------------
+    @staticmethod
+    def _nearest(count: int, minutes: float) -> float:
+        return round(count * 60.0 / minutes, 2)
+
+    def _pressure(self, patients: list[dict[str, Any]], now: float) -> dict[str, Any]:
+        """Local zone overload state, rates in matching units and failure categories."""
+        e = self.engine
+        rule = PROFILE["local_rule"]
+        a = PROFILE["assumptions"]
+        window = min(now, float(rule["rate_window_minutes"]))
+
+        def mean(spec: dict) -> float:
+            return (spec["min"] + spec["mode"] + spec["max"]) / 3.0
+
+        # Staffed service capacity per hour: finite units x 60 / disclosed mean task minutes.
+        capacity = {
+            "triage": (e.triage.capacity, mean(a["triage_dwell_minutes"]), "patients per hour"),
+            "assessment": (e.clinicians.capacity, mean(a["active_assessment_minutes"]), "patients per hour"),
+            "lab": (e.lab.capacity, a["lab_turnaround_minutes"]["median"], "tasks per hour"),
+            "imaging": (e.imaging.capacity, a["imaging_turnaround_minutes"]["median"], "tasks per hour"),
+            "discharge": (e.discharge.capacity, mean(a["disposition_processing_minutes"]), "patients per hour"),
+            "allocation": (e.allocation.capacity, mean(a["ward_allocation_minutes"]), "patients per hour"),
+            "transport": (e.transport.capacity, mean(a["transport_minutes"]), "patients per hour"),
+        }
+
+        def rates(sid: str, inputs_ok: bool) -> dict[str, Any]:
+            entries = [t for t in e.work_entries.get(sid, []) if t > now - window]
+            done = [t for t in e.work_done.get(sid, []) if t > now - window]
+            known = inputs_ok and window > 0
+            lam = round(len(entries) * 60.0 / window, 2) if known else None
+            through = round(len(done) * 60.0 / window, 2) if known else None
+            out: dict[str, Any] = {
+                "window_min": round(window, 1),
+                "received_per_hour": lam,
+                "recent_throughput_per_hour": through,
+            }
+            if sid in capacity:
+                servers, minutes, unit = capacity[sid]
+                mu = round(servers * 60.0 / minutes, 2) if servers > 0 else None
+                out.update(
+                    {
+                        "unit": unit,
+                        "servers": servers,
+                        "capacity_per_hour": mu,
+                        "mean_task_min": round(minutes, 2),
+                        # Pressure signal only: never a countdown, never divides by zero.
+                        "pressure_signal": (lam > mu) if (lam is not None and mu) else None,
+                    }
+                )
+            elif sid == "space":
+                out.update({"unit": "patients per hour", "capacity_per_hour": None, "pressure_signal": None})
+            else:  # ward_beds
+                c = e.ward_beds.counts()
+                out.update(
+                    {
+                        "unit": "transfers per hour",
+                        "capacity_per_hour": None,
+                        "free_beds": {"ward": c["ward"]["free"], "icu": c["icu"]["free"]},
+                        "pressure_signal": None,
+                    }
+                )
+            return out
+
+        readings = e.local_readings()
+        services: dict[str, Any] = {}
+        for sid, spec in SERVICES.items():
+            st = e.local.services[sid]
+            r = readings[sid]
+            state = "unknown" if st.unknown else st.state
+            confirm_in = None
+            if st.state == "building" and st.onset_min is not None and not st.unknown:
+                confirm_in = round(max(0.0, rule["confirm_after_minutes"] - (now - st.onset_min)), 3)
+            services[sid] = {
+                "id": sid,
+                "zone": spec["zone"],
+                "name": spec["name"],
+                "category": spec["category"],
+                "state": state,
+                "queue": r["queue"] if r["inputs_ok"] else None,
+                "queue_label": spec["queue_label"],
+                "threshold": spec["threshold"],
+                "capacity_unavailable": r["capacity_unavailable"] if r["inputs_ok"] else None,
+                "inputs_ok": r["inputs_ok"],
+                "onset_min": st.onset_min,
+                "confirmed_min": st.confirmed_min,
+                "elapsed_min": None if st.onset_min is None else round(now - st.onset_min, 3),
+                "confirms_in_min": confirm_in,
+                "recovery_since_min": st.below_since_min,
+                "rates": rates(sid, r["inputs_ok"]),
+            }
+
+        urgent_waiting: dict[str, int] = {}
+        phase_service = {
+            "awaiting_triage": "triage", "awaiting_space": "space", "awaiting_clinician": "assessment",
+            "awaiting_result_review": "assessment", "awaiting_lab": "lab", "awaiting_imaging": "imaging",
+            "awaiting_discharge": "discharge", "awaiting_ward_allocation": "allocation",
+            "awaiting_transport": "transport", "awaiting_ward_bed": "ward_beds",
+        }
+        for p in patients:
+            sid = phase_service.get(p["phase"])
+            if sid and p["urgency"] == "urgent":
+                urgent_waiting[sid] = urgent_waiting.get(sid, 0) + 1
+
+        zones = []
+        for z in (1, 2, 3, 4):
+            sids = [s for s in SERVICES if SERVICES[s]["zone"] == z]
+            state = e.local.zone_state(z)
+            zones.append(
+                {
+                    "zone": z,
+                    "state": state,
+                    "label": {"normal": "Normal", "building": "Pressure building",
+                              "overloaded": "Overloaded", "unknown": "Cannot assess"}[state],
+                    "services": sids,
+                }
+            )
+
+        alerts = []
+        active = [s for s in services.values() if s["state"] in ("building", "overloaded")]
+        cats = {s["category"] for s in active}
+        for s in active:
+            alerts.append(
+                {
+                    "service": s["id"],
+                    "zone": s["zone"],
+                    "state": s["state"],
+                    "category": s["category"],
+                    "category_label": CATEGORY_LABEL[s["category"]],
+                    "affected_patients": s["queue"],
+                    "urgent_group_waiting": urgent_waiting.get(s["id"], 0),
+                    "onset_min": s["onset_min"],
+                    "confirmed_min": s["confirmed_min"],
+                    "evidence": (
+                        f"{s['queue']} {s['queue_label']}"
+                        + (f" (threshold {s['threshold']})" if s["threshold"] is not None else "")
+                        + ("; required capacity unavailable" if s["capacity_unavailable"] else "")
+                    ),
+                }
+            )
+        return {
+            "rule": rule,
+            "services": services,
+            "zones": zones,
+            "alerts": alerts,
+            "mixed": len(cats) > 1,
+            "mixed_label": CATEGORY_LABEL["mixed"] if len(cats) > 1 else None,
+            "any_unknown": any(s["state"] == "unknown" for s in services.values()),
+            "episodes": {sid: list(e.local.services[sid].episodes) for sid in SERVICES},
         }
 
     def _time_summary(self) -> dict[str, Any]:
@@ -464,6 +625,7 @@ class ReplaySession:
                     if p.departure_min is None
                 ],
                 "congestion_episodes": list(e.monitor.episodes),
+                "local_episodes": {sid: list(st.episodes) for sid, st in e.local.services.items()},
             }
 
 

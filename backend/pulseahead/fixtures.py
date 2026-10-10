@@ -132,6 +132,23 @@ def _boarding_script() -> dict[str, Any]:
     return {"walk_ins": walk_ins, "ambulances": []}
 
 
+def _congestion_script() -> dict[str, Any]:
+    return {
+        # Two urgent walk-ins whose long stabilization tasks keep the only two staffed general
+        # spaces occupied (nurses N1-N5 are off duty), so no staffed general space is available.
+        "walk_ins": [
+            (1.5, "W01", _walk_in("urgent", 2, 400.0)),
+            (1.5, "W02", _walk_in("urgent", 2, 400.0)),
+        ],
+        "ambulances": [
+            # Eight critical patients at one instant against two resuscitation spaces: six wait.
+            # Non-integer arrival so the per-minute monitor tick never ties with it.
+            AmbulanceRun("A01", 5.0, 30.5, 5.0, [_amb("A01", "urgent", 1, True) for _ in range(8)], True,
+                         arrive_min=30.5),
+        ],
+    }
+
+
 FIXTURES: dict[str, dict[str, Any]] = {
     "fixture-intake": {
         "id": "fixture-intake",
@@ -159,6 +176,26 @@ FIXTURES: dict[str, dict[str, Any]] = {
             {"id": "IC1", "type": "icu", "free_at_min": 120},
             {"id": "IC2", "type": "icu", "free_at_min": 100000},
         ],
+    },
+    "fixture-congestion-boundary": {
+        "id": "fixture-congestion-boundary",
+        "name": "Fixture: sustained space shortage for exact congestion and recovery boundaries",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _congestion_script,
+        "staffing": [
+            (0.0, "N1", False), (0.0, "N2", False), (0.0, "N3", False),
+            (0.0, "N4", False), (0.0, "N5", False),
+        ],
+    },
+    "fixture-diagnostics-gap": {
+        "id": "fixture-diagnostics-gap",
+        "name": "Fixture: diagnostics with the imaging queue feed missing for 30 minutes",
+        "fixture": True,
+        "background_arrivals": False,
+        "script": _diagnostics_script,
+        # Supplied faulty feed: imaging queue and capacity inputs are missing from 90 to 120.
+        "missing_inputs": [(90.0, 120.0, ["imaging"])],
     },
     "fixture-diagnostics": {
         "id": "fixture-diagnostics",

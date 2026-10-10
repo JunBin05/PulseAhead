@@ -24,6 +24,7 @@ from typing import Any
 import simpy
 
 from .fixtures import FIXTURES
+from .pressure import LocalMonitor
 from .profile import CRITICAL_RANK, PROFILE, SCENARIOS, URGENCY_RANK
 from .scenario import (
     AmbulanceRun,
@@ -56,6 +57,34 @@ PHASE_ZONE = {
     "awaiting_transport": 4,
     "in_transport": 4,
     "departed": None,
+}
+
+
+# Wait phase -> service whose queue it joins; active phase -> service whose work it completes.
+WAIT_SERVICE = {
+    "awaiting_triage": "triage",
+    "awaiting_space": "space",
+    "awaiting_clinician": "assessment",
+    "awaiting_result_review": "assessment",
+    "awaiting_lab": "lab",
+    "awaiting_imaging": "imaging",
+    "awaiting_discharge": "discharge",
+    "awaiting_ward_bed": "ward_beds",
+    "awaiting_ward_allocation": "allocation",
+    "awaiting_transport": "transport",
+}
+DONE_SERVICE = {
+    "in_triage": "triage",
+    "assessment_active": "assessment",
+    "result_review_active": "assessment",
+    "in_lab": "lab",
+    "in_imaging": "imaging",
+    "disposition_processing": "discharge",
+    "ward_allocation_active": "allocation",
+    "in_transport": "transport",
+    # Leaving these queues is a grant (space, bed), counted as that service's throughput.
+    "awaiting_space": "space",
+    "awaiting_ward_bed": "ward_beds",
 }
 
 
@@ -290,6 +319,11 @@ class CongestionMonitor:
     below_since_min: float | None = None
     episodes: list[dict[str, Any]] = field(default_factory=list)
 
+    @property
+    def recovering(self) -> bool:
+        """Confirmed congestion whose recovery clock (fewer than 3 waiting) is running."""
+        return self.state == "confirmed" and self.below_since_min is not None
+
     def tick(self, now: float, available_spaces: int, awaiting_space: int) -> None:
         rule = PROFILE["congestion_rule"]
         cond = (
@@ -494,6 +528,10 @@ class EDEngine:
         self.events: list[dict[str, Any]] = []
         self.departed_count = 0
         self.monitor = CongestionMonitor()
+        self.local = LocalMonitor()
+        # Queue entries and completions per service (times), for received-work and throughput rates.
+        self.work_entries: dict[str, list[float]] = {}
+        self.work_done: dict[str, list[float]] = {}
         self._rate_mult = self.definition.get("rate_multiplier", 1.0)
         if self.definition.get("background_arrivals", True):
             self._walk_in_rng = random.Random(f"{seed}:arrivals")
@@ -569,6 +607,12 @@ class EDEngine:
         previous = p.phase
         p.phase = phase
         p.phase_since_min = self.now
+        service = WAIT_SERVICE.get(phase)
+        if service:
+            self.work_entries.setdefault(service, []).append(self.now)
+        done = DONE_SERVICE.get(previous)
+        if done and phase != previous:
+            self.work_done.setdefault(done, []).append(self.now)
         self._emit(
             "phase_change",
             p.id,
@@ -891,6 +935,8 @@ class EDEngine:
         p.nurse_id = None
         p.phase, previous = "departed", p.phase
         p.phase_since_min = self.now
+        if previous in DONE_SERVICE:
+            self.work_done.setdefault(DONE_SERVICE[previous], []).append(self.now)
         self._emit(
             "phase_change",
             p.id,
@@ -935,10 +981,41 @@ class EDEngine:
             )
         return None
 
+    def _inputs_ok(self, service: str) -> bool:
+        """A fixture can declare a service's inputs missing for an interval (faulty feed)."""
+        for start, end, services in self.definition.get("missing_inputs", []):
+            if start <= self.now < end and service in services:
+                return False
+        return True
+
+    def local_readings(self) -> dict[str, dict[str, Any]]:
+        gp, rp = self.general_pool, self.resus_pool
+        space_blocked = (len(gp.waiting) > 0 and not gp.free_staffed()) or (
+            len(rp.waiting) > 0 and not rp.free_staffed()
+        )
+        beds_waiting = len(self.ward_beds.waiting)
+        raw = {
+            "triage": (len(self.triage.queue), False),
+            "assessment": (len(self.clinicians.queue), False),
+            "space": (len(gp.waiting) + len(rp.waiting), space_blocked),
+            "lab": (len(self.lab.queue), False),
+            "imaging": (len(self.imaging.queue), False),
+            "discharge": (len(self.discharge.queue), False),
+            "allocation": (len(self.allocation.queue), False),
+            "transport": (len(self.transport.queue), False),
+            # A waiter exists only when no suitable free bed of its type does.
+            "ward_beds": (beds_waiting, beds_waiting > 0),
+        }
+        return {
+            sid: {"queue": q, "capacity_unavailable": blocked, "inputs_ok": self._inputs_ok(sid)}
+            for sid, (q, blocked) in raw.items()
+        }
+
     def _monitor_loop(self):
         while True:
             yield self.env.timeout(1.0)
             self.monitor.tick(self.now, self.available_general_spaces(), self.awaiting_space())
+            self.local.tick(self.now, self.local_readings())
 
     # -- read models ---------------------------------------------------------------------
     def active_patients(self) -> list[Patient]:
