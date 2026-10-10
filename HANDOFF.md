@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10 (tickets 01-09 done and committed; HEAD is `d7b2b37 ticket 09: Generate varied shifts and reproduce saved replays`). **Ticket 10 is IN PROGRESS and UNCOMMITTED** (see "Ticket 10 WIP" below). Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-11. Tickets 01-09 are done and committed. **Ticket 10 is committed as WIP (`48f3619`) but NOT closed** (see "Ticket 10 status at commit"). Branch `pulseahead-mvp`, repo root `C:UsersVaasDocumentsPrototypePulseAheadReal`. **The push to GitHub is blocked (403, see "Start here in a new session").** Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -303,7 +303,31 @@ Ticket: `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-alert-
 5. Tick only passed criteria, set the ticket status, update this file, commit `ticket 10: Predict bottlenecks and explain the time remaining` with the attribution trailer.
 6. **Then run the `code-review` skill gate for ticket 10** (subagents allowed for this gate), fix in-scope findings, re-verify, commit `review: fixes after ticket 10 gate`.
 
-## Exact next steps
+## Start here in a new session (2026-10-11)
+
+**Git remote.** `origin` is `https://github.com/JunBin05/PulseAhead.git`. `git push -u origin pulseahead-mvp` failed with 403: the signed-in GitHub account `Srinivaas-only` has no write access. Nothing was pushed; all commits are local. The user must add that account as a collaborator, supply another repo, or sign in with another credential. Do not change the remote or guess credentials; ask.
+
+**First commands** (from `Real/`): `git status` and `git log --oneline | head -5` (expect HEAD `48f3619` or a later docs commit and a clean tree), then confirm the servers below.
+
+**Servers.** The backend on :8000 was started from the current code (log `%TEMP%\pulse-backend.log`) and serves the built `frontend/dist`; it may still be running. Restart it after any Python edit: kill python.exe whose command line contains `uvicorn pulseahead.api:app`, confirm :8000 is free with `netstat`, then start `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000` from `Real/`. Rebuild first after any `frontend/src` change (`cd frontend && npx tsc --noEmit && npm run build`). The browser caches the bundle: reload the page (or clear the cache) after a rebuild before checking.
+
+**Playwright MCP.**
+- If the profile is locked ("Browser is already in use"), stop only chrome.exe processes whose command line contains `mcp-chrome-ac24c5d`.
+- Run **one snippet at a time**. Two snippets in one turn shared one browser and gave false failures in `06-ui`.
+- Staging: copy `evidence/NN-name.playwright-mcp.js` to `C:\Users\Vaas\Documents\Prototype\.playwright-mcp\` as UTF-8 without BOM, with the leading `//` lines removed, and set `PART` where the snippet has one (`06-pressure`: `engine`, `seed7`; `10-scan`, `10-ui-states`, `10-bench`: `A`, `B`). The staging helper script lived in the old session's scratchpad (not in the repo); rewrite it in a few lines of node. Staged copies of the regression and ticket 10 snippets already exist in that folder.
+- A snippet's source is echoed in every result, so keep snippets small and run only what the change touches plus regression 01.
+
+**Finish ticket 10, in order:**
+1. Run `07-zones` (the only regression not yet run on this build). Re-run `01` after any code change.
+2. Write `evidence/10-forecast-and-alert-panel.md` from the results in "Ticket 10 status at commit": a nine-row criteria table (pass / fail / not-run, seed or fixture, expected vs actual), the benchmark, the machine and the predeclared evaluation size (Q10). State the criterion 9 caveat: the action-comparison cost does not exist yet (tickets 11 and 17), so the size is re-confirmed in ticket 18.
+3. Tick the passed boxes in `PulseAhead-Tickets/.scratch/pulseahead-3d/issues/10-forecast-and-alert-panel.md` (criterion 1 rests on `10-isolation` I4 and `10-inputs` N1, N2), set its status and update the ticket table above.
+4. Commit `ticket 10: Predict bottlenecks and explain the time remaining` with `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit` and the attribution trailer from the session's system reminder.
+5. Run the `code-review` skill gate for ticket 10 (subagents allowed for gates only), fix in-scope findings, re-verify, commit `review: fixes after ticket 10 gate`.
+6. Continue 11 (gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (gate) -> 18 -> 19 (gate) -> 20. Stop and ask before ticket 21 (hosting); ticket 22 stays with the user. The design notes for 11 (shared action machinery) are in `C:\Users\Vaas\.claude\plans\pasted-content-id-7f58-continue-the-async-mccarthy.md`.
+
+**Carry to ticket 20.** Regression 01 measured 10x playback at 9.49 sim min/s (earlier runs 9.94 to 9.97) while forecasts ran; the forecast competes for the Python GIL. Ticket 20 must measure interaction while forecast work runs.
+
+## Exact next steps (older list; "Start here" above is current)
 
 1. Finish ticket 10 from "Ticket 10 WIP" above (code exists; verification, Q10, evidence, ticks, commit and the review gate remain). Run `git status` and `git diff --stat` first and re-check the claims there before trusting them.
 2. Continue in blocker order: (10 review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
