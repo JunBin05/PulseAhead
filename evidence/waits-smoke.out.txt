@@ -1,0 +1,14 @@
+﻿PASS  forecast carries predicted waits with unit and basis
+PASS  every listed patient is waiting in the received state at this version  -- 1 first-assessment, 4 test waits
+PASS  summary counts equal the received waiting patients
+PASS  a patient already in assessment or later is not listed
+PASS  queued test patients get a predicted start (median) from the futures  -- P0005:awaiting_lab:median 12.5 p90 20.4 starts 1 | P0006:awaiting_lab:median 35.9 p90 53.7 starts 1 | P0002:awaiting_imaging:median 1.8 p90 4.8 starts 0.98
+PASS  predicted waits are non-negative and bounded by the run
+PASS  censoring is honest: a 90th percentile never appears without a median
+PASS  imaging queue in the response equals the received imaging queue  -- 2 waiting
+PASS  same version returns the same waits
+PASS  cannot assess: no predicted waits are shown
+PASS  forecast still reports the imaging service state
+PASS  no-action seed 7 normal: 705 events, 59 patients
+
+ALL PASS

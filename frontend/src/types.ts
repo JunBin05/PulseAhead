@@ -587,6 +587,32 @@ export interface ForecastAlert {
   also_active: string[];
 }
 
+export interface WaitRow {
+  id: string;
+  urgency: Urgency;
+  phase: string;
+  minutes_in_phase: number;
+  starts_in_run_chance: number | null;
+  futures: number;
+  median_min: number | null;
+  p90_min: number | null;
+}
+
+export interface ForecastWaits {
+  unit: string;
+  basis: string;
+  run_min: number;
+  first_assessment: WaitRow[];
+  diagnostic: WaitRow[];
+  summary: {
+    waiting_for_first_assessment: number;
+    urgent_waiting: number;
+    longest_median_min: number | null;
+    not_started_within_run: number;
+    waiting_for_a_test: number;
+  };
+}
+
 export interface Forecast {
   api_version: string;
   kind: 'forecast';
@@ -610,6 +636,7 @@ export interface Forecast {
     assumptions: Record<string, string>;
   };
   overall: (ForecastSummary & { state: string }) | null;
+  waits?: ForecastWaits;
   zones: ForecastZone[];
   services: Record<string, ForecastService>;
   alerts: {

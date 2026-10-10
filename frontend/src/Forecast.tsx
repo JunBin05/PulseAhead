@@ -259,6 +259,7 @@ export function ForecastStrip({
           <strong>Next step:</strong> {f.next_step.text} {f.reasons.join(' ')}
         </p>
       )}
+      {f && f.status === 'ok' && f.waits && <PredictedWaits f={f} />}
       {view.status === 'error' && (
         <button className="btn" onClick={onRetry} data-testid="fc-retry">
           Retry forecast
@@ -275,6 +276,57 @@ export function ForecastStrip({
         </details>
       )}
     </section>
+  );
+}
+
+const URGENCY_WORD: Record<string, string> = { urgent: 'Urgent', medium: 'Medium', lower: 'Lower' };
+
+/** Predicted waits from the forecast's own futures: first assessment and, for a diagnostic queue, the test start. */
+function PredictedWaits({ f }: { f: Forecast }) {
+  const w = f.waits!;
+  const s = w.summary;
+  const cell = (r: { median_min: number | null; p90_min: number | null; starts_in_run_chance: number | null }) =>
+    r.median_min === null
+      ? `not within ${w.run_min} min (${pct(r.starts_in_run_chance)} of futures start in the run)`
+      : `about ${r.median_min} min${r.p90_min !== null ? ` (90% by ${r.p90_min} min)` : ' (90th percentile beyond the run)'}`;
+  if (!s.waiting_for_first_assessment && !s.waiting_for_a_test) {
+    return (
+      <p className="muted" data-testid="fc-waits">
+        Predicted wait: nobody is waiting for a first assessment or a test right now.
+      </p>
+    );
+  }
+  return (
+    <details className="fc-details" data-testid="fc-waits" open>
+      <summary>
+        Predicted wait · {s.waiting_for_first_assessment} waiting for first assessment ({s.urgent_waiting} urgent)
+        {s.longest_median_min !== null ? `, longest median about ${s.longest_median_min} min` : ''}
+        {s.waiting_for_a_test ? ` · ${s.waiting_for_a_test} waiting for a test` : ''}
+      </summary>
+      <p className="muted">
+        Minutes from {clock(f.forecast_time_min)}, from {f.model.settings.samples} sampled futures. {w.basis}
+      </p>
+      {w.first_assessment.length > 0 && (
+        <ul data-testid="fc-waits-first">
+          {w.first_assessment.slice(0, 6).map((r) => (
+            <li key={r.id} data-testid={`fc-wait-${r.id}`}>
+              {r.id} ({URGENCY_WORD[r.urgency] ?? r.urgency}, waiting {Math.round(r.minutes_in_phase)} min so far): first
+              assessment {cell(r)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {w.diagnostic.length > 0 && (
+        <ul data-testid="fc-waits-diagnostic">
+          {w.diagnostic.slice(0, 6).map((r) => (
+            <li key={r.id} data-testid={`fc-testwait-${r.id}`}>
+              {r.id} ({URGENCY_WORD[r.urgency] ?? r.urgency}, {r.phase === 'awaiting_imaging' ? 'imaging' : 'lab'}
+              queue): test starts {cell(r)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }
 

@@ -302,7 +302,7 @@ class _P:
     __slots__ = (
         "id", "rank", "urgency", "critical", "source", "stage", "arrive", "space", "bed", "disp", "u", "hold",
         "tests", "had_tests", "first_assess", "effective", "depart", "rem", "care", "mode", "known",
-        "cohort", "pre", "test_wait",
+        "cohort", "pre", "test_wait", "test_start",
     )
 
 
@@ -448,6 +448,7 @@ class Future:
         p.cohort = False
         p.pre = False
         p.test_wait = 0.0
+        p.test_start = None
         p.rem = 0.0
         a = self.a
         group = "critical" if critical else urgency
@@ -671,6 +672,8 @@ class Future:
                 asked = env.now
                 yield req
                 p.test_wait += env.now - asked
+                if p.test_start is None:
+                    p.test_start = env.now
                 yield env.timeout(minutes)
                 res.release(req)
         if p.had_tests and st <= S["review_active"]:
@@ -789,7 +792,10 @@ class Future:
             return {"new": new, "confirmed": first_conf, "cleared": cleared}
 
         loc = {sid: episodes(self.local.services[sid].episodes) for sid in _SERVICE_IDS}
-        return {"overall": episodes(self.overall.episodes), "local": loc, "ticks": self.ticks}
+        # Minutes from now until a patient present now starts first assessment or the first test (None when
+        # that does not happen within the run: censored, never invented).
+        waits = {p.id: (p.first_assess, p.test_start) for p in self.patients if p.source == "present"}
+        return {"overall": episodes(self.overall.episodes), "local": loc, "ticks": self.ticks, "waits": waits}
 
 
 def run_future(inp: dict[str, Any], k: int, base: int = FORECAST_SEED, extra: dict[str, int] | None = None,
@@ -926,6 +932,65 @@ def compare_actions(inp: dict[str, Any], specs: list[dict[str, Any]], samples: i
         "overdue_urgent_wait_min": OVERDUE_URGENT_WAIT_MIN,
         "no_action": branch(rows_base), "actions": out_actions, "blocked_by_in_flight": blocked,
         "compute_ms": round((time.perf_counter() - t0) * 1000, 1),
+    }
+
+
+# -- predicted waits ----------------------------------------------------------------------------------
+_FIRST_PHASES = {"awaiting_triage", "in_triage", "awaiting_space", "awaiting_clinician"}
+_TEST_PHASES = {"awaiting_lab", "awaiting_imaging"}
+
+
+def _censored_quantile(vals: list[float], n: int, q: float) -> float | None:
+    """Quantile over all n futures where a missing value means 'longer than the run'. None when that
+    quantile falls in the censored part (never filled in)."""
+    need = math.ceil(q * n)
+    if len(vals) < need or n == 0:
+        return None
+    return sorted(vals)[need - 1]
+
+
+def build_waits(inp: dict[str, Any], outs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Predicted minutes from now to first assessment (and to the first test for a patient queued for
+    lab or imaging), from the same sampled futures as the forecast. Median and 90th percentile are given
+    only when that share of futures actually starts within the run."""
+    n = len(outs)
+    rank = {"urgent": 0, "medium": 1, "lower": 2}
+    rows: dict[str, list[dict[str, Any]]] = {"first_assessment": [], "diagnostic": []}
+    for p in inp["patients"]:
+        if p["phase"] in _FIRST_PHASES:
+            key, idx = "first_assessment", 0
+        elif p["phase"] in _TEST_PHASES:
+            key, idx = "diagnostic", 1
+        else:
+            continue
+        vals = [o["waits"][p["id"]][idx] for o in outs if p["id"] in o.get("waits", {}) and o["waits"][p["id"]][idx] is not None]
+        med = _censored_quantile(vals, n, 0.5)
+        p90 = _censored_quantile(vals, n, 0.9)
+        rows[key].append({
+            "id": p["id"], "urgency": p["urgency"], "phase": p["phase"], "minutes_in_phase": p["in_phase"],
+            "starts_in_run_chance": round(len(vals) / n, 3) if n else None, "futures": n,
+            "median_min": None if med is None else round(med, 1), "p90_min": None if p90 is None else round(p90, 1),
+        })
+    for lst in rows.values():
+        lst.sort(key=lambda r: (rank.get(r["urgency"], 3), -(r["minutes_in_phase"] or 0.0), r["id"]))
+    fa = rows["first_assessment"]
+    meds = [r["median_min"] for r in fa if r["median_min"] is not None]
+    return {
+        "unit": "simulated minutes from the forecast time",
+        "basis": (
+            "From the same sampled futures as the forecast. A median or 90th percentile is shown only when at "
+            "least that share of futures starts within the run; otherwise the wait is longer than the run and no "
+            "number is invented."
+        ),
+        "run_min": HORIZON_MIN + TAIL_MIN,
+        "first_assessment": fa[:12], "diagnostic": rows["diagnostic"][:12],
+        "summary": {
+            "waiting_for_first_assessment": len(fa),
+            "urgent_waiting": sum(1 for r in fa if r["urgency"] == "urgent"),
+            "longest_median_min": max(meds) if meds else None,
+            "not_started_within_run": sum(1 for r in fa if r["median_min"] is None),
+            "waiting_for_a_test": len(rows["diagnostic"]),
+        },
     }
 
 
@@ -1236,6 +1301,7 @@ def forecast_from_input(inp: dict[str, Any], snapshot: dict[str, Any], samples: 
     out.update(
         {
             "status": "ok", "reasons": [], "overall": summary["overall"], "zones": summary["zones"],
+            "waits": build_waits(inp, outs),
             "services": summary["services"], "alerts": alerts, "series": summary["series"], "limitations": limits,
             "next_step": next_step(summary, True, [], alerts),
             "inputs": {
