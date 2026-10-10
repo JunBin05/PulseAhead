@@ -13,10 +13,10 @@ import {
   IconTriangle,
   IconUnknown,
 } from './icons';
+import { ZONE_LOOK, type ZoneDisplay } from './status';
 import {
   ZONE_NAMES,
   type CongestionState,
-  type LocalState,
   type Phase,
   type PressureService,
   type Snapshot,
@@ -73,8 +73,10 @@ function formatClock(min: number): string {
   return `T+${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function zoneState(snap: Snapshot | null, zone: number): LocalState {
-  return snap?.pressure.zones.find((z) => z.zone === zone)?.state ?? 'normal';
+/** No snapshot yet means 'idle' (Not started), never Normal. */
+function zoneState(snap: Snapshot | null, zone: number): ZoneDisplay {
+  if (!snap) return 'idle';
+  return snap.pressure.zones.find((z) => z.zone === zone)?.state ?? 'unknown';
 }
 
 function minutes(n: number): string {
@@ -102,17 +104,8 @@ const STATUS_LOOK: Record<CongestionState, { tone: string; icon: ReactNode }> = 
   confirmed: { tone: 'overload', icon: <IconOctagon /> },
 };
 
-// Local zone state: green Normal, yellow Pressure building, red Overloaded, gray Cannot assess.
-// Colour is never the only signal; every state has its own icon and text.
-const LOCAL_LOOK: Record<LocalState, { tone: string; icon: ReactNode; label: string }> = {
-  normal: { tone: 'normal', icon: <IconCheck />, label: 'Normal' },
-  building: { tone: 'pressure', icon: <IconTriangle />, label: 'Pressure building' },
-  overloaded: { tone: 'overload', icon: <IconOctagon />, label: 'Overloaded' },
-  unknown: { tone: 'unknown', icon: <IconUnknown />, label: 'Cannot assess' },
-};
-
-function LocalChip({ state, testid }: { state: LocalState; testid?: string }) {
-  const look = LOCAL_LOOK[state];
+function LocalChip({ state, testid }: { state: ZoneDisplay; testid?: string }) {
+  const look = ZONE_LOOK[state];
   return (
     <span className="status" data-tone={look.tone} data-state={state} data-testid={testid}>
       {look.icon}
@@ -892,6 +885,11 @@ function PressureSection({ snap, zoneId }: { snap: Snapshot; zoneId: number }) {
               <div className="svc-head">
                 <strong>{a.category_label}</strong>
                 <LocalChip state={a.state} />
+                {a.mixed && (
+                  <span className="tag" data-testid={`alert-mixed-${a.service}`}>
+                    Mixed: also {a.also_active.join(', ')}
+                  </span>
+                )}
               </div>
               <p className="svc-sub">
                 {a.evidence}. Affected: {a.affected_patients ?? 'unknown'} · urgent group waiting:{' '}

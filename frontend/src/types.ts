@@ -86,7 +86,8 @@ export interface DispService {
   waiting: number;
   owner: string;
   median_min: number;
-  capacity_tasks_per_hour: number;
+  /** Units x 60 / mean disclosed task minutes; the same basis as the zone pressure panel's mu. */
+  capacity_patients_per_hour: number;
 }
 
 export interface BedCounts {
@@ -163,6 +164,10 @@ export interface PressureAlert {
   urgent_group_waiting: number;
   onset_min: number | null;
   confirmed_min: number | null;
+  /** More than one failure category is active across the ED right now. */
+  mixed: boolean;
+  /** Labels of the other active categories. */
+  also_active: string[];
   evidence: string;
 }
 

@@ -65,7 +65,9 @@ WAIT_SERVICE = {
     "awaiting_triage": "triage",
     "awaiting_space": "space",
     "awaiting_clinician": "assessment",
-    "awaiting_result_review": "assessment",
+    # Result review is the same patient returning for more doctor work; it is not a new patient
+    # for the assessment rate (patients per hour), so it has its own log key.
+    "awaiting_result_review": "assessment_review",
     "awaiting_lab": "lab",
     "awaiting_imaging": "imaging",
     "awaiting_discharge": "discharge",
@@ -76,7 +78,7 @@ WAIT_SERVICE = {
 DONE_SERVICE = {
     "in_triage": "triage",
     "assessment_active": "assessment",
-    "result_review_active": "assessment",
+    "result_review_active": "assessment_review",
     "in_lab": "lab",
     "in_imaging": "imaging",
     "disposition_processing": "discharge",
@@ -86,6 +88,11 @@ DONE_SERVICE = {
     "awaiting_space": "space",
     "awaiting_ward_bed": "ward_beds",
 }
+
+
+# Phase -> the service whose waiting queue the patient is in. First assessment and result review
+# share one doctor queue (the same doctors), so both belong to "assessment" for queue counts.
+QUEUE_SERVICE = {**WAIT_SERVICE, "awaiting_result_review": "assessment"}
 
 
 def scenario_definition(scenario: str) -> dict[str, Any]:
@@ -996,15 +1003,19 @@ class EDEngine:
             len(rp.waiting) > 0 and not rp.free_staffed()
         )
         beds_waiting = len(self.ward_beds.waiting)
+        def unit(res: Any) -> tuple[int, bool]:
+            # Capacity is unavailable only when the service has no staffed unit at all.
+            return len(res.queue), res.capacity == 0
+
         raw = {
-            "triage": (len(self.triage.queue), False),
-            "assessment": (len(self.clinicians.queue), False),
+            "triage": unit(self.triage),
+            "assessment": unit(self.clinicians),
             "space": (len(gp.waiting) + len(rp.waiting), space_blocked),
-            "lab": (len(self.lab.queue), False),
-            "imaging": (len(self.imaging.queue), False),
-            "discharge": (len(self.discharge.queue), False),
-            "allocation": (len(self.allocation.queue), False),
-            "transport": (len(self.transport.queue), False),
+            "lab": unit(self.lab),
+            "imaging": unit(self.imaging),
+            "discharge": unit(self.discharge),
+            "allocation": unit(self.allocation),
+            "transport": unit(self.transport),
             # A waiter exists only when no suitable free bed of its type does.
             "ward_beds": (beds_waiting, beds_waiting > 0),
         }

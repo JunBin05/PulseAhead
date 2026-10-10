@@ -6,26 +6,31 @@ import {
   EXITS,
   PLATFORM_DEPTH,
   PLATFORM_SIZE,
+  ZONE4_ROW_PITCH,
   ZONE_CENTERS,
   type DotTarget,
   type RenderedScene,
 } from './layout';
 import { IconOctagon, IconUnknown } from './icons';
-import { ZONE_NAMES, type LocalState, type Urgency } from './types';
+import { ZONE_LOOK, type ZoneDisplay } from './status';
+import { ZONE_NAMES, type Urgency } from './types';
 
 // Platform fills mirror the --status-*-tint tokens (three.js needs literal colours). The state comes
 // from the received queues and resources, never from how many dots are drawn.
-const STATE_FILL: Record<LocalState, string> = {
+// 'idle' (nothing received yet) is drawn gray, never as Normal.
+const STATE_FILL: Record<ZoneDisplay, string> = {
   normal: '#e0f1e7',
   building: '#fdf0cc',
   overloaded: '#fce6e3',
   unknown: '#e6eaee',
+  idle: '#e6eaee',
 };
-const STATE_EDGE: Record<LocalState, string> = {
+const STATE_EDGE: Record<ZoneDisplay, string> = {
   normal: '#14663e',
   building: '#7a4d00',
   overloaded: '#a4231a',
   unknown: '#44505b',
+  idle: '#44505b',
 };
 
 // three.js materials need literal colours; these mirror the urgency, accent and scene tokens in
@@ -85,6 +90,10 @@ function projector(width: number, height: number) {
 }
 
 const COMPACT_BELOW_PX = 560;
+/** One world unit along z moves a label this fraction of the zoom down the screen (true isometric view). */
+const Z_TO_SCREEN_Y = 0.408;
+/** Area labels are 10 px tall; adjacent zone 4 rows must be at least this far apart on screen. */
+const MIN_LABEL_PITCH_PX = 10.2;
 
 function LabelLayer({
   counts,
@@ -94,7 +103,7 @@ function LabelLayer({
 }: {
   counts: Record<number, number>;
   areaCounts: Record<string, number>;
-  zoneStates: Record<number, LocalState>;
+  zoneStates: Record<number, ZoneDisplay>;
   exitCounts: { home: number; ward: number };
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -108,49 +117,56 @@ function LabelLayer({
     return () => ro.disconnect();
   }, []);
   const project = useMemo(() => (box.w > 0 ? projector(box.w, box.h) : null), [box.w, box.h]);
-  const place = (x: number, y: number, z: number, anchor: 'center' | 'start' = 'center') => {
+  // 'top' hangs the element below its anchor, so a two-line zone label grows toward the viewer
+  // instead of into the area labels above it.
+  const place = (x: number, y: number, z: number, anchor: 'center' | 'start' | 'top' = 'center') => {
     const p = project!(x, y, z);
     return {
       left: p.left,
       top: p.top,
       position: 'absolute' as const,
-      transform: anchor === 'start' ? 'translate(0, -50%)' : 'translate(-50%, -50%)',
+      transform:
+        anchor === 'start' ? 'translate(0, -50%)' : anchor === 'top' ? 'translate(-50%, 0)' : 'translate(-50%, -50%)',
     };
   };
   // Too narrow for full labels: show zone numbers only. The zone buttons below the map carry the
   // same names and counts.
-  const compact = box.w < COMPACT_BELOW_PX;
+  const rowPitchPx = ZONE4_ROW_PITCH * Z_TO_SCREEN_Y * fitZoom(box.w, box.h);
+  const compact = box.w < COMPACT_BELOW_PX || rowPitchPx < MIN_LABEL_PITCH_PX;
   return (
     <div ref={ref} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
       {project && (
         <>
           {[1, 2, 3, 4].map((z) => {
             const [cx, cz] = ZONE_CENTERS[z];
+            const state = zoneStates[z];
+            // Compact scenes have no room for a bubble beside the label; the status icon next to the zone
+            // number carries the alert there, and the zone buttons below spell it out.
+            const alert = !compact && (state === 'overloaded' || state === 'unknown');
             return (
               <div
                 key={`l${z}`}
-                className="zone-label"
-                // Front edge: the back edge is where the area labels sit.
-                style={place(cx, 0.4, cz + PLATFORM_SIZE / 2 + 0.9)}
+                className={compact ? 'zone-label' : 'zone-label zone-label--stacked'}
+                // The alert bubble is a child hanging off the label (above it for zone 1, whose front strip
+                // is empty and which sits at the canvas edge; to the left for the others), so its position
+                // never depends on the label's size or the zoom.
+                data-bubble-side={z === 1 ? 'above' : 'left'}
+                // Front edge: the back edge is where the area labels sit. The stacked label hangs below
+                // its anchor so it grows toward the viewer, away from the rows above it.
+                style={place(cx, 0.4, cz + PLATFORM_SIZE / 2 + 0.9, compact ? 'center' : 'top')}
               >
-                {compact ? z : `${z} · ${ZONE_NAMES[z]} · ${counts[z] ?? 0}`}
-              </div>
-            );
-          })}
-          {[1, 2, 3, 4].map((z) => {
-            const state = zoneStates[z];
-            if (state !== 'overloaded' && state !== 'unknown') return null;
-            const [cx, cz] = ZONE_CENTERS[z];
-            return (
-              <div
-                key={`a${z}`}
-                className="alert-bubble"
-                data-testid={`alert-${z}`}
-                data-state={state}
-                style={place(cx, 0.4, cz + PLATFORM_SIZE / 2 + 2.6)}
-              >
-                {state === 'overloaded' ? <IconOctagon /> : <IconUnknown />}
-                {state === 'overloaded' ? 'ALERT' : 'Cannot assess'}
+                {/* Status never rides on colour alone: icon and word sit in the label itself. */}
+                <span className="zone-label-status" data-state={state} data-testid={`zone-label-status-${z}`}>
+                  {ZONE_LOOK[state].icon}
+                  <span className={compact ? 'sr-only' : undefined}>{ZONE_LOOK[state].label}</span>
+                </span>
+                <span>{compact ? z : `${z} · ${ZONE_NAMES[z]} · ${counts[z] ?? 0}`}</span>
+                {alert && (
+                  <span className="alert-bubble" data-testid={`alert-${z}`} data-state={state}>
+                    {state === 'overloaded' ? <IconOctagon /> : <IconUnknown />}
+                    {state === 'overloaded' ? 'ALERT' : 'Cannot assess'}
+                  </span>
+                )}
               </div>
             );
           })}
@@ -195,7 +211,7 @@ function Platform({
 }: {
   zone: number;
   selected: boolean;
-  state: LocalState;
+  state: ZoneDisplay;
   onSelect: (zone: number) => void;
 }) {
   const [cx, cz] = ZONE_CENTERS[zone];
@@ -259,12 +275,14 @@ interface SceneProps {
   /** Exact patients per dot area, for the area labels. */
   areaCounts: Record<string, number>;
   /** Local zone state from the pressure model (platform tint and ALERT bubble). */
-  zoneStates: Record<number, LocalState>;
+  zoneStates: Record<number, ZoneDisplay>;
   /** Patients who have physically left through each exit so far. */
   exitCounts: { home: number; ward: number };
   selectedZone: number | null;
   onSelectZone: (zone: number) => void;
 }
+
+const TEST_HOOKS = new URLSearchParams(window.location.search).has('fixture');
 
 /** Writes the number of patient meshes actually in the 3D scene to the canvas, for verification. */
 function MeshCounter() {
@@ -286,8 +304,8 @@ function MeshCounter() {
       }
     });
     gl.domElement.dataset.patientMeshes = String(n);
-    // Rendered positions, for the layout check (a test hook; not used by the UI).
-    gl.domElement.dataset.meshPositions = JSON.stringify(positions);
+    // Rendered positions, for the layout check: a test hook, written only for ?fixture= runs.
+    if (TEST_HOOKS) gl.domElement.dataset.meshPositions = JSON.stringify(positions);
   });
   return null;
 }

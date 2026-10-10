@@ -24,7 +24,12 @@ interface Area {
   cols: number;
   step: number;
   text: string;
+  /** Rows per stacked layer; omitted means ROWS_PER_LAYER. Zone 4 uses one row per area. */
+  rows?: number;
 }
+
+/** Distance between zone 4's seven single-row areas; the scene hides area labels when it projects too small. */
+export const ZONE4_ROW_PITCH = 1.18;
 
 /** Rows that fit between an area's origin and the next area's label. */
 const ROWS_PER_LAYER = 2;
@@ -43,10 +48,15 @@ const AREAS = {
   in_lab: { zone: 3, origin: [-1.8, -0.9], cols: 2, step: 1.2, text: 'In lab' },
   imaging_queue: { zone: 3, origin: [-2.1, 1.0], cols: 8, step: 0.62, text: 'Imaging queue' },
   in_imaging: { zone: 3, origin: [-1.8, 2.9], cols: 1, step: 1.2, text: 'In imaging' },
-  discharge: { zone: 4, origin: [-2.1, -3.0], cols: 8, step: 0.62, text: 'Discharge' },
-  boarding: { zone: 4, origin: [-2.1, -1.1], cols: 8, step: 0.62, text: 'Awaiting ward/ICU bed' },
-  allocation: { zone: 4, origin: [-2.1, 0.8], cols: 8, step: 0.62, text: 'Ward allocation' },
-  transport: { zone: 4, origin: [-2.1, 2.7], cols: 8, step: 0.62, text: 'Transport' },
+  // Zone 4: waiting lines and active tasks are separate areas, one row each (spec: queues cluster in
+  // distinct waiting areas; active tasks use slots).
+  discharge_queue: { zone: 4, origin: [-2.1, -3.45], cols: 8, step: 0.62, rows: 1, text: 'Awaiting discharge' },
+  discharge_active: { zone: 4, origin: [-2.1, -2.27], cols: 8, step: 0.62, rows: 1, text: 'Discharge processing' },
+  boarding: { zone: 4, origin: [-2.1, -1.09], cols: 8, step: 0.62, rows: 1, text: 'Awaiting ward/ICU bed' },
+  allocation_queue: { zone: 4, origin: [-2.1, 0.09], cols: 8, step: 0.62, rows: 1, text: 'Awaiting ward allocation' },
+  allocation_active: { zone: 4, origin: [-2.1, 1.27], cols: 8, step: 0.62, rows: 1, text: 'Ward allocation' },
+  transport_queue: { zone: 4, origin: [-2.1, 2.45], cols: 8, step: 0.62, rows: 1, text: 'Awaiting transport' },
+  transport_active: { zone: 4, origin: [-2.1, 3.63], cols: 8, step: 0.62, rows: 1, text: 'In transport' },
 } satisfies Record<string, Area>;
 
 type AreaKey = keyof typeof AREAS;
@@ -64,13 +74,13 @@ const PHASE_AREA: Record<Phase, AreaKey> = {
   in_lab: 'in_lab',
   awaiting_imaging: 'imaging_queue',
   in_imaging: 'in_imaging',
-  awaiting_discharge: 'discharge',
-  disposition_processing: 'discharge',
+  awaiting_discharge: 'discharge_queue',
+  disposition_processing: 'discharge_active',
   awaiting_ward_bed: 'boarding',
-  awaiting_ward_allocation: 'allocation',
-  ward_allocation_active: 'allocation',
-  awaiting_transport: 'transport',
-  in_transport: 'transport',
+  awaiting_ward_allocation: 'allocation_queue',
+  ward_allocation_active: 'allocation_active',
+  awaiting_transport: 'transport_queue',
+  in_transport: 'transport_active',
 };
 
 // Each label starts just behind the first dot of its own row and stays on its own platform. Rows
@@ -79,7 +89,8 @@ export const AREA_LABELS: { key: AreaKey; zone: number; text: string; local: [nu
   Object.keys(AREAS) as AreaKey[]
 ).map((key) => {
   const a: Area = AREAS[key];
-  return { key, zone: a.zone, text: a.text, local: [a.origin[0], a.origin[1] - 0.9] };
+  // A single-row area leaves less room above it, so its label sits closer to its dots.
+  return { key, zone: a.zone, text: a.text, local: [a.origin[0], a.origin[1] - (a.rows === 1 ? 0.55 : 0.9)] };
 });
 
 export type { AreaKey };
@@ -100,9 +111,9 @@ export interface RenderedScene {
   perArea: Record<string, number>;
 }
 
-/** Two rows per layer; further patients stack upward at the same slots, never into the next area. */
+/** One or two rows per layer; further patients stack upward at the same slots, never into the next area. */
 function slot(area: Area, index: number): { x: number; z: number; layer: number } {
-  const perLayer = area.cols * ROWS_PER_LAYER;
+  const perLayer = area.cols * (area.rows ?? ROWS_PER_LAYER);
   const layer = Math.floor(index / perLayer);
   const within = index % perLayer;
   const col = within % area.cols;

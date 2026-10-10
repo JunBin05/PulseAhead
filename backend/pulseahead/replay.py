@@ -10,11 +10,16 @@ import threading
 import uuid
 from typing import Any
 
-from .engine import EDEngine
+from .engine import QUEUE_SERVICE, EDEngine
 from .pressure import CATEGORY_LABEL, SERVICES
 from .profile import PROFILE, PROFILE_ID, ZONES
 
 MAX_ADVANCE_MIN = 60.0
+
+
+def _triangular_mean(spec: dict[str, Any]) -> float:
+    """Mean of a disclosed triangular duration assumption (min, mode, max)."""
+    return (spec["min"] + spec["mode"] + spec["max"]) / 3.0
 API_VERSION = "v1"
 
 
@@ -215,6 +220,7 @@ class ReplaySession:
 
         def diag(kind: str, res: Any, starts: list, finished: list, spec: dict, owner: str) -> dict:
             window = 30.0
+            span = min(now, window)  # the throughput window is shorter early in the run
             started = sum(1 for k, t in starts if k == kind and t > now - window)
             completed = sum(1 for k, t in finished if k == kind and t > now - window)
             servers = res.capacity
@@ -230,7 +236,7 @@ class ReplaySession:
                 "completed_last_30_min": completed,
                 # Recent completed throughput, separate from capacity: an idle service completes
                 # nothing without having no capacity.
-                "recent_throughput_tasks_per_hour": round(completed * 60.0 / window, 2),
+                "recent_throughput_tasks_per_hour": round(completed * 60.0 / span, 2) if span > 0 else 0.0,
             }
 
         diagnostics = {
@@ -249,8 +255,9 @@ class ReplaySession:
                 "busy": res.count,
                 "waiting": len(res.queue),
                 "owner": owner,
-                "median_min": spec["median"],
-                "capacity_tasks_per_hour": round(res.capacity * 60.0 / spec["median"], 2),
+                "median_min": spec.get("median", spec["mode"]),
+                # Same basis as the zone pressure panel: units x 60 / mean disclosed task minutes.
+                "capacity_patients_per_hour": round(res.capacity * 60.0 / _triangular_mean(spec), 2),
             }
 
         a_ = PROFILE["assumptions"]
@@ -258,9 +265,7 @@ class ReplaySession:
         disposition = {
             "unit": "patients per hour",
             "discharge": svc(
-                e.discharge,
-                {"median": a_["disposition_processing_minutes"]["mode"]},
-                PROFILE["owners"]["discharge_processing"],
+                e.discharge, a_["disposition_processing_minutes"], PROFILE["owners"]["discharge_processing"]
             ),
             "allocation": svc(e.allocation, a_["ward_allocation_minutes"], PROFILE["owners"]["ward_allocation"]),
             "transport": svc(e.transport, a_["transport_minutes"], PROFILE["owners"]["transport"]),
@@ -408,10 +413,6 @@ class ReplaySession:
         }
 
     # -- zone pressure ---------------------------------------------------------------------
-    @staticmethod
-    def _nearest(count: int, minutes: float) -> float:
-        return round(count * 60.0 / minutes, 2)
-
     def _pressure(self, patients: list[dict[str, Any]], now: float) -> dict[str, Any]:
         """Local zone overload state, rates in matching units and failure categories."""
         e = self.engine
@@ -419,18 +420,28 @@ class ReplaySession:
         a = PROFILE["assumptions"]
         window = min(now, float(rule["rate_window_minutes"]))
 
-        def mean(spec: dict) -> float:
-            return (spec["min"] + spec["mode"] + spec["max"]) / 3.0
+        # Doctor minutes per patient: first assessment plus the result review of the share of assessed
+        # patients who have so far come back for one (received work only, no hidden test needs).
+        assessed = len(e.work_entries.get("assessment", []))
+        reviewed = len(e.work_entries.get("assessment_review", []))
+        review_share = min(1.0, reviewed / assessed) if assessed else 0.0
+        doctor_min = _triangular_mean(a["active_assessment_minutes"]) + review_share * _triangular_mean(
+            a["result_review_minutes"]
+        )
 
         # Staffed service capacity per hour: finite units x 60 / disclosed mean task minutes.
         capacity = {
-            "triage": (e.triage.capacity, mean(a["triage_dwell_minutes"]), "patients per hour"),
-            "assessment": (e.clinicians.capacity, mean(a["active_assessment_minutes"]), "patients per hour"),
+            "triage": (e.triage.capacity, _triangular_mean(a["triage_dwell_minutes"]), "patients per hour"),
+            "assessment": (e.clinicians.capacity, doctor_min, "patients per hour"),
             "lab": (e.lab.capacity, a["lab_turnaround_minutes"]["median"], "tasks per hour"),
             "imaging": (e.imaging.capacity, a["imaging_turnaround_minutes"]["median"], "tasks per hour"),
-            "discharge": (e.discharge.capacity, mean(a["disposition_processing_minutes"]), "patients per hour"),
-            "allocation": (e.allocation.capacity, mean(a["ward_allocation_minutes"]), "patients per hour"),
-            "transport": (e.transport.capacity, mean(a["transport_minutes"]), "patients per hour"),
+            "discharge": (
+                e.discharge.capacity, _triangular_mean(a["disposition_processing_minutes"]), "patients per hour"
+            ),
+            "allocation": (
+                e.allocation.capacity, _triangular_mean(a["ward_allocation_minutes"]), "patients per hour"
+            ),
+            "transport": (e.transport.capacity, _triangular_mean(a["transport_minutes"]), "patients per hour"),
         }
 
         def rates(sid: str, inputs_ok: bool) -> dict[str, Any]:
@@ -500,14 +511,8 @@ class ReplaySession:
             }
 
         urgent_waiting: dict[str, int] = {}
-        phase_service = {
-            "awaiting_triage": "triage", "awaiting_space": "space", "awaiting_clinician": "assessment",
-            "awaiting_result_review": "assessment", "awaiting_lab": "lab", "awaiting_imaging": "imaging",
-            "awaiting_discharge": "discharge", "awaiting_ward_allocation": "allocation",
-            "awaiting_transport": "transport", "awaiting_ward_bed": "ward_beds",
-        }
         for p in patients:
-            sid = phase_service.get(p["phase"])
+            sid = QUEUE_SERVICE.get(p["phase"])
             if sid and p["urgency"] == "urgent":
                 urgent_waiting[sid] = urgent_waiting.get(sid, 0) + 1
 
@@ -540,6 +545,9 @@ class ReplaySession:
                     "urgent_group_waiting": urgent_waiting.get(s["id"], 0),
                     "onset_min": s["onset_min"],
                     "confirmed_min": s["confirmed_min"],
+                    # More than one failure category is active across the ED right now.
+                    "mixed": len(cats) > 1,
+                    "also_active": sorted(CATEGORY_LABEL[c] for c in cats if c != s["category"]),
                     "evidence": (
                         f"{s['queue']} {s['queue_label']}"
                         + (f" (threshold {s['threshold']})" if s["threshold"] is not None else "")

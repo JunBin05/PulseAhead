@@ -20,9 +20,12 @@ async (page) => {
   };
   const SERVICES = ['triage', 'assessment', 'space', 'lab', 'imaging', 'discharge', 'allocation', 'transport', 'ward_beds'];
   const ZONE_OF = { triage: 1, assessment: 2, space: 2, lab: 3, imaging: 3, discharge: 4, allocation: 4, transport: 4, ward_beds: 4 };
-  const WAIT = { awaiting_triage: 'triage', awaiting_space: 'space', awaiting_clinician: 'assessment', awaiting_result_review: 'assessment', awaiting_lab: 'lab', awaiting_imaging: 'imaging', awaiting_discharge: 'discharge', awaiting_ward_bed: 'ward_beds', awaiting_ward_allocation: 'allocation', awaiting_transport: 'transport' };
-  const DONE = { in_triage: 'triage', assessment_active: 'assessment', result_review_active: 'assessment', in_lab: 'lab', in_imaging: 'imaging', disposition_processing: 'discharge', ward_allocation_active: 'allocation', in_transport: 'transport', awaiting_space: 'space', awaiting_ward_bed: 'ward_beds' };
+  const WAIT = { awaiting_triage: 'triage', awaiting_space: 'space', awaiting_clinician: 'assessment', awaiting_result_review: 'assessment_review', awaiting_lab: 'lab', awaiting_imaging: 'imaging', awaiting_discharge: 'discharge', awaiting_ward_bed: 'ward_beds', awaiting_ward_allocation: 'allocation', awaiting_transport: 'transport' };
+  const DONE = { in_triage: 'triage', assessment_active: 'assessment', result_review_active: 'assessment_review', in_lab: 'lab', in_imaging: 'imaging', disposition_processing: 'discharge', ward_allocation_active: 'allocation', in_transport: 'transport', awaiting_space: 'space', awaiting_ward_bed: 'ward_beds' };
   const LOCAL_LABEL = { normal: 'Normal', building: 'Pressure building', overloaded: 'Overloaded', unknown: 'Cannot assess' };
+  // Waiting queues: first assessment and result review share the same doctors, so one queue.
+  const QWAIT = { ...WAIT, awaiting_result_review: 'assessment' };
+  const CAT_LABEL = { triage_arrival: 'Triage / arrival pressure', physician_space: 'Physician / staffed-space constraint', lab_imaging: 'Lab / imaging delay', departure_ward_transport: 'Departure / ward / transport blockage' };
   const OVERALL_LABEL = { stable: 'Stable', building: 'Building congestion', confirmed: 'Congested' };
 
   const timelines = (events) => {
@@ -46,7 +49,7 @@ async (page) => {
       for (const line of Object.values(tl)) {
         const x = phaseAt(line, t);
         if (!x || x.phase === 'departed') continue;
-        if (WAIT[x.phase]) cnt[WAIT[x.phase]] = (cnt[WAIT[x.phase]] || 0) + 1;
+        if (QWAIT[x.phase]) cnt[QWAIT[x.phase]] = (cnt[QWAIT[x.phase]] || 0) + 1;
         if (x.phase === 'awaiting_space') { if (line[0].critical) rWait++; else gWait++; }
         if (x.space) occ.add(x.space);
       }
@@ -121,11 +124,13 @@ async (page) => {
       for (const [k, v] of Object.entries(s.pressure.services)) {
         svc[k] = { state: v.state, queue: v.queue, blocked: v.capacity_unavailable, ok: v.inputs_ok, onset: v.onset_min, conf: v.confirmed_min, confirmsIn: v.confirms_in_min, recSince: v.recovery_since_min, lam: v.rates.received_per_hour, thr: v.rates.recent_throughput_per_hour, mu: v.rates.capacity_per_hour, sig: v.rates.pressure_signal, unit: v.rates.unit, win: v.rates.window_min, servers: v.rates.servers ?? null, mean: v.rates.mean_task_min ?? null, cat: v.category };
       }
-      rows.push({ t: s.sim_time_min, v: s.version, overall: { state: s.overall_status.state, label: s.overall_status.label, onset: s.overall_status.onset_min, conf: s.overall_status.confirmed_min, rec: s.overall_status.recovering, recSince: s.overall_status.recovery_since_min, localAlert: s.overall_status.local_alert }, zones: s.pressure.zones.map((z) => z.state), zoneLabels: s.pressure.zones.map((z) => z.label), alerts: s.pressure.alerts.map((a) => ({ svc: a.service, cat: a.category, affected: a.affected_patients, urgent: a.urgent_group_waiting, state: a.state })), mixed: s.pressure.mixed, svc, patients: s.patients.map((p) => ({ id: p.id, phase: p.phase, urgency: p.urgency })), availGeneral: s.resources.ed_spaces.available_staffed, awaitingSpace: s.resources.ed_spaces.awaiting_space });
+      rows.push({ t: s.sim_time_min, v: s.version, overall: { state: s.overall_status.state, label: s.overall_status.label, onset: s.overall_status.onset_min, conf: s.overall_status.confirmed_min, rec: s.overall_status.recovering, recSince: s.overall_status.recovery_since_min, localAlert: s.overall_status.local_alert }, zones: s.pressure.zones.map((z) => z.state), zoneLabels: s.pressure.zones.map((z) => z.label), alerts: s.pressure.alerts.map((a) => ({ svc: a.service, cat: a.category, affected: a.affected_patients, urgent: a.urgent_group_waiting, state: a.state, mixed: a.mixed, also: a.also_active })), res: { labThr: s.resources.diagnostics.lab.recent_throughput_tasks_per_hour, imgThr: s.resources.diagnostics.imaging.recent_throughput_tasks_per_hour, disp: Object.fromEntries(['discharge', 'allocation', 'transport'].map((k) => [k, s.resources.disposition[k].capacity_patients_per_hour])) }, mixed: s.pressure.mixed, svc, patients: s.patients.map((p) => ({ id: p.id, phase: p.phase, urgency: p.urgency })), availGeneral: s.resources.ed_spaces.available_staffed, awaitingSpace: s.resources.ed_spaces.awaiting_space });
     }
     const ex = await fetch(`/api/v1/replays/${id}/export`).then((r) => r.json());
     const profile = await fetch('/api/v1/profile').then((r) => r.json());
-    return { id, rows, nonFinite, ex, assumptions: profile.profile.assumptions };
+    const freeAtInProfile = (profile.profile.ward_beds || []).some((b) => 'free_at_min' in b);
+    const freeAtInExport = ((ex.profile && ex.profile.ward_beds) || []).some((b) => 'free_at_min' in b);
+    return { id, rows, nonFinite, ex, assumptions: profile.profile.assumptions, freeAtInProfile, freeAtInExport };
   }, { scenario, seed, totalMin });
 
   const ALL_GENERAL = Array.from({ length: 22 }, (_, i) => 'S' + String(i + 1).padStart(2, '0'));
@@ -180,7 +185,13 @@ async (page) => {
           const thr = round2((dones[s] || []).filter((x) => x > t - w && x <= t).length * 60 / w);
           if (Math.abs(a.lam - lam) > 0.006) bad(`T+${t} ${s} lambda ${a.lam} vs ${lam}`);
           if (Math.abs(a.thr - thr) > 0.006) bad(`T+${t} ${s} throughput ${a.thr} vs ${thr}`);
-          const mean = meanOf(s) ?? medOf[s] ?? null;
+          let mean = meanOf(s) ?? medOf[s] ?? null;
+          if (s === 'assessment') {
+            const assessed = (entries.assessment || []).filter((x) => x <= t).length;
+            const reviewed = (entries.assessment_review || []).filter((x) => x <= t).length;
+            const share = assessed ? Math.min(1, reviewed / assessed) : 0;
+            mean = meanOf('assessment') + share * (A.result_review_minutes.min + A.result_review_minutes.mode + A.result_review_minutes.max) / 3;
+          }
           if (a.servers !== null) {
             const mu = round2(a.servers * 60 / mean);
             if (Math.abs(a.mu - mu) > 0.006) bad(`T+${t} ${s} mu ${a.mu} vs ${mu}`);
@@ -192,14 +203,23 @@ async (page) => {
           if (t % 30 === 0 || (a.thr === 0 && a.mu > 0 && a.queue === 0 && rateSamples.length < 6)) rateSamples.push({ t, s, lam: a.lam, mu: a.mu, thr: a.thr, unit: a.unit, sig: a.sig });
         }
       }
+      // The diagnostics resource view and the pressure panel use one window and one basis.
+      for (const [k, s2] of [['labThr', 'lab'], ['imgThr', 'imaging']]) {
+        const want = round2((dones[s2] || []).filter((x) => x > t - w && x <= t).length * 60 / w);
+        if (Math.abs(row.res[k] - want) > 0.006) bad(`T+${t} resources.diagnostics ${s2} throughput ${row.res[k]} vs ${want}`);
+      }
+      for (const s2 of ['discharge', 'allocation', 'transport']) if (Math.abs(row.res.disp[s2] - row.svc[s2].mu) > 0.006) bad(`T+${t} disposition ${s2} capacity ${row.res.disp[s2]} vs pressure mu ${row.svc[s2].mu}`);
       // failure categories, affected and urgent-group counts from /state patients
-      const phaseSvc = (p) => WAIT[p.phase];
+      const phaseSvc = (p) => QWAIT[p.phase];
       for (const al of row.alerts) {
         const inQ = row.patients.filter((p) => phaseSvc(p) === al.svc);
         if (al.affected !== inQ.length) bad(`T+${t} alert ${al.svc} affected ${al.affected} vs ${inQ.length}`);
         if (al.urgent !== inQ.filter((p) => p.urgency === 'urgent').length) bad(`T+${t} alert ${al.svc} urgent ${al.urgent}`);
         const want = { triage: 'triage_arrival', assessment: 'physician_space', space: 'physician_space', lab: 'lab_imaging', imaging: 'lab_imaging', discharge: 'departure_ward_transport', allocation: 'departure_ward_transport', transport: 'departure_ward_transport', ward_beds: 'departure_ward_transport' }[al.svc];
         if (al.cat !== want) bad(`T+${t} alert ${al.svc} category ${al.cat}`);
+        const others = [...new Set(row.alerts.map((a) => a.cat).filter((c) => c !== al.cat))].map((c) => CAT_LABEL[c]).sort();
+        if (al.mixed !== (others.length > 0)) bad(`T+${t} alert ${al.svc} mixed ${al.mixed}`);
+        if (JSON.stringify(al.also) !== JSON.stringify(others)) bad(`T+${t} alert ${al.svc} also_active ${JSON.stringify(al.also)} vs ${JSON.stringify(others)}`);
       }
       const cats = new Set(row.alerts.map((a) => a.cat));
       if (row.mixed !== (cats.size > 1)) bad(`T+${t} mixed ${row.mixed}`);
@@ -218,6 +238,9 @@ async (page) => {
     const wantO = JSON.stringify(rec.overallEp.map((x) => [x.onset_min, x.confirmed_min, x.cleared_min]));
     out.overallEpisodes = { export: JSON.parse(gotO), independent: JSON.parse(wantO) };
     if (gotO !== wantO) bad(`overall episodes export ${gotO} vs independent ${wantO}`);
+    out.freeAtMinHidden = { profileEndpoint: run.freeAtInProfile ? 'EXPOSED' : 'absent', exportRunRecord: run.freeAtInExport ? 'present' : 'absent' };
+    if (run.freeAtInProfile) bad('free_at_min is exposed by /api/v1/profile');
+    if (!run.freeAtInExport) bad('export.profile lost the bed release schedule');
     out.nonFinite = run.nonFinite;
     if (run.nonFinite) bad(`non-finite numbers in ${run.nonFinite} responses`);
     out.rec = rec;

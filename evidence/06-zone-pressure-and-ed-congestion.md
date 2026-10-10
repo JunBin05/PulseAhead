@@ -1,6 +1,8 @@
 # Evidence: ticket 06, local overload versus ED congestion
 
-Date: 2026-10-10. Tool: Playwright MCP (`browser_run_code_unsafe`, `browser_evaluate`, `browser_take_screenshot`) against the production build on `:8000`. Snippets: [06-pressure.playwright-mcp.js](06-pressure.playwright-mcp.js) (engine and API, parts `engine` and `seed7`) and [06-ui.playwright-mcp.js](06-ui.playwright-mcp.js) (UI). Screenshots are in `evidence/shots/06-*.png`.
+Date: 2026-10-10. Tool: Playwright MCP (`browser_run_code_unsafe`, `browser_evaluate`, `browser_take_screenshot`) against the production build on `:8000`. Snippets: [06-pressure.playwright-mcp.js](06-pressure.playwright-mcp.js) (engine and API, parts `engine` and `seed7`) and [06-ui.playwright-mcp.js](06-ui.playwright-mcp.js) (UI). Layout and label checks added at the review gate: [06-zone4-layout.playwright-mcp.js](06-zone4-layout.playwright-mcp.js) and [06-label-geometry.playwright-mcp.js](06-label-geometry.playwright-mcp.js). Screenshots are in `evidence/shots/06-*.png`.
+
+**Status after the ticket 03-06 review gate:** all eight criteria still pass. The numbers in sections 4 and 5 below were re-run on the gate build (see "Review-gate fixes" for what changed against `3ecc56c`).
 
 ## How the checks work
 
@@ -53,9 +55,9 @@ Runs: `fixture-congestion-boundary` (150 min), `fixture-diagnostics` (200), `fix
 
 Checked at every minute for all services (0 mismatches):
 - **λ** = work entries into the service's queue in the previous 30 min × 60 / window (window = min(t, 30)). The first queue entered at arrival (triage or critical bypass) counts: this was a defect in the first backend version (arrivals never reached the entry log, so triage λ would always have been 0). It was found by reading the code before the run and fixed in `engine.py` `_spawn`.
-- **μ** = servers × 60 / mean task minutes (mean of the triangular assumption; lab and imaging use the disclosed median). Examples: triage 11.25 patients/h, assessment 20.57, lab 4 tasks/h, imaging 1.33, discharge 11.25, allocation 3.83, transport 3.6.
+- **μ** = servers × 60 / mean task minutes (mean of the triangular assumption; lab and imaging use the disclosed median). Examples: triage 11.25 patients/h, lab 4 tasks/h, imaging 1.33, discharge 11.25, allocation 3.83, transport 3.6. **Assessment** μ = 4 doctor slots × 60 / (mean first assessment 11.67 min + review share × mean result review 5.33 min); the review share is result-review entries ÷ first-assessment entries so far. It is 20.57 before any review and falls as reviews accumulate: `fixture-diagnostics` gives 20.57 (T+30, 0 of 5), 19.67 (T+60, 1 of 10), 18.61 (T+90, 3 of 13), 17.5 (T+120, 5 of 13), 16.05 (T+150, 8 of 13); each value equals the independent formula (minute by minute, 0 mismatches).
 - **Units:** triage, assessment, discharge, allocation and transport are patients per hour; lab and imaging are tasks per hour, separate rows; ward beds report free ward/ICU beds instead of a rate; the staffed-space service has no per-hour capacity (null, "Not modelled per hour").
-- **Throughput** is separate: completions in the same window. Idle capacity: lab at T+1 shows μ 4 tasks/h with throughput 0 and queue 0.
+- **Throughput** is separate: completions in the same window, `min(t, 30)` minutes (the diagnostics resource view uses the same span, so `resources.diagnostics.*.recent_throughput_tasks_per_hour` equals the pressure panel at every minute). Assessment λ and throughput count first assessments; a result review is the same patient returning and is logged under its own key (λ 10/h, throughput 12/h at T+60 in `fixture-diagnostics`). Idle capacity: lab at T+1 shows μ 4 tasks/h with throughput 0 and queue 0.
 - **λ > μ** is a pressure signal only: triage in the surge fixture has λ 48 against μ 11.25 at T+30 and `pressure_signal` true; `confirms_in_min` is null whenever a service is Normal. No response contained NaN or Infinity (`nonFinite` 0 in every run).
 
 ### 6. Colours, bubbles and the overall status
@@ -75,6 +77,7 @@ Short bursts, exact 10/20 min onsets, 5/10 min recovery, zero-capacity waits (`s
 
 ## Layout (deferred finding from ticket 01)
 
+- **Zone 4 (review gate):** waiting and active areas are now seven separate single-row areas (Awaiting discharge, Discharge processing, Awaiting ward/ICU bed, Awaiting ward allocation, Ward allocation, Awaiting transport, In transport), pitch 1.18, each with its own exact count. `fixture-boarding`, 40 steps: 138 dot positions all on their own row (`z` within 0.02), max layer 0, every label count equal to `/state`, 0 label overlaps.
 - **Fixed:** wait lines now use 8 columns (step 0.62), two rows per layer; further patients stack upward in layers (0.6 high) at the same slots instead of running into the next area. Each area label shows its exact count ("Awaiting space · 4"), taken from all patients, so the number is right even when dots are capped at 200.
 - **Check** (`fixture-queue-surge`, 4 steps, 23 patients awaiting triage): every rendered mesh position lies inside its own area box (0 outside), `y` sits on a layer (max layer 1), no dot beyond the platform, mesh count equals patients. The check reads real mesh positions from `canvas.dataset.meshPositions`, a test hook added to the scene.
 - **Not fixed:** area labels can still sit under dots (ticket 20 owns the visual pass).
@@ -83,21 +86,44 @@ Short bursts, exact 10/20 min onsets, 5/10 min recovery, zero-capacity waits (`s
 
 | Width | Horizontal scroll | Zone buttons min h x w (px) | Chips inside buttons | ALERT bubble inside canvas |
 |---|---|---|---|---|
-| 375 | none | 117 x 151 | yes | yes |
-| 768 | none | 117 x 196 | yes (after fix) | yes |
+| 375 | none | 117 x 151 | yes | n/a: compact scene, status icon beside the zone number, no bubble |
+| 768 | none | 117 x 196 | yes | n/a: compact scene (as above) |
 | 1024 | none | 137 x 158 | yes | yes |
 | 1440 | none | 137 x 168 | yes | yes |
 
-The first run found the chip overflowing its zone button at 768 px (buttons only 94 px wide). The zone bar now uses `auto-fit` columns of at least 150 px, and the rerun passes.
+The first run found the chip overflowing its zone button at 768 px (buttons only 94 px wide). At the review gate the zone bar became a container query on the map column: 2 × 2 by default and 4 across from 640 px of map width (375 and 768: 2 rows × 2 columns; 1024 and 1440: 1 row × 4 columns). The rerun on the final build gives the same button sizes and chips inside their buttons at every width.
 
 ## Regression
 
-Rerun on the final build: `01-regression` (counts agree, cadence 1.99 and 9.92 sim min/s, 409 on stale reset, no overlaps, 0 targets under 44 px, deterministic), `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition`: 0 problems in each. The zone button text now includes the status chip.
+Rerun on the review-gate build (2026-10-10T13:51-13:53Z): `01-regression` (counts agree, cadence 1.99 and 9.95 sim min/s, 409 on stale reset, 0 label overlaps, 0 clipped labels and 0 targets under 44 px at 375/768/1024/1440, deterministic), `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition`: 0 problems in each. The zone button text includes the status chip. An earlier run of this gate build failed the overlap/clip check in 01 (6-7 overlaps, 1 clipped label at 1024 and 1440); the layout was reworked and 01 then passed, see below.
+
+## Review-gate fixes (after `3ecc56c`)
+
+Run on the working tree before the review-gate commit; 0 problems in every check unless noted.
+
+| Finding | Change | Result |
+|---|---|---|
+| Assessment λ/μ in unlike units | result review has its own log key; λ and throughput count first assessments; μ uses doctor minutes per patient (above); queue and alert counts still merge both waits | `06-pressure` engine (6 fixtures, 1 min steps) and seed7 (720 min): 0 mismatches with the independent formula |
+| Two different μ for discharge/allocation/transport | `resources.disposition.*.capacity_patients_per_hour` uses the same triangular mean as the panel | equals the pressure μ at every minute of every run |
+| Throughput window differs | diagnostics throughput divides by `min(t, 30)` | equals the pressure panel at every minute |
+| Hidden bed schedule served by the profile | `free_at_min` removed from `/api/v1/profile`, kept in `export.profile` | profile bed keys `[id, type]`, export keys `[id, type, free_at_min]` |
+| Mixed only a global flag | each alert has `mixed` and `also_active`; drawer shows a Mixed tag | per alert and minute equal to the other active categories (sorted labels), 0 mismatches |
+| Normal/Building had no in-scene text or icon | every zone label carries the status icon and word (compact scene: icon beside the number, word screen-reader only) | all four widths: label status equals the zone chip equals `/state` at every step |
+| No data read as Normal | before Start every chip and label reads "Not started", platforms gray, no bubbles; after the first state they follow `/state` | `noDataAndLabels.pass` true |
+| Zone 4 queue and active areas shared one area | seven separate areas (above) | 40 steps, 0 problems |
+| `font-weight: 750`, `auto-fit` zone bar, DESIGN.md wording | 650; container-query zone bar; one sentence allowing the zone tint | widths table above; `06-ui` 0 problems |
+| Mesh-position hook always on | written only with `?fixture=` | absent on `/` after Start (`hook: absent`), present for fixture runs |
+| ALERT bubble overlapped its zone label (found while fixing the above) | the bubble is a child of the zone label (above it for zone 1, left of it for zones 2-4; none in the compact scene, where the status icon carries the alert) | `06-label-geometry`: 5 fixtures with an alert in each of zones 1-4, six viewports (375x812 to 1920x1080), 30 cases, 0 overlaps, 0 clipped |
+
+Layout rework detail: zone 4's seven rows put adjacent area labels about 10.5 px apart at a 679-719 px canvas, less than the 12 px they had. Area labels are now 10 px with line-height 1, and the scene switches to its compact form when a zone 4 row pitch would project below 10.2 px (map canvas narrower than about 660 px at the usual height, or any canvas height of 300 px). The stacked zone label (name and count over status) hangs below its anchor so it grows away from the rows above it.
 
 ## Not run / limits
 
 - The "Open episode" row in the drawer for a service with missing inputs is in the tested build but the snippet does not read it; it was neither asserted nor inspected (not-run).
 - A recovered local episode shows no recovery clock in the UI after clearing (the export carries it). Only the in-progress clock is shown.
+- In the compact scene (map canvas under about 660 px) area labels and the ALERT bubble are not drawn; counts and status words remain in the zone buttons and the drawer. The 1280 px viewport is compact for this reason (the drawer column narrows the map to 559 px).
+- The `06-pressure` engine and seed7 parts were run once after the backend changes and were not repeated after the later frontend-only label work (no backend file changed in between).
+- The mesh-position hook is read by `06-ui` and `06-zone4-layout`, so those runs require `?fixture=`.
 - `ward_beds` capacity unavailable is "a waiter exists" (the engine only queues when no suitable bed is free). Verified through the fixture episodes, not through an independent bed-schedule model.
 - The 12 h seed 7 run gives only one local alert (ward beds, 630/640, never cleared); only ward beds reach Overloaded and the overall status stays Stable.
 - Forecast-based zone warnings and the selected-zone forecast panel belong to ticket 10.

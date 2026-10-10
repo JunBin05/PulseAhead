@@ -56,8 +56,13 @@ def health() -> dict:
 
 @app.get("/api/v1/profile")
 def profile() -> dict:
-    # Staff-facing scenarios only; test fixtures are listed separately.
-    return {"profile": PROFILE, "scenarios": list(SCENARIOS.values())}
+    # Staff-facing scenarios only; test fixtures are listed separately. The bed release schedule is
+    # hidden replay future: it appears only in a run's export record, never in this live description.
+    public = {
+        **PROFILE,
+        "ward_beds": [{k: v for k, v in b.items() if k != "free_at_min"} for b in PROFILE["ward_beds"]],
+    }
+    return {"profile": public, "scenarios": list(SCENARIOS.values())}
 
 
 @app.get("/api/v1/fixtures")

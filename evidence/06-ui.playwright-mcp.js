@@ -25,10 +25,13 @@ async (page) => {
     in_lab: [3, -1.8, -0.9, 2, 1.2, 'In lab', ['in_lab']],
     imaging_queue: [3, -2.1, 1.0, 8, 0.62, 'Imaging queue', ['awaiting_imaging']],
     in_imaging: [3, -1.8, 2.9, 1, 1.2, 'In imaging', ['in_imaging']],
-    discharge: [4, -2.1, -3.0, 8, 0.62, 'Discharge', ['awaiting_discharge', 'disposition_processing']],
-    boarding: [4, -2.1, -1.1, 8, 0.62, 'Awaiting ward/ICU bed', ['awaiting_ward_bed']],
-    allocation: [4, -2.1, 0.8, 8, 0.62, 'Ward allocation', ['awaiting_ward_allocation', 'ward_allocation_active']],
-    transport: [4, -2.1, 2.7, 8, 0.62, 'Transport', ['awaiting_transport', 'in_transport']],
+    discharge_queue: [4, -2.1, -3.45, 8, 0.62, 'Awaiting discharge', ['awaiting_discharge']],
+    discharge_active: [4, -2.1, -2.27, 8, 0.62, 'Discharge processing', ['disposition_processing']],
+    boarding: [4, -2.1, -1.09, 8, 0.62, 'Awaiting ward/ICU bed', ['awaiting_ward_bed']],
+    allocation_queue: [4, -2.1, 0.09, 8, 0.62, 'Awaiting ward allocation', ['awaiting_ward_allocation']],
+    allocation_active: [4, -2.1, 1.27, 8, 0.62, 'Ward allocation', ['ward_allocation_active']],
+    transport_queue: [4, -2.1, 2.45, 8, 0.62, 'Awaiting transport', ['awaiting_transport']],
+    transport_active: [4, -2.1, 3.63, 8, 0.62, 'In transport', ['in_transport']],
   };
   const areaOf = (phase) => Object.entries(AREAS).find(([, a]) => a[6].includes(phase))?.[0];
 
@@ -46,6 +49,7 @@ async (page) => {
       overall: t('overall-status'), localAlert: !!document.querySelector('[data-testid=local-alert]'),
       zoneChips: [1, 2, 3, 4].map((z) => t(`zone-${z}-status`)),
       bubbles: [1, 2, 3, 4].map((z) => t(`alert-${z}`)),
+      labelStatus: [1, 2, 3, 4].map((z) => t(`zone-label-status-${z}`)),
       areaLabels: [...document.querySelectorAll('.area-label')].map((e) => e.textContent.trim()),
       meshes: Number(canvas.dataset.patientMeshes), positions: JSON.parse(canvas.dataset.meshPositions || '[]'),
       drawerZone: t('drawer-zone-state'), note: t('pressure-note'), svc,
@@ -74,7 +78,11 @@ async (page) => {
     if (ui.localAlert !== anyOver || st.overall_status.local_alert !== anyOver) bad(`local alert ui ${ui.localAlert} api ${st.overall_status.local_alert} want ${anyOver}`);
     st.pressure.zones.forEach((z, i) => {
       if (ui.zoneChips[i] !== LOCAL[z.state]) bad(`zone ${z.zone} chip ${ui.zoneChips[i]} vs ${LOCAL[z.state]}`);
-      const want = z.state === 'overloaded' ? 'ALERT' : z.state === 'unknown' ? 'Cannot assess' : null;
+      // The scene label always carries the state as icon + word (the word is screen-reader only in a compact scene).
+      if (ui.labelStatus[i] !== LOCAL[z.state]) bad(`zone ${z.zone} label status ${ui.labelStatus[i]} vs ${LOCAL[z.state]}`);
+      // Bubbles exist only in the full-size scene; a compact one (no area labels) shows the status icon instead.
+      const compact = ui.areaLabels.length === 0;
+      const want = compact ? null : z.state === 'overloaded' ? 'ALERT' : z.state === 'unknown' ? 'Cannot assess' : null;
       if (ui.bubbles[i] !== want) bad(`zone ${z.zone} bubble ${ui.bubbles[i]} vs ${want}`);
     });
     if (ui.meshes !== st.patients.length) bad(`meshes ${ui.meshes} vs ${st.patients.length}`);
@@ -172,11 +180,39 @@ async (page) => {
       const bb = bubble ? box(bubble) : null;
       return { scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, minButtonH: Math.min(...btn.map((b) => b.h)), minButtonW: Math.min(...btn.map((b) => b.w)),
         chipsInsideButtons: chips.every((c, i) => c.l >= btn[i].l - 1 && c.r <= btn[i].r + 1 && c.b <= btn[i].b + 1), bubbleInsideCanvas: bb ? bb.l >= canvas.left - 1 && bb.r <= canvas.right + 1 && bb.t >= canvas.top - 1 && bb.b <= canvas.bottom + 1 : null,
-        bubbleText: bubble?.textContent ?? null, drawerCards: document.querySelectorAll('.svc-list li').length };
+        bubbleText: bubble?.textContent ?? null, drawerCards: document.querySelectorAll('.svc-list li').length,
+        zoneBarRows: new Set(btn.map((b) => Math.round(b.t))).size, zoneBarCols: new Set(btn.map((b) => Math.round(b.l))).size,
+        labelStatus: [...document.querySelectorAll('[data-testid^=zone-label-status-]')].map((e) => e.textContent.trim() + (e.querySelector('svg') ? ' +icon' : ' NO-ICON')) };
     });
     R.checks.widths.push({ width: w, ...m, noHorizontalScroll: m.scrollW <= m.innerW });
     await page.screenshot({ path: `C:/Users/Vaas/Documents/Prototype/PulseAhead/Real/evidence/shots/06-width-${w}.png` });
   }
+  // ---- E. no data, label status, test-hook gating (normal URL, no ?fixture=) ------------------------------------
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(BASE + '/');
+  await page.waitForTimeout(800);
+  const before = await page.evaluate(() => ({
+    chips: [1, 2, 3, 4].map((z) => document.querySelector(`[data-testid="zone-${z}-status"]`)?.textContent?.trim()),
+    labels: [1, 2, 3, 4].map((z) => document.querySelector(`[data-testid="zone-label-status-${z}"]`)?.textContent?.trim()),
+    bubbles: document.querySelectorAll('.alert-bubble').length,
+    hook: document.querySelector('canvas').dataset.meshPositions ?? null,
+  }));
+  await page.getByTestId('start').click(); await waitV(1);
+  await page.getByTestId('step').click(); await waitV(2); await page.waitForTimeout(600);
+  const st = await api(`/api/v1/replays/${replayId}/state`);
+  const after = await page.evaluate(() => ({
+    chips: [1, 2, 3, 4].map((z) => document.querySelector(`[data-testid="zone-${z}-status"]`)?.textContent?.trim()),
+    labels: [1, 2, 3, 4].map((z) => document.querySelector(`[data-testid="zone-label-status-${z}"]`)?.textContent?.trim()),
+    hook: document.querySelector('canvas').dataset.meshPositions ?? null,
+    meshes: Number(document.querySelector('canvas').dataset.patientMeshes),
+  }));
+  R.checks.noDataAndLabels = {
+    before,
+    after: { ...after, hook: after.hook === null ? 'absent' : 'PRESENT' },
+    apiZones: st.pressure.zones.map((z) => z.state),
+    pass: before.chips.every((c) => c === 'Not started') && before.labels.every((l) => l === 'Not started') && before.bubbles === 0 && before.hook === null
+      && after.hook === null && after.chips.every((c, i) => c === LOCAL[st.pressure.zones[i].state]) && after.labels.every((l, i) => l === LOCAL[st.pressure.zones[i].state]) && after.meshes === st.patients.length,
+  };
   R.console = consoleMsgs;
   return R;
 }

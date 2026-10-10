@@ -132,7 +132,7 @@ PulseAhead is the calm, well-lit station a shift coordinator stands at to read t
 
 Density is operational, not editorial. A three-column workspace holds controls and feeds on the left, the isometric four-zone scene in the centre, and the selected-zone drawer on the right. Numbers use tabular figures and sit right-aligned in key/value lists, so a coordinator can compare them down a column. Exactly one accent, Deep Clinical Teal, marks primary actions and the current selection, and nothing else.
 
-The 3D scene is a simple isometric diagram, not a realistic hospital. Flat pale platforms with hairline edges, small coloured patient dots and DOM labels carry the meaning. Depth exists only to show four zones in sequence.
+The 3D scene is a simple isometric diagram, not a realistic hospital. Flat pale platforms with hairline edges, small coloured patient dots and DOM labels carry the meaning. A platform takes its zone's status tint (the spec requires zone colours), and that tint is always backed by the status icon and word in the zone's own label. Depth exists only to show four zones in sequence.
 
 **Key Characteristics:**
 - Light, cool-neutral ground with white panels; one teal accent.
@@ -157,7 +157,7 @@ A cool, low-chroma neutral world with one deep teal accent and four strictly res
 - **Scene Floor** (`scene-ground`), **Platform White** (`scene-platform`) and **Platform Edge** (`scene-platform-edge`): the 3D scene's background, zone platforms and their hairline edges.
 
 ### Status and urgency
-- **Stable Green**, **Pressure Amber**, **Overload Red** and **Unknown Slate** each come as an ink/tint pair (`status-*-ink` on `status-*-tint`, each ≥4.5:1). They are used only for status badges and banners, and each has a fixed icon: check, triangle, octagon, question mark.
+- **Stable Green**, **Pressure Amber**, **Overload Red** and **Unknown Slate** each come as an ink/tint pair (`status-*-ink` on `status-*-tint`, each ≥4.5:1). They are used only for status badges, banners and the zone platform tint, and each has a fixed icon: check, triangle, octagon, question mark.
 - **Urgency dots:** `urgency-urgent` (largest dot), `urgency-medium` and `urgency-lower` (smallest dot). Size and the legend text distinguish them as well as hue.
 
 ### Named Rules

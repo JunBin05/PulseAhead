@@ -1,6 +1,6 @@
 # HANDOFF: PulseAhead build
 
-Updated 2026-10-10 (tickets 01-06 done and committed; the ticket 06 review gate is next). Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
+Updated 2026-10-10 (tickets 01-06 done; the code-review gate for tickets 03-06 is closed and its fixes are committed as `review: fixes after ticket 03-06 gate`). Next ticket: 07. Branch `pulseahead-mvp`. Repo root is `C:\Users\Vaas\Documents\Prototype\PulseAhead\Real`. Read `CLAUDE.md` first; it holds the architecture invariants and working rules.
 
 ## Goal and rules
 
@@ -24,10 +24,10 @@ Updated 2026-10-10 (tickets 01-06 done and committed; the ticket 06 review gate 
 | 03 Assessment and shared staffing | **done**: 7/7 pass (no review gate due) | `evidence/03-assessment-and-staffing.md`, `evidence/03-staffing.playwright-mcp.js`, `evidence/shots/03-staffing-t40.png` |
 | 04 Diagnostic queues and return flow | **done**: 7/7 pass (no review gate due) | `evidence/04-diagnostics-and-return-flow.md`, `evidence/04-diagnostics.playwright-mcp.js`, `evidence/shots/04-diagnostics-t90.png` |
 | 05 Cleared discharge and constrained ward exits | **done**: 7/7 pass (no review gate due) | `evidence/05-disposition-and-exits.md`, `evidence/05-disposition.playwright-mcp.js`, `evidence/shots/05-boarding-t70.png` |
-| 06 Local overload vs ED congestion | **done**: 8/8 pass; the review gate (base `e69ceb6`) is due and not yet run | `evidence/06-zone-pressure-and-ed-congestion.md`, `evidence/06-pressure.playwright-mcp.js`, `evidence/06-ui.playwright-mcp.js`, `evidence/shots/06-*.png` |
+| 06 Local overload vs ED congestion | **done**: 8/8 pass; review gate for 03-06 closed, fixes re-verified (see "Review gate state") | `evidence/06-zone-pressure-and-ed-congestion.md`, `evidence/06-pressure.playwright-mcp.js`, `evidence/06-ui.playwright-mcp.js`, `evidence/shots/06-*.png` |
 | 07–22 | not started | n/a |
 
-Tickets 01 to 06 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has **not** been run yet.
+Tickets 01 to 06 are done. Ticket 06 is committed as `ticket 06: Distinguish local overload from ED congestion` on top of the WIP commit `c76a295`. The code-review gate for tickets 03 to 06 has run and is **closed**: its fixes are committed and re-verified (see "Review gate state"). Tickets 01 to 06 therefore also stand on the gate build.
 
 ## Verified through Playwright MCP (all pass, production build on :8000)
 
@@ -131,7 +131,8 @@ Tickets 01 to 06 are done. Ticket 06 is committed as `ticket 06: Distinguish loc
 - **Frontend** (`frontend/src/`):
   - `App.tsx`: controls, ambulance panel, resources, zone drawer and the shared staffing summary (zones 2 and 3). The test-only `?fixture=` parameter is read here.
   - `Scene.tsx`: R3F isometric scene, DOM labels, compact labels below a 560 px canvas, and the `data-patient-meshes` counter.
-  - `layout.ts`: dot areas (phases that share a waiting line or a doctor share one area; wait lines have 8 columns, two rows per layer, extra patients stack upward) and platform size (6 wide, 8 deep).
+  - `layout.ts`: dot areas (phases that share a waiting line or a doctor share one area; wait lines have 8 columns, two rows per layer, extra patients stack upward; zone 4 has seven single-row areas, queue and active apart, pitch `ZONE4_ROW_PITCH` 1.18) and platform size (6 wide, 8 deep).
+  - `status.tsx`: `ZONE_LOOK` (icon, tone and word per zone state, including `idle` = "Not started"), shared by the chips and the scene labels.
   - `api.ts`, `types.ts`, `tokens.css`, `app.css`, `icons.tsx`.
 - **Design:** `DESIGN.md` ("The Charge Desk") and `.impeccable/design.json`.
 
@@ -167,9 +168,39 @@ Start commands, from `Real/`:
 - **Git:** no global git identity is set. Commit with `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit ...`.
 - **Stray screenshots:** old screenshots sit outside the repo (`Prototype/evidence/shots/`, `Prototype/Real/evidence/shots/`); they were left untouched.
 
+## Review gate state (tickets 03-06: closed)
+
+The `code-review` skill ran two reviewers (Standards, Spec) over `e69ceb6...3ecc56c`. All in-scope findings were fixed and re-verified through Playwright MCP on the gate build; the details and numbers are in `evidence/06-zone-pressure-and-ed-congestion.md`, section "Review-gate fixes".
+
+- **Backend:** assessment λ/μ units (result review has its own log key; μ from doctor minutes per patient), one μ basis for disposition, one throughput window, bed release schedule hidden from `/api/v1/profile` (kept in `export.profile`), `capacity_unavailable` from the unit capacity, per-alert `mixed` / `also_active`.
+- **Frontend:** status icon and word in every zone label (compact scene: icon beside the number), "Not started" instead of Normal before any data, zone 4 split into queue and active areas, container-query zone bar (2 x 2, 4 across from 640 px of map width), ALERT bubble as a child of its zone label, mesh-position test hook only with `?fixture=`, types for the renamed key and the mixed fields, `DESIGN.md` sentence on the zone tint.
+- **Verified (Playwright MCP, production build on :8000):** `06-pressure` engine (6 fixtures) and seed7 (720 min): 0 mismatches; `06-ui`: 0 problems; `06-zone4-layout` (40 steps): 0 problems; `06-label-geometry` (30 cases, 6 viewports, alerts in zones 1-4): 0 overlaps, 0 clipped; regression `01` to `05`: 0 problems.
+- **A layout lesson worth keeping:** the first version of the gate fix passed every functional check and failed regression 01's overlap and clip check (6 to 7 overlaps, 1 clipped label). Adding a word to a label widens it, and seven zone 4 rows leave about 10.5 px between labels. Run `01-regression` and `06-label-geometry` after any change to labels, areas or platform depth.
+
+### Review findings deliberately deferred (not fixed in this gate)
+
+- **Missing-feed masking is partial:** only `pressure` hides counts for a service whose inputs are missing; `resources.diagnostics.*.waiting`, `zones[].lab_queue` and the sidebar still show exact numbers. Owned by ticket 08 (received data).
+- **Overall monitor ignores missing space-feed inputs**, while the local one respects them. Ticket 08/10.
+- **Total ED time and its parts shown separately in the UI** (story 23): export only for now. Tickets 11 and 17 (comparison panel).
+- **Normal shift ends permanently red in zone 4 (ward beds):** a consequence of the disclosed Q5 bed assumption, an honest model state (also written into `OPEN_QUESTIONS.md` Q6). Revisit with ticket 09 scenarios.
+- **Smells left as judgement calls:** repeated inline styles in `App.tsx`, `Scene` pass-through props, positional `SuppliedInputs(...)` in fixtures, a duplicated local helper `r()` in `engine.py`, mysterious short names in `replay.py`.
+- **Compact scene (map under about 660 px):** area labels and ALERT bubble are not drawn; counts and status words are in the zone buttons and drawer. The 1280 px viewport is compact because the drawer column narrows the map. Ticket 20 owns the full visual and layout pass.
+
 ## Exact next steps
 
-1. **Code-review gate for tickets 03 to 06** (`code-review` skill, base `e69ceb6`): fix Standards and Spec findings inline, re-verify affected criteria through Playwright MCP, commit the fixes.
+1. Start ticket 07 (blockers 04, 05, 06 are complete).
 2. Continue in blocker order: 07 -> 08 -> 09 -> 10 (review gate) -> 11 (review gate) -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 (review gate) -> 18 -> 19 (review gate) -> 20.
 3. **Stop before ticket 21** (hosting): ask the user for an authorized target. Ticket 22's rehearsal and the organizer check stay with the user.
-4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow or layout changed, the `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition` and `06-*` snippets. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`; copy them there with the leading `//` lines removed.
+4. At each ticket, re-run `evidence/01-regression.playwright-mcp.js` and, if the flow or layout changed, the `02-intake`, `03-staffing`, `04-diagnostics`, `05-disposition` and `06-*` snippets. Playwright MCP runs snippets by filename from `Prototype/.playwright-mcp/`; copy them there with the leading `//` lines removed (for `06-pressure`, also set `PART`).
+
+## Tool quirks seen this session
+
+- **Bash heredocs failed again** when the body held quotes and template strings ("unexpected EOF"): write patch scripts with the Write tool into the scratchpad and run them with `node`. Source files have CRLF line endings (`Scene.tsx`, `layout.ts`, `app.css`, the evidence snippets): make patch scripts EOL-tolerant (replace `\r\n` with `\n`, patch, write back) or `Edit` will not match.
+- **A stale Playwright Chrome** held the profile again ("Browser is already in use"); stopping only the `chrome.exe` processes whose command line contains `mcp-chrome-ac24c5d` fixed it.
+- **Snippet staging:** copy `evidence/*.playwright-mcp.js` to `Prototype/.playwright-mcp/` with the leading `//` lines removed; `browser_run_code_unsafe` echoes the whole snippet back, so long snippets cost output tokens on every run.
+
+- **Bash heredocs with Python containing triple quotes failed** ("unexpected EOF"): write the script with the Write tool to the scratchpad and run it with `backend/.venv/Scripts/python.exe <script> <repo root>`.
+- **Restart the backend** after Python edits: kill every `python.exe` whose command line contains `uvicorn pulseahead.api:app`, then start `backend/.venv/Scripts/python.exe -m uvicorn pulseahead.api:app --app-dir backend --port 8000` from `Real/` (hidden window, logs to `%TEMP%\pulse-backend.log`). Rebuild the frontend first (`cd frontend && npm run build`) after any `src` change.
+- **A stale Playwright Chrome** can lock the profile ("Browser is already in use"): stop only the Chrome tree whose command line has `mcp-chrome-ac24c5d`.
+- **`/advance` takes at most 60 min per call.**
+- **Attribution:** commit trailers use the line given in the session's system reminder; the author identity is `Vaas <airscan.health@gmail.com>` via `git -c user.name=Vaas -c user.email=airscan.health@gmail.com commit`.
