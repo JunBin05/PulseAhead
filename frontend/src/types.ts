@@ -864,3 +864,76 @@ export interface ActionsView {
   in_flight: ActionRecord | null;
   history: ActionRecord[];
 }
+
+// -- Demo story (backend demo_case.py, evaluation.py) ---------------------------------------------
+export interface DemoDriver {
+  id: 'boarding' | 'diagnostics' | 'arrivals';
+  label: string;
+  services: string[];
+  evidence: Record<string, unknown>;
+  rule: string;
+}
+
+export interface DemoDrivers {
+  kind: 'demo_drivers';
+  source: { replay_id: string; run_number: number; version: number; sim_time_min: number };
+  supported_count: number;
+  drivers: DemoDriver[];
+  sim_time_min: number;
+}
+
+export interface DemoCase {
+  kind: 'demo_case';
+  available: boolean;
+  reason?: string;
+  label?: string;
+  scenario?: string;
+  scenario_name?: string;
+  seed?: number;
+  partition?: string;
+  service?: string;
+  service_name?: string;
+  alert_time_min?: number;
+  why?: string;
+  scan?: { shifts_scanned: number; qualifying: number; lead_min: number; onset_min: number; drivers: string[] };
+  retrospective?: {
+    label: string;
+    definition: string;
+    service: string;
+    onset_min: number | null;
+    confirmed_min: number | null;
+  };
+}
+
+export interface SavedEvaluation {
+  id: string;
+  status: string;
+  created: string;
+  elapsed_s: number;
+  label: string;
+  results: {
+    aggregate: {
+      shifts: number;
+      episodes?: number;
+      early_warned?: number;
+      late_only?: number;
+      missed?: number;
+      early_30_min_or_more?: number;
+      lead_min?: { min: number; median: number; max: number; n: number } | null;
+      false_warnings_per_shift?: number;
+      target_false_warnings_per_shift?: number;
+      policies?: Record<
+        string,
+        { total_ed_patient_min: number; unfinished_stays: number; resource_hours: number; actions_approved: number }
+      >;
+      saving_vs_no_action_by_shift?: Record<string, { better: number; worse: number; same: number; per_shift_patient_min: number[] }>;
+    };
+    settings: {
+      warning_threshold: number;
+      threshold_tuned: boolean;
+      exposure?: string;
+      partition?: string;
+      limits: string[];
+    };
+  };
+}

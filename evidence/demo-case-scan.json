@@ -1,0 +1,1063 @@
+{
+ "kind": "demo_case_scan",
+ "engine_version": "flow-4",
+ "forecast_model": "mc-flow-1",
+ "warning_threshold": 0.4,
+ "partitions": [
+  "development",
+  "tuning"
+ ],
+ "min_lead_min": 30.0,
+ "driver_rules": {
+  "boarding": {
+   "label": "Blocked departures (boarding, no suitable ward/ICU bed)",
+   "min_boarding": 3,
+   "rule": "At least 3 decided Ward/ICU patients are boarding, and at least one is waiting for a bed of a type with no free bed."
+  },
+  "diagnostics": {
+   "label": "Diagnostic delay",
+   "min_queue": 2,
+   "rule": "A lab or imaging queue of at least 2, with received demand above capacity (lambda > mu) or a received turnaround slower than the model's prior."
+  },
+  "arrivals": {
+   "label": "Announced arrivals",
+   "min_patients": 2,
+   "window_min": 30,
+   "rule": "At least 2 patients on announced ambulances with a received ETA in the next 30 minutes."
+  }
+ },
+ "ranking": "more supported drivers, then best_action over supported_not_top, then overall status Stable, then longer lead, then lower seed",
+ "shifts": [
+  {
+   "family": "normal",
+   "seed": 7,
+   "partition": "development",
+   "episodes": [],
+   "false_warning_runs": 1,
+   "warning_runs": 2,
+   "candidates": []
+  },
+  {
+   "family": "normal",
+   "seed": 1001,
+   "partition": "tuning",
+   "episodes": [],
+   "false_warning_runs": 0,
+   "warning_runs": 0,
+   "candidates": []
+  },
+  {
+   "family": "normal",
+   "seed": 1002,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "triage",
+     "onset": 447.0,
+     "confirmed": 457.0,
+     "result": "late_only",
+     "lead_min": null
+    },
+    {
+     "key": "lab",
+     "onset": 261.0,
+     "confirmed": 271.0,
+     "result": "early_warned",
+     "lead_min": 51.0
+    },
+    {
+     "key": "lab",
+     "onset": 312.0,
+     "confirmed": 322.0,
+     "result": "early_warned",
+     "lead_min": 72.0
+    },
+    {
+     "key": "imaging",
+     "onset": 359.0,
+     "confirmed": 369.0,
+     "result": "early_warned",
+     "lead_min": 44.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 509.0,
+     "confirmed": 519.0,
+     "result": "early_warned",
+     "lead_min": 59.0
+    }
+   ],
+   "false_warning_runs": 0,
+   "warning_runs": 6,
+   "candidates": [
+    {
+     "key": "lab",
+     "onset_min": 261.0,
+     "confirmed_min": 271.0,
+     "alert_time_min": 210.0,
+     "lead_min": 51.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "lab",
+     "onset_min": 312.0,
+     "confirmed_min": 322.0,
+     "alert_time_min": 240.0,
+     "lead_min": 72.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "imaging",
+     "onset_min": 359.0,
+     "confirmed_min": 369.0,
+     "alert_time_min": 315.0,
+     "lead_min": 44.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 509.0,
+     "confirmed_min": 519.0,
+     "alert_time_min": 450.0,
+     "lead_min": 59.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "busy-recovers",
+   "seed": 7,
+   "partition": "development",
+   "episodes": [
+    {
+     "key": "discharge",
+     "onset": 342.0,
+     "confirmed": 352.0,
+     "result": "late_only",
+     "lead_min": null
+    },
+    {
+     "key": "ward_beds",
+     "onset": 393.0,
+     "confirmed": 403.0,
+     "result": "early_warned",
+     "lead_min": 78.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 501.0,
+     "confirmed": 511.0,
+     "result": "early_warned",
+     "lead_min": 66.0
+    }
+   ],
+   "false_warning_runs": 2,
+   "warning_runs": 4,
+   "candidates": [
+    {
+     "key": "ward_beds",
+     "onset_min": 393.0,
+     "confirmed_min": 403.0,
+     "alert_time_min": 315.0,
+     "lead_min": 78.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [],
+     "driver_count": 0,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 501.0,
+     "confirmed_min": 511.0,
+     "alert_time_min": 435.0,
+     "lead_min": 66.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "busy-recovers",
+   "seed": 1011,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "lab",
+     "onset": 145.0,
+     "confirmed": 155.0,
+     "result": "early_warned",
+     "lead_min": 40.0
+    },
+    {
+     "key": "imaging",
+     "onset": 205.0,
+     "confirmed": 215.0,
+     "result": "early_warned",
+     "lead_min": 55.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 175.0,
+     "confirmed": 185.0,
+     "result": "early_warned",
+     "lead_min": 85.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 259.0,
+     "confirmed": 269.0,
+     "result": "early_warned",
+     "lead_min": 4.0
+    }
+   ],
+   "false_warning_runs": 1,
+   "warning_runs": 5,
+   "candidates": [
+    {
+     "key": "lab",
+     "onset_min": 145.0,
+     "confirmed_min": 155.0,
+     "alert_time_min": 105.0,
+     "lead_min": 40.0,
+     "qualifies": true,
+     "reason": "qualifies",
+     "drivers": [
+      "diagnostics",
+      "arrivals"
+     ],
+     "driver_count": 2,
+     "overall_label": "Stable",
+     "chance": 0.42,
+     "onset": {
+      "low_min": 122.0,
+      "median_min": 143.0,
+      "high_min": 177.0,
+      "expected_in_min": 38.0,
+      "low_in_min": 17.0,
+      "high_in_min": 72.0
+     },
+     "top_action": {
+      "id": "diagnostic_reserve:lab",
+      "preset": "diagnostic_reserve",
+      "target": "lab",
+      "zone": 3,
+      "service": "lab",
+      "feasible": true,
+      "label": "best_action",
+      "order": 1,
+      "owner": "Lab manager",
+      "saving_mean": 166.536,
+      "saving_lower_90": 131.136
+     }
+    },
+    {
+     "key": "imaging",
+     "onset_min": 205.0,
+     "confirmed_min": 215.0,
+     "alert_time_min": 150.0,
+     "lead_min": 55.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 175.0,
+     "confirmed_min": 185.0,
+     "alert_time_min": 90.0,
+     "lead_min": 85.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [],
+     "driver_count": 0,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 259.0,
+     "confirmed_min": 269.0,
+     "alert_time_min": 255.0,
+     "lead_min": 4.0,
+     "qualifies": false,
+     "reason": "lead 4.0 min is under 30"
+    }
+   ]
+  },
+  {
+   "family": "busy-recovers",
+   "seed": 1012,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "triage",
+     "onset": 559.0,
+     "confirmed": 569.0,
+     "result": "early_warned",
+     "lead_min": 19.0
+    },
+    {
+     "key": "triage",
+     "onset": 598.0,
+     "confirmed": 608.0,
+     "result": "early_warned",
+     "lead_min": 58.0
+    },
+    {
+     "key": "lab",
+     "onset": 161.0,
+     "confirmed": 171.0,
+     "result": "late_only",
+     "lead_min": null
+    },
+    {
+     "key": "lab",
+     "onset": 575.0,
+     "confirmed": 585.0,
+     "result": "early_warned",
+     "lead_min": 20.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 449.0,
+     "confirmed": 459.0,
+     "result": "early_warned",
+     "lead_min": 89.0
+    }
+   ],
+   "false_warning_runs": 4,
+   "warning_runs": 9,
+   "candidates": [
+    {
+     "key": "triage",
+     "onset_min": 559.0,
+     "confirmed_min": 569.0,
+     "alert_time_min": 540.0,
+     "lead_min": 19.0,
+     "qualifies": false,
+     "reason": "lead 19.0 min is under 30"
+    },
+    {
+     "key": "triage",
+     "onset_min": 598.0,
+     "confirmed_min": 608.0,
+     "alert_time_min": 540.0,
+     "lead_min": 58.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "boarding"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "lab",
+     "onset_min": 575.0,
+     "confirmed_min": 585.0,
+     "alert_time_min": 555.0,
+     "lead_min": 20.0,
+     "qualifies": false,
+     "reason": "lead 20.0 min is under 30"
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 449.0,
+     "confirmed_min": 459.0,
+     "alert_time_min": 360.0,
+     "lead_min": 89.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "arrival-surge",
+   "seed": 7,
+   "partition": "development",
+   "episodes": [],
+   "false_warning_runs": 3,
+   "warning_runs": 4,
+   "candidates": []
+  },
+  {
+   "family": "arrival-surge",
+   "seed": 1021,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "imaging",
+     "onset": 422.0,
+     "confirmed": 432.0,
+     "result": "early_warned",
+     "lead_min": 2.0
+    }
+   ],
+   "false_warning_runs": 2,
+   "warning_runs": 3,
+   "candidates": [
+    {
+     "key": "imaging",
+     "onset_min": 422.0,
+     "confirmed_min": 432.0,
+     "alert_time_min": 420.0,
+     "lead_min": 2.0,
+     "qualifies": false,
+     "reason": "lead 2.0 min is under 30"
+    }
+   ]
+  },
+  {
+   "family": "arrival-surge",
+   "seed": 1022,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "lab",
+     "onset": 181.0,
+     "confirmed": 191.0,
+     "result": "early_warned",
+     "lead_min": 16.0
+    },
+    {
+     "key": "lab",
+     "onset": 257.0,
+     "confirmed": 267.0,
+     "result": "early_warned",
+     "lead_min": 77.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 255.0,
+     "confirmed": 265.0,
+     "result": "early_warned",
+     "lead_min": 60.0
+    }
+   ],
+   "false_warning_runs": 3,
+   "warning_runs": 6,
+   "candidates": [
+    {
+     "key": "lab",
+     "onset_min": 181.0,
+     "confirmed_min": 191.0,
+     "alert_time_min": 165.0,
+     "lead_min": 16.0,
+     "qualifies": false,
+     "reason": "lead 16.0 min is under 30"
+    },
+    {
+     "key": "lab",
+     "onset_min": 257.0,
+     "confirmed_min": 267.0,
+     "alert_time_min": 180.0,
+     "lead_min": 77.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 255.0,
+     "confirmed_min": 265.0,
+     "alert_time_min": 195.0,
+     "lead_min": 60.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "diagnostic-delay",
+   "seed": 7,
+   "partition": "development",
+   "episodes": [],
+   "false_warning_runs": 6,
+   "warning_runs": 6,
+   "candidates": []
+  },
+  {
+   "family": "diagnostic-delay",
+   "seed": 1031,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "overall",
+     "onset": 372.0,
+     "confirmed": 392.0,
+     "result": "early_warned",
+     "lead_min": 57.0
+    },
+    {
+     "key": "space",
+     "onset": 310.0,
+     "confirmed": 320.0,
+     "result": "early_warned",
+     "lead_min": 55.0
+    },
+    {
+     "key": "lab",
+     "onset": 208.0,
+     "confirmed": 218.0,
+     "result": "late_only",
+     "lead_min": null
+    },
+    {
+     "key": "lab",
+     "onset": 534.0,
+     "confirmed": 544.0,
+     "result": "early_warned",
+     "lead_min": 9.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 597.0,
+     "confirmed": 607.0,
+     "result": "late_only",
+     "lead_min": null
+    }
+   ],
+   "false_warning_runs": 0,
+   "warning_runs": 3,
+   "candidates": [
+    {
+     "key": "overall",
+     "onset_min": 372.0,
+     "confirmed_min": 392.0,
+     "alert_time_min": 315.0,
+     "lead_min": 57.0,
+     "qualifies": false,
+     "reason": "overall-ED episode: the demo case is a local service alert"
+    },
+    {
+     "key": "space",
+     "onset_min": 310.0,
+     "confirmed_min": 320.0,
+     "alert_time_min": 255.0,
+     "lead_min": 55.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "lab",
+     "onset_min": 534.0,
+     "confirmed_min": 544.0,
+     "alert_time_min": 525.0,
+     "lead_min": 9.0,
+     "qualifies": false,
+     "reason": "lead 9.0 min is under 30"
+    }
+   ]
+  },
+  {
+   "family": "diagnostic-delay",
+   "seed": 1032,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "triage",
+     "onset": 486.0,
+     "confirmed": 496.0,
+     "result": "early_warned",
+     "lead_min": 51.0
+    },
+    {
+     "key": "space",
+     "onset": 511.0,
+     "confirmed": 521.0,
+     "result": "early_warned",
+     "lead_min": 31.0
+    }
+   ],
+   "false_warning_runs": 4,
+   "warning_runs": 6,
+   "candidates": [
+    {
+     "key": "triage",
+     "onset_min": 486.0,
+     "confirmed_min": 496.0,
+     "alert_time_min": 435.0,
+     "lead_min": 51.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "arrivals"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "space",
+     "onset_min": 511.0,
+     "confirmed_min": 521.0,
+     "alert_time_min": 480.0,
+     "lead_min": 31.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [],
+     "driver_count": 0,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "boarding-blockage",
+   "seed": 7,
+   "partition": "development",
+   "episodes": [],
+   "false_warning_runs": 0,
+   "warning_runs": 0,
+   "candidates": []
+  },
+  {
+   "family": "boarding-blockage",
+   "seed": 1041,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "ward_beds",
+     "onset": 159.0,
+     "confirmed": 169.0,
+     "result": "early_warned",
+     "lead_min": 9.0
+    }
+   ],
+   "false_warning_runs": 3,
+   "warning_runs": 4,
+   "candidates": [
+    {
+     "key": "ward_beds",
+     "onset_min": 159.0,
+     "confirmed_min": 169.0,
+     "alert_time_min": 150.0,
+     "lead_min": 9.0,
+     "qualifies": false,
+     "reason": "lead 9.0 min is under 30"
+    }
+   ]
+  },
+  {
+   "family": "boarding-blockage",
+   "seed": 1042,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "triage",
+     "onset": 545.0,
+     "confirmed": 555.0,
+     "result": "early_warned",
+     "lead_min": 5.0
+    },
+    {
+     "key": "lab",
+     "onset": 581.0,
+     "confirmed": 591.0,
+     "result": "early_warned",
+     "lead_min": 26.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 164.0,
+     "confirmed": 174.0,
+     "result": "early_warned",
+     "lead_min": 44.0
+    }
+   ],
+   "false_warning_runs": 2,
+   "warning_runs": 6,
+   "candidates": [
+    {
+     "key": "triage",
+     "onset_min": 545.0,
+     "confirmed_min": 555.0,
+     "alert_time_min": 540.0,
+     "lead_min": 5.0,
+     "qualifies": false,
+     "reason": "lead 5.0 min is under 30"
+    },
+    {
+     "key": "lab",
+     "onset_min": 581.0,
+     "confirmed_min": 591.0,
+     "alert_time_min": 555.0,
+     "lead_min": 26.0,
+     "qualifies": false,
+     "reason": "lead 26.0 min is under 30"
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 164.0,
+     "confirmed_min": 174.0,
+     "alert_time_min": 120.0,
+     "lead_min": 44.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [],
+     "driver_count": 0,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "mixed-cascade",
+   "seed": 7,
+   "partition": "development",
+   "episodes": [
+    {
+     "key": "space",
+     "onset": 366.0,
+     "confirmed": 376.0,
+     "result": "late_only",
+     "lead_min": null
+    },
+    {
+     "key": "imaging",
+     "onset": 128.0,
+     "confirmed": 138.0,
+     "result": "late_only",
+     "lead_min": null
+    },
+    {
+     "key": "ward_beds",
+     "onset": 271.0,
+     "confirmed": 281.0,
+     "result": "early_warned",
+     "lead_min": 46.0
+    }
+   ],
+   "false_warning_runs": 2,
+   "warning_runs": 4,
+   "candidates": [
+    {
+     "key": "ward_beds",
+     "onset_min": 271.0,
+     "confirmed_min": 281.0,
+     "alert_time_min": 225.0,
+     "lead_min": 46.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "mixed-cascade",
+   "seed": 1051,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "imaging",
+     "onset": 143.0,
+     "confirmed": 153.0,
+     "result": "early_warned",
+     "lead_min": 8.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 149.0,
+     "confirmed": 159.0,
+     "result": "early_warned",
+     "lead_min": 14.0
+    }
+   ],
+   "false_warning_runs": 0,
+   "warning_runs": 2,
+   "candidates": [
+    {
+     "key": "imaging",
+     "onset_min": 143.0,
+     "confirmed_min": 153.0,
+     "alert_time_min": 135.0,
+     "lead_min": 8.0,
+     "qualifies": false,
+     "reason": "lead 8.0 min is under 30"
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 149.0,
+     "confirmed_min": 159.0,
+     "alert_time_min": 135.0,
+     "lead_min": 14.0,
+     "qualifies": false,
+     "reason": "lead 14.0 min is under 30"
+    }
+   ]
+  },
+  {
+   "family": "mixed-cascade",
+   "seed": 1052,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "space",
+     "onset": 595.0,
+     "confirmed": 605.0,
+     "result": "early_warned",
+     "lead_min": 55.0
+    },
+    {
+     "key": "imaging",
+     "onset": 164.0,
+     "confirmed": 174.0,
+     "result": "early_warned",
+     "lead_min": 44.0
+    },
+    {
+     "key": "ward_beds",
+     "onset": 206.0,
+     "confirmed": 216.0,
+     "result": "early_warned",
+     "lead_min": 26.0
+    }
+   ],
+   "false_warning_runs": 3,
+   "warning_runs": 6,
+   "candidates": [
+    {
+     "key": "space",
+     "onset_min": 595.0,
+     "confirmed_min": 605.0,
+     "alert_time_min": 540.0,
+     "lead_min": 55.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "boarding"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "imaging",
+     "onset_min": 164.0,
+     "confirmed_min": 174.0,
+     "alert_time_min": 120.0,
+     "lead_min": 44.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    },
+    {
+     "key": "ward_beds",
+     "onset_min": 206.0,
+     "confirmed_min": 216.0,
+     "alert_time_min": 180.0,
+     "lead_min": 26.0,
+     "qualifies": false,
+     "reason": "lead 26.0 min is under 30"
+    }
+   ]
+  },
+  {
+   "family": "no-effective-action",
+   "seed": 7,
+   "partition": "development",
+   "episodes": [],
+   "false_warning_runs": 3,
+   "warning_runs": 3,
+   "candidates": []
+  },
+  {
+   "family": "no-effective-action",
+   "seed": 1061,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "imaging",
+     "onset": 138.0,
+     "confirmed": 148.0,
+     "result": "early_warned",
+     "lead_min": 63.0
+    }
+   ],
+   "false_warning_runs": 0,
+   "warning_runs": 1,
+   "candidates": [
+    {
+     "key": "imaging",
+     "onset_min": 138.0,
+     "confirmed_min": 148.0,
+     "alert_time_min": 75.0,
+     "lead_min": 63.0,
+     "qualifies": false,
+     "reason": "fewer than two supported drivers",
+     "drivers": [
+      "diagnostics"
+     ],
+     "driver_count": 1,
+     "overall_label": "Stable",
+     "chance": null,
+     "onset": null
+    }
+   ]
+  },
+  {
+   "family": "no-effective-action",
+   "seed": 1062,
+   "partition": "tuning",
+   "episodes": [
+    {
+     "key": "ward_beds",
+     "onset": 343.0,
+     "confirmed": 353.0,
+     "result": "early_warned",
+     "lead_min": 13.0
+    }
+   ],
+   "false_warning_runs": 2,
+   "warning_runs": 4,
+   "candidates": [
+    {
+     "key": "ward_beds",
+     "onset_min": 343.0,
+     "confirmed_min": 353.0,
+     "alert_time_min": 330.0,
+     "lead_min": 13.0,
+     "qualifies": false,
+     "reason": "lead 13.0 min is under 30"
+    }
+   ]
+  }
+ ],
+ "qualifying": [
+  {
+   "key": "lab",
+   "onset_min": 145.0,
+   "confirmed_min": 155.0,
+   "alert_time_min": 105.0,
+   "lead_min": 40.0,
+   "qualifies": true,
+   "reason": "qualifies",
+   "drivers": [
+    "diagnostics",
+    "arrivals"
+   ],
+   "driver_count": 2,
+   "overall_label": "Stable",
+   "chance": 0.42,
+   "onset": {
+    "low_min": 122.0,
+    "median_min": 143.0,
+    "high_min": 177.0,
+    "expected_in_min": 38.0,
+    "low_in_min": 17.0,
+    "high_in_min": 72.0
+   },
+   "top_action": {
+    "id": "diagnostic_reserve:lab",
+    "preset": "diagnostic_reserve",
+    "target": "lab",
+    "zone": 3,
+    "service": "lab",
+    "feasible": true,
+    "label": "best_action",
+    "order": 1,
+    "owner": "Lab manager",
+    "saving_mean": 166.536,
+    "saving_lower_90": 131.136
+   },
+   "family": "busy-recovers",
+   "seed": 1011,
+   "partition": "tuning"
+  }
+ ],
+ "elapsed_s": 96.8
+}

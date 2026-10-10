@@ -1,5 +1,13 @@
 # HANDOFF: PulseAhead build
 
+## Demo rework status (2026-10-11, after the final build) - read this first
+
+**The Demo bar now tells the brief's six beats A to F** (`frontend/src/Demo.tsx`, `evidence/demo-story.md`, `evidence/demo-smoke.mjs`). The case comes from `GET /api/v1/demo/case`, chosen by `python -m pulseahead.demo_scan` (run from `backend/`) over development/tuning seeds only: one qualifying case, `busy-recovers` tuning seed 1011, Lab, alert T+01:45, counts onset T+02:25. It is a demo case, not held-out evidence. New API: `/demo/case`, `/replays/{id}/demo/drivers`, `/evaluations/latest` (finished evaluations are saved to git-ignored `backend/saved_runs/evaluations/`; run one from the Evaluation panel on a fresh checkout or beat F says none exists). No engine change; `flow-4`, seed 7 normal 705 / 59.
+
+**Still true:** false warnings 2.71 per shift (target 1, not met); PulseAhead beats no action in 7 of 7 shifts, not the reactive baseline in aggregate; 2 of 6 interventions; not deployed; no rehearsal; test seed [0] of every family is exposed. In the demo case the action's deadline is already `too_late` and only one action is feasible, so there is no A-vs-B what-if; the beats say so.
+
+**Next (Priority 2):** pick the warning threshold (0.4/0.6/0.8) and the reactive trigger on development/tuning seeds only, freeze them (bump the forecast model version), run the held-out evaluation once on test seed [1]. Then keyboard/reduced-motion/regression 01 passes. Ticket 21 (hosting) needs an authorized target; ticket 22 is the user's.
+
 ## Final build status (2026-10-11, end of the 2-hour push) - supersedes older statements below
 
 **Branch `pulseahead-mvp`, nothing pushed.** Committed this session: ticket 11 (ward coordination and the shared request/approval/lifecycle machinery), 14 (diagnostic reserve slot, reduced), 17 (lite ranking, priority list, what-if A vs B, per-action deadline, impact per reserve unit-hour), the guided **Demo bar**, **predicted waits** (FR-03), ticket 18 merged with 19 (one background evaluation run, panel, export) and a 2D list view toggle. Engine `flow-4`; seed 7 normal still 705 events / 59 patients.

@@ -17,10 +17,12 @@ that are never registered with the replay store.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from . import actions as act
@@ -35,6 +37,8 @@ END_MIN = WARMUP_MIN + SCORED_MIN  # 600
 TRUTH_EXTENSION_MIN = 110  # so a warning near the end of the window can still meet its episode
 EARLY_LEAD_MIN = 30.0
 COORDINATOR = act.DEMO_COORDINATOR
+
+EVAL_DIR = Path(__file__).resolve().parents[1] / "saved_runs" / "evaluations"
 
 JOBS: dict[str, "EvalJob"] = {}
 _JOBS_LOCK = threading.Lock()
@@ -100,6 +104,10 @@ def settings() -> dict[str, Any]:
             "reactive": "Same catalog, owners and delays; the owner approves a feasible action only once its service is Overloaded. No comparison is used.",
             "pulseahead": "Every 15 min with no action in flight, compare actions; the owner approves the top action only if it is labelled Best action.",
         },
+        "exposure": (
+            "Test seed [0] of every family was evaluated by an earlier run and its results were seen: it is exposed, "
+            "not an untouched final test. No setting was tuned on it in this build."
+        ),
         "limits": [
             "One shift per family: results are descriptive and carry no confidence interval.",
             "The warning threshold 0.4 is the provisional starting value and was not tuned.",
@@ -368,6 +376,33 @@ def run_job(job: EvalJob) -> None:
             job.current = None
     finally:
         job.finished = time.time()
+        if job.status == "done":
+            try:
+                save(job)
+            except OSError:
+                pass  # the in-memory job still serves its results
+
+
+def save(job: EvalJob) -> None:
+    """Persist a finished evaluation exactly as served, so the demo can show real numbers instantly."""
+    EVAL_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {**job.progress(), "format": "pulseahead-evaluation", "format_version": 1}
+    (EVAL_DIR / f"{job.id}.json").write_text(json.dumps(payload, indent=1), encoding="utf-8")
+
+
+def latest_saved() -> dict[str, Any] | None:
+    """The newest finished evaluation on disk (by its created time), or None."""
+    if not EVAL_DIR.is_dir():
+        return None
+    best: dict[str, Any] | None = None
+    for path in EVAL_DIR.glob("*.json"):
+        try:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if rec.get("status") == "done" and (best is None or rec.get("created", "") > best.get("created", "")):
+            best = rec
+    return best
 
 
 def start(families: list[str] | None = None) -> EvalJob:

@@ -1,6 +1,9 @@
 import type {
   ActionRequest,
   ComparisonResult,
+  DemoCase,
+  DemoDrivers,
+  SavedEvaluation,
   Forecast,
   ForecastExplanation,
   SavedSummary,
@@ -116,6 +119,16 @@ export const api = {
       forecast: { samples: number };
     },
   ) => request<SavedSummary>(`/replays/${id}/save`, { method: 'POST', body: JSON.stringify(body) }),
+  /** The scanned demo case and its retrospective no-action baseline. */
+  demoCase: () => request<DemoCase>('/demo/case'),
+  /** Which received pressures support the alert, at one state version. */
+  demoDrivers: (id: string, version: number) =>
+    request<DemoDrivers>(`/replays/${id}/demo/drivers`, {
+      method: 'POST',
+      body: JSON.stringify({ expected_version: version, samples: 50 }),
+    }),
+  /** The newest finished evaluation, exactly as measured (404 when none is saved). */
+  latestEvaluation: () => request<SavedEvaluation>('/evaluations/latest'),
   saved: () => request<{ saved: SavedSummary[] }>('/saved'),
   load: (savedId: string) =>
     request<Snapshot>(`/saved/${savedId}/load`, { method: 'POST', body: JSON.stringify({}) }),

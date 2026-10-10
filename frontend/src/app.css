@@ -1156,3 +1156,97 @@ p {
   gap: var(--s-3);
   padding: var(--s-2) 0;
 }
+
+/* Guided demo: six beats */
+.demo-beats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin: var(--s-2) 0;
+}
+
+.demo-beat-chip {
+  min-width: 44px;
+  min-height: 44px;
+  font-weight: 600;
+}
+
+.demo-beat-chip[aria-current='step'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.demo-beat-title {
+  margin: 0 0 var(--s-2);
+  font-weight: 600;
+}
+
+.demo-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+
+.demo-tag {
+  display: inline-block;
+  margin-right: var(--s-1);
+  padding: 0 var(--s-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.demo-cards {
+  display: grid;
+  gap: var(--s-2);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-top: var(--s-3);
+}
+
+.demo-card {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.demo-card h3 {
+  margin: 0 0 var(--s-1);
+}
+
+.demo-close {
+  margin: var(--s-3) 0 0;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.demo-pace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: center;
+  margin: var(--s-2) 0;
+  padding: 0;
+  border: 0;
+}
+
+.demo-pace legend {
+  float: left;
+  margin-right: var(--s-3);
+  padding: 0;
+}
+
+.demo-pace label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: 44px;
+}
+
+.demo-pace input {
+  width: 24px;
+  height: 24px;
+}

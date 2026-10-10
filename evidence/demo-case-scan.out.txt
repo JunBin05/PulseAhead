@@ -1,0 +1,38 @@
+shift normal development seed 7
+shift normal tuning seed 1001
+shift normal tuning seed 1002
+shift busy-recovers development seed 7
+  busy-recovers/7 T+105: alerts ['triage'] drivers 2
+shift busy-recovers tuning seed 1011
+  busy-recovers/1011 T+105: alerts ['triage', 'lab', 'ward_beds'] drivers 2
+  busy-recovers/1011 T+525: alerts ['imaging'] drivers 2
+shift busy-recovers tuning seed 1012
+  busy-recovers/1012 T+600: alerts ['lab', 'imaging'] drivers 2
+shift arrival-surge development seed 7
+shift arrival-surge tuning seed 1021
+shift arrival-surge tuning seed 1022
+  arrival-surge/1022 T+420: alerts ['lab'] drivers 2
+  arrival-surge/1022 T+540: alerts ['triage'] drivers 2
+shift diagnostic-delay development seed 7
+  diagnostic-delay/7 T+390: alerts ['space'] drivers 2
+shift diagnostic-delay tuning seed 1031
+shift diagnostic-delay tuning seed 1032
+shift boarding-blockage development seed 7
+shift boarding-blockage tuning seed 1041
+shift boarding-blockage tuning seed 1042
+  boarding-blockage/1042 T+540: alerts ['triage'] drivers 2
+  boarding-blockage/1042 T+555: alerts ['lab', 'imaging', 'space'] drivers 2
+  boarding-blockage/1042 T+570: alerts ['lab', 'imaging', 'space'] drivers 2
+  boarding-blockage/1042 T+585: alerts ['imaging', 'space'] drivers 2
+  boarding-blockage/1042 T+600: alerts ['space'] drivers 2
+shift mixed-cascade development seed 7
+  mixed-cascade/7 T+525: alerts ['triage'] drivers 2
+  mixed-cascade/7 T+540: alerts ['lab'] drivers 2
+shift mixed-cascade tuning seed 1051
+shift mixed-cascade tuning seed 1052
+  mixed-cascade/1052 T+495: alerts ['space'] drivers 2
+  mixed-cascade/1052 T+570: alerts ['space'] drivers 2
+shift no-effective-action development seed 7
+shift no-effective-action tuning seed 1061
+shift no-effective-action tuning seed 1062
+Chosen from 1 qualifying early-warned episodes on development/tuning seeds (21 shifts scanned): 2 supported drivers (diagnostics, arrivals), a forecast-risk alert 40 min before onset, and a best action for zone 3. A demo case, not held-out evidence.

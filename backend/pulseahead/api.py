@@ -16,6 +16,7 @@ from .fixtures import FIXTURES
 from .profile import (
     CATALOG_VERSION, ENGINE_VERSION, PROFILE, PROFILE_ID, SCENARIOS, SCORED_MIN, WARMUP_MIN, scenario_catalog,
 )
+from . import demo_case
 from . import evaluation
 from . import forecast as fcast
 from .replay import API_VERSION, MAX_ADVANCE_MIN, ActionError, ReplayStore, SavedRunMismatch
@@ -281,6 +282,43 @@ def start_evaluation() -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return job.progress()
+
+
+@app.get("/api/v1/evaluations/latest")
+def latest_evaluation() -> dict:
+    """The newest finished evaluation saved to disk, exactly as measured (declared before the id route)."""
+    rec = evaluation.latest_saved()
+    if rec is None:
+        raise HTTPException(status_code=404, detail="no saved evaluation: run one from the evaluation panel")
+    # `exposure` is served from the current settings text when an older file predates it.
+    rec.setdefault("results", {}).setdefault("settings", {}).setdefault("exposure", evaluation.settings()["exposure"])
+    return rec
+
+
+@app.get("/api/v1/demo/case")
+def demo_case_info() -> dict:
+    """The scanned demo case (development/tuning seed) with its retrospective no-action baseline."""
+    return demo_case.case()
+
+
+class DriversBody(BaseModel):
+    expected_version: int = Field(ge=1)
+    samples: Literal[50, 100] = 50
+
+
+@app.post("/api/v1/replays/{replay_id}/demo/drivers")
+def demo_drivers(replay_id: str, body: DriversBody) -> dict:
+    """Which received pressures support the alert, at one state version (disclosed rules)."""
+    s = _session(replay_id)
+    result, _ = s.forecast(body.samples, body.expected_version)
+    if result is None:
+        raise HTTPException(status_code=409, detail="state version changed; request fresh drivers")
+    with s.lock:
+        if s.version != body.expected_version:
+            raise HTTPException(status_code=409, detail="state version changed; request fresh drivers")
+        snap = s.snapshot()
+    return {"api_version": API_VERSION, "kind": "demo_drivers", "source": result["source"],
+            **demo_case.drivers(snap, result)}
 
 
 @app.get("/api/v1/evaluations/{eval_id}")

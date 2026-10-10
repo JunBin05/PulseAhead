@@ -1,0 +1,38 @@
+{
+ "scenario": "busy-recovers",
+ "seed": 1011,
+ "partition": "tuning",
+ "service": "lab",
+ "service_name": "Lab",
+ "alert_time_min": 105.0,
+ "why": "Chosen from 1 qualifying early-warned episodes on development/tuning seeds (21 shifts scanned): 2 supported drivers (diagnostics, arrivals), a forecast-risk alert 40 min before onset, and a best action for zone 3. A demo case, not held-out evidence.",
+ "scan": {
+  "file": "evidence/demo-case-scan.json",
+  "shifts_scanned": 21,
+  "qualifying": 1,
+  "lead_min": 40.0,
+  "onset_min": 145.0,
+  "confirmed_min": 155.0,
+  "chance": 0.42,
+  "drivers": [
+   "diagnostics",
+   "arrivals"
+  ],
+  "overall_label": "Stable",
+  "top_action": {
+   "id": "diagnostic_reserve:lab",
+   "preset": "diagnostic_reserve",
+   "target": "lab",
+   "zone": 3,
+   "service": "lab",
+   "feasible": true,
+   "label": "best_action",
+   "order": 1,
+   "owner": "Lab manager",
+   "saving_mean": 166.536,
+   "saving_lower_90": 131.136
+  },
+  "engine_version": "flow-4",
+  "forecast_model": "mc-flow-1"
+ }
+}
