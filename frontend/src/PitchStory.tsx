@@ -18,8 +18,8 @@ import { ZONE_NAMES, type ComparisonRow, type Forecast, type ForecastAlert, type
 const SAMPLES = 50;
 const COORDINATOR = 'ED shift coordinator';
 const PITCH_CASE = { scenario: 'mixed-cascade', seed: 1052, atMin: 120, label: 'Mixed cascade · tuning seed 1052' };
-/** Time each of the first two beats stays on screen before the alert appears (about 9 s in total). */
-const BEAT_MS = { surface: 4200, delays: 4800 } as const;
+/** The alert popup comes up as soon as the warning and the fixes are ready; the first two beats stay in the rail. */
+const BEAT_MS = { surface: 0, delays: 0 } as const;
 
 const BEATS = [
   { id: 'A', name: 'It looks fine' },
@@ -88,6 +88,7 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
   const run = useCallback(async () => {
     const id = ++runId.current;
     const live = () => runId.current === id;
+    ctl.holdAlert(true);
     setPhase('loading');
     setBeat(0);
     setSurface(null);
@@ -107,6 +108,7 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
         const demo = await api.demoCase();
         if (!demo.available || !demo.scenario || demo.seed === undefined || demo.alert_time_min === undefined) {
           setMessage(demo.reason ?? 'No demo case is available right now, so there is no early warning to show.');
+          ctl.holdAlert(false);
           setPhase('error');
           return;
         }
@@ -118,7 +120,8 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
       if (!live()) return;
       if (!a) {
         setMessage('At this moment the forecast shows no early warning, so the story stops here instead of inventing one.');
-        setPhase('error');
+        ctl.holdAlert(false);
+          setPhase('error');
         return;
       }
       const alertRow = a;
@@ -197,13 +200,15 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
         timing: best ? `about ${best.review_min + best.setup_min} minutes to approve and set up` : null,
       });
       setBeat(2);
+      ctl.holdAlert(false);
       setPhase('alert');
     } catch (e) {
       if (runId.current !== id) return;
       setMessage(e instanceof Error ? e.message : 'The demo could not start. Please try again.');
-      setPhase('error');
+      ctl.holdAlert(false);
+          setPhase('error');
     }
-  }, [play]);
+  }, [play, ctl]);
 
   useEffect(() => {
     if (kick > 0 && kick !== lastKick.current) {
@@ -212,6 +217,9 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
       void run();
     }
   }, [kick, run]);
+
+  // Never leave the strip hidden if the story goes away mid-run.
+  useEffect(() => () => ctl.holdAlert(false), [ctl]);
 
   const openFixes = useCallback(() => {
     if (alert) ctl.focusZone(alert.zone);

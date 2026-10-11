@@ -842,3 +842,7 @@ body {
 .fix-off ul { margin: var(--s-2) 0 0; padding: 0; list-style: none; display: grid; gap: var(--s-2); }
 .fix-off li { display: grid; gap: 2px; font-size: var(--text-sm); }
 .fix-off li span { color: var(--ink-muted); }
+
+/* The strip's text gives way before its button does. */
+.alert-spine .btn { flex: 0 0 auto; white-space: nowrap; }
+.fix-warn { margin: var(--s-2) 0; font-size: var(--text-sm); color: var(--status-pressure-ink); }

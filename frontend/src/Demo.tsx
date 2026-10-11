@@ -28,6 +28,8 @@ export interface DemoController {
   setRole: (role: string) => void;
   openCompare: () => void;
   currentReplayId: () => string | null;
+  /** Keep the alert strip hidden while a story is about to raise its own alert popup. */
+  holdAlert: (hold: boolean) => void;
 }
 
 const SAMPLES = 50;

@@ -491,6 +491,8 @@ export function App() {
   }, []);
 
   // The guided demo drives the real API itself; this hands it the app's own snapshot, selection and panels.
+  // A story raises its own popup the moment the warning is ready; the strip waits so they appear together.
+  const [alertHeld, setAlertHeld] = useState(false);
   const demoCtl = useMemo<DemoController>(
     () => ({
       adopt: (s2, fresh) => {
@@ -509,6 +511,7 @@ export function App() {
       setRole,
       openCompare,
       currentReplayId: () => idRef.current,
+      holdAlert: setAlertHeld,
     }),
     [apply, clearSelection, selectAlert, openCompare],
   );
@@ -757,7 +760,7 @@ export function App() {
                 </div>
               </div>
             )}
-            {snap && (
+            {snap && !alertHeld && (
               <AlertSpine
                 snap={snap}
                 view={fcView}

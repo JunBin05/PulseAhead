@@ -577,22 +577,32 @@ export function ComparePanel({
             Needs approval from <strong>{row.owners.join(', ')}</strong>
           </p>
         )}
-        {supported && row.feasible && !gone && (
-          <div className="fix-buttons">
-            <button
-              className="btn btn-primary"
-              onClick={() => void approveRow(row)}
-              disabled={deciding || stale || !!openReq || !!fl}
-              data-testid={`fix-approve-${row.id}`}
-            >
-              Approve this fix
-            </button>
-            <button className="btn" onClick={() => setHidden((h) => [...h, row.id])}>
-              Not now
-            </button>
-          </div>
+        {row.feasible && !gone && (
+          <>
+            {!supported && (
+              <p className="fix-warn" data-testid={`fix-warn-${row.id}`}>
+                <IconTriangle />{' '}
+                {row.rank?.label === 'urgent_delay_check_failed'
+                  ? 'Our practice runs showed this making urgent patients wait longer. You can still approve it, but we advise against it.'
+                  : 'Our practice runs did not show this helping. You can still approve it if you know something we do not.'}
+              </p>
+            )}
+            <div className="fix-buttons">
+              <button
+                className={supported ? 'btn btn-primary' : 'btn'}
+                onClick={() => void approveRow(row)}
+                disabled={deciding || stale || !!openReq || !!fl}
+                data-testid={`fix-approve-${row.id}`}
+              >
+                {supported ? 'Approve this fix' : 'Approve anyway'}
+              </button>
+              <button className="btn" onClick={() => setHidden((h) => [...h, row.id])}>
+                Not now
+              </button>
+            </div>
+          </>
         )}
-        {supported && row.feasible && gone && <p className="muted">Not approved for now.</p>}
+        {row.feasible && gone && <p className="muted">Not approved for now.</p>}
         {detailsOf(row)}
       </section>
     );
