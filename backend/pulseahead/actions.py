@@ -31,6 +31,18 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
         "effect": "One extra slot of the chosen service. Tests are never shortened and results never manufactured.",
     },
+    "transport_coordination": {
+        "name": "Reserve transport team",
+        "summary": "Use the declared reserve transport team to add one transport slot for decided Ward/ICU transfers.",
+        "targets": {"transport": {"reserve": "transport_reserve_slot", "zone": 4, "setup_min": 10.0}},
+        "effect": "One extra transport slot. Each transfer takes as long as before; it never creates a ward bed or a clinical clearance.",
+    },
+    "discharge_support": {
+        "name": "Cleared discharge support",
+        "summary": "Use the declared reserve discharge-processing slot for patients already cleared to go home.",
+        "targets": {"discharge": {"reserve": "discharge_reserve_slot", "zone": 4, "setup_min": 10.0}},
+        "effect": "One extra home-discharge processing slot. It never creates a clinical clearance.",
+    },
     "staffed_surge_space": {
         "name": "Staffed surge space",
         "summary": "Open the declared reserve ED space X1 with its reserve nurse.",
@@ -40,7 +52,6 @@ PRESETS: dict[str, dict[str, Any]] = {
 }
 
 NOT_MODELED: list[dict[str, str]] = [
-    {"id": "cleared_discharge", "name": "Cleared discharge support", "reason": NOT_MODELED_REASON},
     {"id": "surge_triage_desk", "name": "Surge triage desk", "reason": NOT_MODELED_REASON},
     {"id": "reserve_physician", "name": "Reserve physician assessment capacity", "reason": NOT_MODELED_REASON},
     {"id": "diagnostic_reallocation", "name": "Diagnostic reallocation from another service", "reason": NOT_MODELED_REASON},
@@ -95,6 +106,11 @@ def eligibility(snapshot: dict[str, Any], s: dict[str, Any], in_flight: bool) ->
                 )
             else:
                 reasons.append("No decided Ward/ICU patient is waiting for allocation work.")
+    elif s["service"] in ("transport", "discharge"):
+        phase = "awaiting_transport" if s["service"] == "transport" else "awaiting_discharge"
+        waiting = [p for p in patients if p["phase"] == phase and p["decision_received"]]
+        if not waiting:
+            reasons.append(f"No decided patient is waiting for {s['service']}: an extra slot has no queue to serve.")
     elif s["service"] == "space":
         # A preventive action: opening the reserve space is possible whenever the reserve exists and the
         # space and staffing feeds are current. Whether it helps is decided by the paired comparison

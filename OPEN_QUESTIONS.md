@@ -180,3 +180,14 @@ Spec §Actions and the scope amendment: one lifecycle, approvers from resource o
 **Working decision:** a no-action replay of each held-out shift is forecast every 15 simulated minutes at 50 futures with threshold 0.4 (untuned). An early warning is a forecast-risk alert for a service (or the overall ED) made at t when that key's confirmed episode has its onset in (t, t+90]; each episode is matched by its earliest such warning. A building alert made before confirmation with no earlier forecast-risk match is "late only" and earns no early-detection credit; an episode with neither is missed. Consecutive forecast-risk alerts for one key form one warning run; a run with no matching episode in (first time, last time + 90] is a false warning. The truth replay runs 110 minutes past T+600 so late warnings are not truncated. Policies run on the same seed and catalog: no action; reactive (owner approves a feasible action only once its service is Overloaded, no comparison); PulseAhead (approves the top action only if labelled Best action, every 15 minutes with none in flight). Cohort: patients arriving in T+120..T+600; unfinished stays accrue to T+600 and are counted apart. Resource-hours are review + setup + active hours of each approved reserve unit. Everything is descriptive (one shift per family).
 
 **Alternative not taken:** tuning the threshold or changing the reactive baseline after seeing test results; reporting only the favourable shifts.
+
+## Q-LLM1. Which Groq model and output mode does the analyst use? (ticket 23)
+
+**Working decision:**
+- Default model `openai/gpt-oss-120b`, overridable with `GROQ_MODEL`; the key is `GROQ_API_KEY` (env or git-ignored `backend/.env`). The call uses the OpenAI-compatible chat endpoint with `response_format: json_object`, temperature 0, one retry, 12 s timeout, over the standard library (no new dependency).
+- The output is validated strictly in `analyst.validate`; JSON-schema structured output is not relied on.
+- Not verified: model availability and latency against a live key (none was available when this was built).
+
+## Q-LLM2. How is clinical wording kept out of analyst output? (ticket 23)
+
+**Working decision:** a deny-list regex (`CLINICAL_WORDING`) drops causes, proposals and ideas that read as a diagnosis, treatment, dose, or an individual patient clearance or acuity change. Items are listed as "not shown" with the reason. It is a guardrail, not a proof; staff still review every proposal.

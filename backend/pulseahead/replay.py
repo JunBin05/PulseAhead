@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import actions as act
+from . import analyst
 from . import forecast as fcast
 from .engine import QUEUE_SERVICE, EDEngine
 from .feeds import HEARTBEAT_MIN, SERVICE_SOURCE, SOURCES, STALE_AFTER_MIN
@@ -70,6 +71,9 @@ class ReplaySession:
         self.choices: list[dict[str, Any]] = []
         self._cmp: dict[tuple[int, int], dict[str, Any]] = {}
         self._cmp_lock = threading.Lock()
+        # LLM analyst results keyed like the comparison; one model call per (version, samples).
+        self._an: dict[tuple[int, int], dict[str, Any]] = {}
+        self._an_lock = threading.Lock()
         if self.engine.gate.has_faults:
             self._sample(0.0)
 
@@ -105,6 +109,7 @@ class ReplaySession:
             self.requests = {}
             self.choices = []
             self._cmp = {}
+            self._an = {}
             if self.engine.gate.has_faults:
                 self._sample(0.0)
             self.run_number += 1
@@ -1011,6 +1016,53 @@ class ReplaySession:
                     self._cmp[key] = out
                     for old in sorted(self._cmp)[:-4]:
                         del self._cmp[old]
+            return out, False
+
+    def analysis(self, samples: int = fcast.DEFAULT_SAMPLES, expected_version: int | None = None
+                 ) -> tuple[dict[str, Any] | None, bool]:
+        """LLM causes and proposals for this state version, with the simulator's own comparison attached
+        to every structured proposal. (None, False) when `expected_version` is stale. A model failure
+        never fails the call: the comparison is returned with status `unavailable`."""
+        with self._an_lock:
+            comp, _ = self.compare(samples, expected_version)
+            if comp is None:
+                return None, False
+            version = comp["source"]["version"]
+            key = (version, samples)
+            with self.lock:
+                if version != self.version:
+                    return None, False
+                hit = self._an.get(key)
+                if hit is not None:
+                    return hit, True
+                run = self.run_number
+                snap = self.snapshot()
+            fc = None
+            if comp["status"] == "ok":
+                try:
+                    fc, _ = self.forecast(samples, version)
+                except Exception:  # noqa: BLE001 - a missing forecast only thins the evidence
+                    fc = None
+            catalog = snap["actions"]["catalog"]
+            res = analyst.analyze(snap, fc, comp, catalog)
+            res.pop("_raw", None)
+            rows = {r["id"]: r for r in comp["actions"]}
+            for p in res["structured_proposals"]:
+                row = rows.get(p["catalog_id"])
+                p["comparison"] = row.get("comparison") if row else None
+                p["rank"] = row.get("rank") if row else None
+                p["resource_hours"] = row.get("resource_hours") if row else None
+                p["deadline"] = row.get("deadline") if row else None
+                p["impact_per_resource_hour"] = row.get("impact_per_resource_hour") if row else None
+            out = {
+                "api_version": API_VERSION, "kind": "analysis", "synthetic": True, "source": comp["source"],
+                "samples": samples, "comparison_status": comp["status"], **res,
+            }
+            with self.lock:
+                if self.run_number == run and res["status"] == "ok":  # a failure is retried, not cached
+                    self._an[key] = out
+                    for old in sorted(self._an)[:-4]:
+                        del self._an[old]
             return out, False
 
     # -- forecast (received state and received history only) -----------------------------------

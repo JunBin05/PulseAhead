@@ -43,7 +43,7 @@ check('order: top row is the supported action with the larger lower bound; at mo
   compared[0].rank.rule.saving_lower_90 >= compared[1].rank.rule.saving_lower_90,
   `${compared[0].id} lb ${compared[0].rank.rule.saving_lower_90} vs ${compared[1].id} lb ${compared[1].rank.rule.saving_lower_90}`);
 check('infeasible actions sort last and read Not feasible', c.actions.at(-1).rank.label === 'not_feasible');
-check('not-modeled presets are listed apart', c.not_modeled.length === 4);
+check('not-modeled presets are listed apart', c.not_modeled.length === 3);
 const [a, b] = compared;
 check('what-if: pair difference equals the difference of the two savings (same paired futures)',
   Math.abs(c.pair_diff[a.id][b.id].mean - (a.comparison.total_saving_patient_min.mean - b.comparison.total_saving_patient_min.mean)) < 0.01,

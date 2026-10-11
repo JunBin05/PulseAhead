@@ -1,0 +1,114 @@
+{
+  "records": [
+    {
+      "scenario": "mixed-cascade",
+      "seed": 3052,
+      "sim_time_min": 285.0,
+      "model": "openai/gpt-oss-120b",
+      "recorded_on": "2026-10-11",
+      "raw": {
+        "causes": [
+          {
+            "statement": "Imaging service is overloaded, generating a pressure signal and a queue of 12 patients awaiting imaging, which is delaying multiple patients in zone 3.",
+            "confidence": "supported",
+            "cited": [
+              "service.imaging.state",
+              "service.imaging.pressure_signal",
+              "service.imaging.queue"
+            ]
+          },
+          {
+            "statement": "Ward beds are overloaded and capacity unavailable, with no free ward beds and only one free ICU bed, causing patients to wait for suitable beds.",
+            "confidence": "supported",
+            "cited": [
+              "service.ward_beds.state",
+              "service.ward_beds.capacity_unavailable",
+              "service.ward_beds.rates.free_beds.ward",
+              "service.ward_beds.rates.free_beds.icu"
+            ]
+          },
+          {
+            "statement": "ED staffed space is nearly full (22 of 24 total, only 1 staffed space available), limiting ability to intake new patients and adding pressure on downstream services.",
+            "confidence": "supported",
+            "cited": [
+              "ed_spaces.total",
+              "ed_spaces.occupied",
+              "ed_spaces.available_staffed"
+            ]
+          },
+          {
+            "statement": "Discharge processing has a small queue (1 patient) but the reserve discharge slot is feasible and could reduce any hidden bottleneck in final patient flow.",
+            "confidence": "possible",
+            "cited": [
+              "service.discharge.queue",
+              "reserve.discharge_reserve_slot.feasible"
+            ]
+          }
+        ],
+        "proposals": [
+          {
+            "title": "Activate imaging reserve slot",
+            "rationale": "Adds one extra imaging slot to relieve the overloaded imaging queue and reduce wait times for patients awaiting imaging.",
+            "kind": "reserve",
+            "reserve": "imaging_reserve_slot",
+            "cited": [
+              "service.imaging.state",
+              "reserve.imaging_reserve_slot.feasible"
+            ]
+          },
+          {
+            "title": "Deploy staffed ED surge space (X1)",
+            "rationale": "Provides an additional staffed ED space to increase capacity for incoming patients and alleviate pressure on triage and assessment.",
+            "kind": "reserve",
+            "reserve": "ed_surge_space",
+            "cited": [
+              "ed_spaces.available_staffed",
+              "reserve.ed_surge_space.feasible"
+            ]
+          },
+          {
+            "title": "Activate discharge reserve slot",
+            "rationale": "Adds a discharge-processing slot to ensure any discharge bottleneck is cleared quickly, supporting overall flow.",
+            "kind": "reserve",
+            "reserve": "discharge_reserve_slot",
+            "cited": [
+              "service.discharge.queue",
+              "reserve.discharge_reserve_slot.feasible"
+            ]
+          },
+          {
+            "title": "Prioritize urgent imaging requests",
+            "rationale": "Manually triage imaging orders so urgent cases are completed first, mitigating impact of the imaging overload on high\u2011acuity patients.",
+            "kind": "idea",
+            "reserve": null,
+            "cited": [
+              "service.imaging.queue",
+              "patient.A003-1.urgency",
+              "patient.A004-1.urgency"
+            ]
+          },
+          {
+            "title": "Temporarily repurpose free ICU bed for ward overflow",
+            "rationale": "Use the one free ICU bed to accommodate ward\u2011bed\u2011waiting patients, reducing the ward\u2011bed backlog while a permanent solution is sought.",
+            "kind": "idea",
+            "reserve": null,
+            "cited": [
+              "service.ward_beds.rates.free_beds.icu",
+              "service.ward_beds.capacity_unavailable"
+            ]
+          },
+          {
+            "title": "Implement rapid bed turnover protocol",
+            "rationale": "Accelerate cleaning and preparation of vacated ward beds to increase effective bed availability and shorten wait times for boarding patients.",
+            "kind": "idea",
+            "reserve": null,
+            "cited": [
+              "service.ward_beds.state",
+              "beds.ward.waiting"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

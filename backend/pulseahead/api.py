@@ -248,6 +248,18 @@ def compare_actions(replay_id: str, body: CompareBody | None = None) -> dict:
     return {**result, "cached": cached}
 
 
+@app.post("/api/v1/replays/{replay_id}/analysis")
+def analysis(replay_id: str, body: CompareBody | None = None) -> dict:
+    """LLM analyst: cited causes and proposed actions for this state version. Structured proposals carry
+    the simulator's own comparison and rank; untested ideas carry none. Never a forecast or a number
+    from the model (see analyst.py)."""
+    body = body or CompareBody()
+    result, cached = _session(replay_id).analysis(body.samples, body.expected_version)
+    if result is None:
+        raise HTTPException(status_code=409, detail="state version changed; request a fresh analysis")
+    return {**result, "cached": cached}
+
+
 @app.get("/api/v1/replays/{replay_id}/actions")
 def read_actions(replay_id: str) -> dict:
     s = _session(replay_id)

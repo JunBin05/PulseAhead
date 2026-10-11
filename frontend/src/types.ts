@@ -938,3 +938,52 @@ export interface SavedEvaluation {
     };
   };
 }
+
+export interface AnalystCause {
+  statement: string;
+  confidence: 'supported' | 'possible' | 'unknown';
+  cited: string[];
+  dropped_citations: string[];
+  note: string | null;
+}
+
+export interface AnalystProposal {
+  title: string;
+  rationale: string;
+  cited: string[];
+  dropped_citations: string[];
+  reserve: string;
+  catalog_id: string;
+  preset: string;
+  target: string;
+  service: string;
+  owners: string[];
+  comparison: ActionComparison | null;
+  rank: ActionRank | null;
+  resource_hours?: number | null;
+}
+
+export interface AnalystIdea {
+  title: string;
+  rationale: string;
+  cited: string[];
+  dropped_citations: string[];
+  reason_untested: string;
+}
+
+export interface AnalysisResult {
+  api_version: string;
+  kind: 'analysis';
+  synthetic: boolean;
+  source: { replay_id: string; run_number: number; version: number; sim_time_min: number };
+  status: 'ok' | 'recorded' | 'unavailable' | 'cannot_assess';
+  reason: string | null;
+  model: string;
+  disclaimer: string;
+  samples: number;
+  causes: AnalystCause[];
+  structured_proposals: AnalystProposal[];
+  untested_ideas: AnalystIdea[];
+  rejected: { item: string; reason: string }[];
+  cached?: boolean;
+}

@@ -76,3 +76,7 @@ All testing and verification goes through **Playwright MCP** against the running
 - Keep a persistent Synthetic demo label. Make no claims about clinical outcomes, ROI, or validated hospital performance. Report value in patient-minutes and resource-hours.
 - Never fake a queue, alert, best action, clinical clearance, or resource release to make the visual work. When scope must be cut, cut realism, physics, VR, and decorative effects first.
 - A 2D/keyboard/reduced-motion mode offering the same data and approvals is required as a fallback.
+
+## LLM analyst (ticket 23)
+
+`backend/pulseahead/analyst.py` calls Groq (`GROQ_API_KEY`, optional `GROQ_MODEL`, default `openai/gpt-oss-120b`; put them in the real environment or git-ignored `backend/.env`). The model proposes cited causes and actions; the simulator prices and ranks them. It never supplies a number, a forecast or a rank label, and anything it cannot map to a declared reserve is an untested idea with no approval path. Boundary test hook: `PULSEAHEAD_ANALYST_STUB=<json file>` replaces the network call. Smoke check: `evidence/23-smoke.mjs`.
