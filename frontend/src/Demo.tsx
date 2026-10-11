@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { clock } from './Forecast';
+import { targetSuffix } from './format';
 import { IconPlay, IconReset, IconStep } from './icons';
 import type {
   ComparisonResult,
@@ -81,8 +82,7 @@ const num = (x: number | null | undefined, d = 1): string => (x === null || x ==
 const pct = (x: number | null | undefined): string => (x === null || x === undefined ? 'n/a' : `${Math.round(x * 100)}%`);
 const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
-const rowName = (r: ComparisonRow): string =>
-  `${r.name}${r.preset === 'diagnostic_reserve' ? ` (${r.target})` : ''}`;
+const rowName = (r: ComparisonRow): string => `${r.name}${targetSuffix(r.preset, r.target)}`;
 const labelText = (l: string | undefined): string => (l ? l.replace(/_/g, ' ') : 'no label');
 
 interface Ctx {
@@ -103,21 +103,39 @@ const emptyCtx = (): Ctx => ({
   servers0: null, queue0: null, unit: null, acted: null,
 });
 
-const serversOf = (s: Snapshot, svc: string): number =>
-  svc === 'allocation'
-    ? s.resources.disposition.allocation.servers
-    : svc === 'space'
-      ? s.resources.ed_spaces.general_total
-      : s.resources.diagnostics[svc as 'lab' | 'imaging'].servers;
-const queueOf = (s: Snapshot, svc: string): number | null =>
-  svc === 'allocation'
-    ? s.resources.disposition.allocation.waiting
-    : svc === 'space'
-      ? s.resources.ed_spaces.awaiting_space
-      : s.resources.diagnostics[svc as 'lab' | 'imaging'].waiting;
+const serversOf = (s: Snapshot, svc: string): number => {
+  switch (svc) {
+    case 'allocation':
+    case 'transport':
+    case 'discharge':
+      return s.resources.disposition[svc].servers;
+    case 'space':
+      return s.resources.ed_spaces.general_total;
+    default:
+      return s.resources.diagnostics[svc as 'lab' | 'imaging'].servers;
+  }
+};
+const queueOf = (s: Snapshot, svc: string): number | null => {
+  switch (svc) {
+    case 'allocation':
+    case 'transport':
+    case 'discharge':
+      return s.resources.disposition[svc].waiting;
+    case 'space':
+      return s.resources.ed_spaces.awaiting_space;
+    default:
+      return s.resources.diagnostics[svc as 'lab' | 'imaging'].waiting;
+  }
+};
 /** Plain words for a service in captions (never relabels imaging as lab). */
 const svcWord = (svc: string): string =>
-  svc === 'space' ? 'staffed general spaces' : svc === 'allocation' ? 'ward allocation' : svc;
+  svc === 'space'
+    ? 'staffed general spaces'
+    : svc === 'allocation'
+      ? 'ward allocation'
+      : svc === 'discharge'
+        ? 'home discharge processing'
+        : svc;
 
 function deadlineText(r: ComparisonRow): string {
   const d = r.deadline;
@@ -614,7 +632,7 @@ export function DemoBar({ ctl, onRunning, kick = 0 }: { ctl: DemoController; onR
               tag: 'Limit',
               text:
                 'Synthetic fictional hospital, one shift per family: no clinical outcome, ROI or validated hospital performance is claimed. ' +
-                `${c.cmp ? c.cmp.actions.length : 'Four'} reserve actions are modeled, ${c.cmp ? c.cmp.not_modeled.length : 'four'} interventions are not. Not deployed; no timed rehearsal yet.`,
+                `${c.cmp ? `${c.cmp.actions.length} reserve actions are modeled, ${c.cmp.not_modeled.length} interventions are not.` : 'Reserve actions are modeled; some interventions are not.'} Not deployed; no timed rehearsal yet.`,
             });
           }
           const stats: Stat[] = [];
