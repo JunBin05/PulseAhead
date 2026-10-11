@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { AnalystPanel } from './Analyst';
 import { clock } from './Forecast';
+import { targetSuffix } from './format';
 import { IconCheck, IconClock, IconOctagon, IconTriangle } from './icons';
 import type {
   ActionComparison,
@@ -214,7 +215,7 @@ function WhatIf({
   const ca = ra.comparison!;
   const cb = rb.comparison!;
   const diff = cmp.pair_diff[idA]?.[idB];
-  const label = (r: ComparisonRow) => `${r.name}${r.preset === 'diagnostic_reserve' ? ` (${r.target})` : ''}`;
+  const label = (r: ComparisonRow) => `${r.name}${targetSuffix(r.preset, r.target)}`;
   const line = (name: string, x: Stat, y: Stat, tid: string) => (
     <tr data-testid={`whatif-${tid}`}>
       <th scope="row">{name}</th>
@@ -313,7 +314,7 @@ function RequestCard({
     <section className="request-card" data-testid="request-card" data-status={req.status} aria-label="Action request">
       <h4>
         Request {req.id}: {req.name}
-        {req.target !== 'allocation' && req.target !== 'space' ? ` (${req.target})` : ''}
+        {targetSuffix(req.preset, req.target)}
       </h4>
       <dl className="kv">
         <dt>Status</dt>
@@ -463,7 +464,7 @@ export function ComparePanel({
           return fa - fb || (a.order ?? 99) - (b.order ?? 99);
         })
       : [];
-  const topName = topRow ? `${topRow.name}${topRow.preset === 'diagnostic_reserve' ? ` · ${topRow.target}` : ''}` : null;
+  const topName = topRow ? `${topRow.name}${targetSuffix(topRow.preset, topRow.target, ' · ')}` : null;
   const approved = !!fl || (lastReq?.status === 'approved');
 
   const approveRow = async (row: ComparisonRow) => {
@@ -561,7 +562,7 @@ export function ComparePanel({
   const [hidden, setHidden] = useState<string[]>([]);
   const otherCard = (row: ComparisonRow) => {
     const supported = row.rank?.label === 'best_action' || row.rank?.label === 'supported_not_top';
-    const name = `${row.name}${row.preset === 'diagnostic_reserve' ? ` · ${row.target}` : ''}`;
+    const name = `${row.name}${targetSuffix(row.preset, row.target, ' · ')}`;
     const gone = hidden.includes(row.id);
     return (
       <section key={row.id} className="fix-card fix-card--other" data-testid={`fix-list-${row.id}`} data-supported={supported}>
@@ -686,7 +687,7 @@ export function ComparePanel({
                     <li key={r.id}>
                       <strong>
                         {r.name}
-                        {r.preset === 'diagnostic_reserve' ? ` · ${r.target}` : ''}
+                        {targetSuffix(r.preset, r.target, ' · ')}
                       </strong>
                       <span>{r.reasons[0] ?? 'Not feasible now.'}</span>
                     </li>

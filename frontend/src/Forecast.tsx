@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api';
+import { targetSuffix } from './format';
 import { IconClock, IconOctagon, IconTriangle, IconUnknown } from './icons';
 import type { ComparisonResult, Forecast, ForecastAlert, ForecastExplanation, ForecastOnset, Snapshot } from './types';
 
@@ -365,7 +366,7 @@ function impactText(service: string, cmp: ComparisonResult | null): string {
     r.deadline?.status === 'open' && r.deadline.latest_start_min !== null
       ? `; latest start ${clock(r.deadline.latest_start_min)}`
       : '';
-  return `Impact: ${r.name}${r.preset === 'diagnostic_reserve' ? ` (${r.target})` : ''} saves ${sv.mean?.toFixed(1)} patient-min (90% lower bound ${lb}), ${r.rank?.label.replace(/_/g, ' ')}${when}`;
+  return `Impact: ${r.name}${targetSuffix(r.preset, r.target)} saves ${sv.mean?.toFixed(1)} patient-min (90% lower bound ${lb}), ${r.rank?.label.replace(/_/g, ' ')}${when}`;
 }
 
 export function AlertList({

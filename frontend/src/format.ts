@@ -26,3 +26,9 @@ export function ofTotal(v: number | null | undefined, total: number): string {
 export function clockOrDash(min: number | null | undefined): string {
   return min === null || min === undefined ? '—' : formatClock(min);
 }
+
+/** The reserve's target is only worth naming when a preset has several (lab or imaging). */
+export function targetSuffix(preset: string, target: string, joiner = ' ('): string {
+  if (preset !== 'diagnostic_reserve') return '';
+  return joiner === ' (' ? ` (${target})` : `${joiner}${target}`;
+}
