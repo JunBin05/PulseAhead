@@ -504,6 +504,100 @@ export function ComparePanel({
     }
   };
 
+  const detailsOf = (row: ComparisonRow) => (
+    <details className="fix-more" data-testid={`compare-action-${row.id}`} data-feasible={row.feasible}>
+      <summary>Numbers and details</summary>
+          <p className="muted">{row.effect}</p>
+          <p>
+            Approval needed from <strong>{row.owners.join(', ')}</strong> · review {row.review_min} min, setup{' '}
+            {row.setup_min} min, active {row.active_min} min.
+          </p>
+          {row.rank && (
+            <p
+              className="status"
+              data-tone={
+                row.rank.label === 'best_action' || row.rank.label === 'supported_not_top'
+                  ? 'normal'
+                  : row.rank.label === 'urgent_delay_check_failed'
+                    ? 'overload'
+                    : 'pressure'
+              }
+              data-testid={`rank-${row.id}`}
+              data-label={row.rank.label}
+            >
+              {row.rank.label === 'best_action' || row.rank.label === 'supported_not_top' ? <IconCheck /> : <IconTriangle />}
+              <span>{row.rank.text}</span>
+            </p>
+          )}
+          {row.comparison && row.impact_per_resource_hour && row.impact_per_resource_hour.mean !== null && (
+            <p data-testid={`impact-${row.id}`}>
+              Impact: <strong>{fmt(row.impact_per_resource_hour.mean)}</strong> patient-min saved per reserve unit-hour
+              (90% lower bound {fmt(row.impact_per_resource_hour.lower_90)}), over {row.resource_hours} unit-hours committed.
+            </p>
+          )}
+          {row.feasible && row.deadline && (
+            <p data-testid={`deadline-${row.id}`}>
+              {row.deadline.status === 'open' && row.deadline.latest_start_min !== null
+                ? `Latest start ${clock(row.deadline.latest_start_min)} (in ${row.deadline.in_min} min): onset low bound minus ${row.deadline.review_min} min review, ${row.deadline.setup_min} min setup and ${row.deadline.margin_min} min margin.`
+                : row.deadline.status === 'too_late'
+                  ? 'Too late to act before the earliest forecast onset: act now to limit the effect.'
+                  : row.deadline.status === 'recovery'
+                    ? 'This service is already overloaded: the action aims at recovery, so there is no start deadline.'
+                    : 'No start deadline: there is no forecast onset for this service right now.'}
+            </p>
+          )}
+          {!row.feasible && (
+            <p data-testid={`infeasible-${row.id}`}>
+              <IconTriangle /> Not feasible now: {row.reasons.join(' ')}
+            </p>
+          )}
+          {row.comparison && <CompareTable row={row} c={row.comparison} />}
+          {row.comparison && (
+            <p className="muted" data-testid={`cmp-resource-${row.id}`}>
+              Resource: {row.comparison.resource.reserve_unit} for {row.comparison.resource.active_unit_hours} unit-hour
+              active. {row.comparison.resource.note}
+            </p>
+          )}
+
+    </details>
+  );
+  const others = ranked.filter((r) => r.id !== topRow?.id);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const otherCard = (row: ComparisonRow) => {
+    const supported = row.rank?.label === 'best_action' || row.rank?.label === 'supported_not_top';
+    const name = `${row.name}${targetSuffix(row.preset, row.target, ' · ')}`;
+    const gone = hidden.includes(row.id);
+    return (
+      <section key={row.id} className="fix-card fix-card--other" data-testid={`fix-list-${row.id}`} data-supported={supported}>
+        <span className="eyebrow">{plainRank(row)}</span>
+        <h3 className="fix-name">{name}</h3>
+        <p className="fix-what" data-testid={`fix-reason-${row.id}`}>{plainActionReason(row, false)}</p>
+        {row.feasible && (
+          <p className="fix-owner">
+            Needs approval from <strong>{row.owners.join(', ')}</strong>
+          </p>
+        )}
+        {supported && row.feasible && !gone && (
+          <div className="fix-buttons">
+            <button
+              className="btn btn-primary"
+              onClick={() => void approveRow(row)}
+              disabled={deciding || stale || !!openReq || !!fl}
+              data-testid={`fix-approve-${row.id}`}
+            >
+              Approve this fix
+            </button>
+            <button className="btn" onClick={() => setHidden((h) => [...h, row.id])}>
+              Not now
+            </button>
+          </div>
+        )}
+        {supported && row.feasible && gone && <p className="muted">Not approved for now.</p>}
+        {detailsOf(row)}
+      </section>
+    );
+  };
+
   return (
     <section
       className="panel compare-panel"
@@ -577,38 +671,7 @@ export function ComparePanel({
             )}
           </>
         )}
-        {cmp?.status === 'ok' && cmp.actions.length > 0 && (
-          <div className="fix-list" data-testid="fix-list">
-            <span className="eyebrow">Everything we looked at, and why</span>
-            <ol>
-              {ranked.map((row, i) => {
-                const supported = row.rank?.label === 'best_action' || row.rank?.label === 'supported_not_top';
-                const isTop = topRow?.id === row.id;
-                return (
-                  <li key={row.id} data-top={isTop} data-testid={`fix-list-${row.id}`}>
-                    <span className="fix-list-n">{i + 1}</span>
-                    <span className="fix-list-main">
-                      <strong>
-                        {row.name}
-                        {targetSuffix(row.preset, row.target, ' · ')}
-                      </strong>
-                      <small data-testid={`fix-reason-${row.id}`}>{plainActionReason(row, isTop)}</small>
-                      {row.feasible && <small>Needs sign-off from {row.owners.join(', ')}</small>}
-                    </span>
-                    <span className="fix-chip" data-tone={isTop ? 'best' : supported ? 'ok' : 'off'}>
-                      {isTop ? 'Top suggestion' : plainRank(row)}
-                    </span>
-                    {supported && !isTop && !approved && (
-                      <button className="btn" disabled={deciding || stale || !!openReq || !!fl} onClick={() => void approveRow(row)}>
-                        Choose this instead
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        )}
+        {topRow && detailsOf(topRow)}
         {note && (
           <p className="request-message" role="alert" data-testid="fix-note">
             <IconTriangle /> {note}
@@ -620,8 +683,33 @@ export function ComparePanel({
         )}
       </section>
 
+      {cmp?.status === 'ok' && others.length > 0 && (
+        <div className="fix-others" data-testid="fix-list">
+          <span className="eyebrow">Other options</span>
+          {others.filter((r) => r.feasible).map(otherCard)}
+          {others.some((r) => !r.feasible) && (
+            <details className="fix-off" data-testid="fix-unavailable">
+              <summary>Not available right now ({others.filter((r) => !r.feasible).length})</summary>
+              <ul>
+                {others
+                  .filter((r) => !r.feasible)
+                  .map((r) => (
+                    <li key={r.id}>
+                      <strong>
+                        {r.name}
+                        {targetSuffix(r.preset, r.target, ' · ')}
+                      </strong>
+                      <span>{plainActionReason(r, false)}</span>
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
       <details className="fix-drawer" data-testid="fix-drawer">
-      <summary>Show all details and other options</summary>
+      <summary>More: what-if, request history, analyst</summary>
       <p className="muted" data-testid="compare-source">
         {cmp && sameRun
           ? `Compared at ${clock(cmp.source.sim_time_min)} (state v${cmp.source.version}), ${cmp.samples} paired futures from received data only.`
@@ -652,78 +740,6 @@ export function ComparePanel({
           <IconTriangle /> Cannot assess: essential data is missing or stale. No comparison is shown.
         </p>
       )}
-      {cmp?.status === 'ok' &&
-        cmp.actions.map((row) => (
-          <article key={row.id} className="cmp-action" data-testid={`compare-action-${row.id}`} data-feasible={row.feasible}>
-            <h3>
-              {row.order ? `#${row.order} ` : ''}
-              {row.name}
-              {targetSuffix(row.preset, row.target, ' · ')}
-            </h3>
-            <p className="muted">{row.effect}</p>
-            <p>
-              Approval needed from <strong>{row.owners.join(', ')}</strong> · review {row.review_min} min, setup{' '}
-              {row.setup_min} min, active {row.active_min} min.
-            </p>
-            {row.rank && (
-              <p
-                className="status"
-                data-tone={
-                  row.rank.label === 'best_action' || row.rank.label === 'supported_not_top'
-                    ? 'normal'
-                    : row.rank.label === 'urgent_delay_check_failed'
-                      ? 'overload'
-                      : 'pressure'
-                }
-                data-testid={`rank-${row.id}`}
-                data-label={row.rank.label}
-              >
-                {row.rank.label === 'best_action' || row.rank.label === 'supported_not_top' ? <IconCheck /> : <IconTriangle />}
-                <span>{row.rank.text}</span>
-              </p>
-            )}
-            {row.comparison && row.impact_per_resource_hour && row.impact_per_resource_hour.mean !== null && (
-              <p data-testid={`impact-${row.id}`}>
-                Impact: <strong>{fmt(row.impact_per_resource_hour.mean)}</strong> patient-min saved per reserve unit-hour
-                (90% lower bound {fmt(row.impact_per_resource_hour.lower_90)}), over {row.resource_hours} unit-hours committed.
-              </p>
-            )}
-            {row.feasible && row.deadline && (
-              <p data-testid={`deadline-${row.id}`}>
-                {row.deadline.status === 'open' && row.deadline.latest_start_min !== null
-                  ? `Latest start ${clock(row.deadline.latest_start_min)} (in ${row.deadline.in_min} min): onset low bound minus ${row.deadline.review_min} min review, ${row.deadline.setup_min} min setup and ${row.deadline.margin_min} min margin.`
-                  : row.deadline.status === 'too_late'
-                    ? 'Too late to act before the earliest forecast onset: act now to limit the effect.'
-                    : row.deadline.status === 'recovery'
-                      ? 'This service is already overloaded: the action aims at recovery, so there is no start deadline.'
-                      : 'No start deadline: there is no forecast onset for this service right now.'}
-              </p>
-            )}
-            {!row.feasible && (
-              <p data-testid={`infeasible-${row.id}`}>
-                <IconTriangle /> Not feasible now: {row.reasons.join(' ')}
-              </p>
-            )}
-            {row.comparison && <CompareTable row={row} c={row.comparison} />}
-            {row.comparison && (
-              <p className="muted" data-testid={`cmp-resource-${row.id}`}>
-                Resource: {row.comparison.resource.reserve_unit} for {row.comparison.resource.active_unit_hours} unit-hour
-                active. {row.comparison.resource.note}
-              </p>
-            )}
-            <button
-              className="btn btn-primary"
-              disabled={!row.feasible || stale || sending || !!openReq || !!fl}
-              onClick={() => void request(row)}
-              data-testid={`request-${row.id}`}
-            >
-              Request this action
-            </button>
-            {row.feasible && (openReq || fl) && (
-              <span className="muted"> One action at a time: finish or decide the current one first.</span>
-            )}
-          </article>
-        ))}
       {cmp?.status === 'ok' && <WhatIf cmp={cmp} a={whatA} b={whatB} onA={setWhatA} onB={setWhatB} />}
       {cmp?.status === 'ok' && (
         <AnalystPanel
