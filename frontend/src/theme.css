@@ -8,7 +8,6 @@ body {
 
 .app-header {
   background: rgba(10, 17, 31, 0.88);
-  backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;

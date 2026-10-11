@@ -379,6 +379,8 @@ export function ComparePanel({
   const [sending, setSending] = useState(false);
   const [whatA, setWhatA] = useState<string | null>(null);
   const [whatB, setWhatB] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const [deciding, setDeciding] = useState(false);
   const ref = useRef<HTMLElement>(null);
   const snapRef = useRef(snap);
   snapRef.current = snap;
@@ -426,6 +428,49 @@ export function ComparePanel({
     }
   };
 
+  // The one suggestion shown first: the best action, or the best supported one. Everything else
+  // (other actions, tables, what-if, request history) sits in the details drawer.
+  const listed = cmp?.status === 'ok' ? cmp.actions.filter((x) => x.comparison) : [];
+  const topRow =
+    listed.find((x) => x.rank?.label === 'best_action') ?? listed.find((x) => x.rank?.label === 'supported_not_top') ?? null;
+  const topName = topRow ? `${topRow.name}${topRow.preset === 'diagnostic_reserve' ? ` · ${topRow.target}` : ''}` : null;
+  const approved = !!fl || (lastReq?.status === 'approved');
+
+  const approveTop = async () => {
+    if (!topRow) return;
+    setDeciding(true);
+    setNote(null);
+    try {
+      if (openReq) {
+        await api.decide(snap.replay_id, openReq.id, openReq.owners[0], 'approve', `fix-${openReq.id}-${Date.now()}`, snap.version);
+      } else {
+        const rq = await api.requestAction(snap.replay_id, topRow.preset, topRow.target, role, snap.version);
+        await api.decide(snap.replay_id, rq.request.id, topRow.owners[0], 'approve', `fix-${rq.request.id}`, rq.state_version);
+      }
+      onChanged();
+    } catch (e) {
+      setNote(e instanceof ApiError ? e.message : 'The decision could not be sent.');
+      if (e instanceof ApiError && e.status === 409) onChanged();
+    } finally {
+      setDeciding(false);
+    }
+  };
+  const notNow = async () => {
+    if (!openReq) {
+      setDismissed(true);
+      return;
+    }
+    setDeciding(true);
+    try {
+      await api.decide(snap.replay_id, openReq.id, openReq.owners[0], 'defer', `fix-defer-${openReq.id}-${Date.now()}`, snap.version);
+      onChanged();
+    } catch (e) {
+      setNote(e instanceof ApiError ? e.message : 'The decision could not be sent.');
+    } finally {
+      setDeciding(false);
+    }
+  };
+
   return (
     <section
       className="panel compare-panel"
@@ -438,11 +483,71 @@ export function ComparePanel({
       }}
     >
       <div className="compare-head">
-        <h2 id="compare-h">Compare actions</h2>
+        <h2 id="compare-h">What to do</h2>
         <button className="btn" onClick={onClose} data-testid="compare-close">
           Close
         </button>
       </div>
+      <section className="fix-card" data-testid="fix-card" data-state={approved ? 'approved' : dismissed ? 'dismissed' : 'open'}>
+        <span className="eyebrow">Recommended fix</span>
+        {loading && !cmp && <p className="muted">Working out the best fix…</p>}
+        {cmp?.status === 'cannot_assess' && (
+          <p className="muted">
+            <IconTriangle /> Cannot assess: essential data is missing or stale, so no fix is suggested.
+          </p>
+        )}
+        {cmp?.status === 'ok' && !topRow && (
+          <p className="fix-none" data-testid="fix-none">
+            No fix is shown to help right now. Details below explain why.
+          </p>
+        )}
+        {topRow && (
+          <>
+            <h3 className="fix-name" data-testid="fix-name">{topName}</h3>
+            <p className="fix-owner">
+              Needs approval from <strong>{topRow.owners.join(', ')}</strong>
+            </p>
+            {approved ? (
+              <p className="fix-approved" role="status" data-testid="fix-approved">
+                <IconCheck /> Approved. It is under way.
+              </p>
+            ) : dismissed && !openReq ? (
+              <p className="muted">Not approved for now.</p>
+            ) : (
+              <>
+                <div className="fix-buttons">
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => void approveTop()}
+                    disabled={deciding || stale || (!!fl && !openReq)}
+                    data-testid="fix-approve"
+                  >
+                    Approve this fix
+                  </button>
+                  <button className="btn" onClick={() => void notNow()} disabled={deciding} data-testid="fix-not-now">
+                    Not now
+                  </button>
+                </div>
+                <p className="muted fix-hint">
+                  In this demo you approve on behalf of {topRow.owners[0]}.
+                </p>
+              </>
+            )}
+          </>
+        )}
+        {note && (
+          <p className="request-message" role="alert" data-testid="fix-note">
+            <IconTriangle /> {note}
+          </p>
+        )}
+        {fl && <ActionProgress rec={fl} now={snap.sim_time_min} />}
+        {!fl && snap.actions.history.length > 0 && (
+          <ActionProgress rec={snap.actions.history[snap.actions.history.length - 1]} now={snap.sim_time_min} />
+        )}
+      </section>
+
+      <details className="fix-drawer" data-testid="fix-drawer">
+      <summary>Show all details and other options</summary>
       <p className="muted" data-testid="compare-source">
         {cmp && sameRun
           ? `Compared at ${clock(cmp.source.sim_time_min)} (state v${cmp.source.version}), ${cmp.samples} paired futures from received data only.`
@@ -546,16 +651,7 @@ export function ComparePanel({
           </article>
         ))}
       {cmp?.status === 'ok' && <WhatIf cmp={cmp} a={whatA} b={whatB} onA={setWhatA} onB={setWhatB} />}
-      {note && (
-        <p className="request-message" role="alert" data-testid="request-note">
-          <IconTriangle /> {note}
-        </p>
-      )}
       {lastReq && <RequestCard snap={snap} req={lastReq} role={role} onChanged={onChanged} />}
-      {fl && <ActionProgress rec={fl} now={snap.sim_time_min} />}
-      {!fl && snap.actions.history.length > 0 && (
-        <ActionProgress rec={snap.actions.history[snap.actions.history.length - 1]} now={snap.sim_time_min} />
-      )}
       {cmp && (
         <details className="muted">
           <summary>Not modeled in this build</summary>
@@ -569,6 +665,7 @@ export function ComparePanel({
           <p>{cmp.cohort_rule}</p>
         </details>
       )}
+      </details>
     </section>
   );
 }

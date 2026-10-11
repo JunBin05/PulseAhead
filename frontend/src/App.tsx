@@ -21,7 +21,7 @@ import { RunsPanel } from './panels/RunsPanel';
 import { RunBar } from './shell/RunBar';
 import { KpiRow } from './shell/KpiRow';
 import { Tabs } from './shell/Tabs';
-import { AlertSpine, DockSummary } from './shell/AlertSpine';
+import { AlertSpine, ForecastDock } from './shell/AlertSpine';
 import { PitchStory } from './PitchStory';
 import {
   AlertList,
@@ -613,7 +613,7 @@ export function App() {
                 label: 'Story',
                 content: (
                   <>
-                    <PitchStory ctl={demoCtl} kick={demoKick} />
+                    <PitchStory ctl={demoCtl} kick={demoKick} onOpenEvidence={() => setLeftTab('runs')} />
                     <details className="story-advanced">
                       <summary>Full evidence walkthrough (for presenters)</summary>
                       <DemoBar ctl={demoCtl} kick={0} />
@@ -623,12 +623,12 @@ export function App() {
               },
               {
                 id: 'resources',
-                label: 'Now',
+                label: 'Resources',
                 content: <ResourcesPanel snap={snap} />,
               },
               {
                 id: 'data',
-                label: 'Feeds',
+                label: 'Data',
                 content: (
                   <>
                     <AmbulancePanel snap={snap} />
@@ -779,7 +779,7 @@ export function App() {
             tabs={[
               {
                 id: 'zone',
-                label: 'Zones',
+                label: 'Zone',
                 content: (
                   <>
                   <div className="zone-bar" role="group" aria-label="Zones">
@@ -837,7 +837,7 @@ export function App() {
               },
               {
                 id: 'act',
-                label: 'Fixes',
+                label: 'Act',
                 content: (
                   <>
                     {snap && !compareOpen && (
@@ -895,21 +895,11 @@ export function App() {
         onReset={reset}
         playRef={playRef}
       />
-          <div className="dock-center">
-            {snap && (
-              <DockSummary
-                snap={snap}
-                view={fcView}
-                onCompare={() => {
-                  openCompare();
-                }}
-              />
-            )}
-            <details className="fc-more">
-              <summary>How this forecast was made</summary>
-              <ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />
-            </details>
-          </div>
+          <ForecastDock
+            snap={snap}
+            view={fcView}
+            strip={<ForecastStrip snap={snap} view={fcView} onRetry={fcRetry} />}
+          />
         </div>
       </main>
     </div>

@@ -5,7 +5,7 @@
    ===================================================================================== */
 :root {
   --font-display: 'DM Sans', var(--font);
-  --glass: rgba(9, 30, 58, 0.84);
+  --glass: rgba(9, 30, 58, 0.94);
   --glass-line: rgba(127, 216, 216, 0.2);
   --hot: #ff6b81;
   --radius: 14px;
@@ -21,8 +21,6 @@ body {
 .app-header {
   background: var(--glass);
   border-bottom: 1px solid var(--glass-line);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
 }
 
 .app-title,
@@ -49,8 +47,6 @@ body {
   border: 1px solid var(--glass-line);
   border-radius: 16px;
   overflow: hidden;
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
 }
 
 .kpi {
@@ -87,8 +83,6 @@ body {
   background: var(--glass);
   border-color: var(--glass-line);
   border-radius: 16px;
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
 }
 
 .run-bar {
@@ -186,8 +180,6 @@ body {
   border-radius: 10px;
   background: rgba(8, 16, 30, 0.9);
   border-color: var(--glass-line);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
 }
 
 .zone-label--stacked {
@@ -290,8 +282,6 @@ body {
     background: var(--glass);
     border: 1px solid var(--glass-line);
     border-radius: 16px;
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
     scrollbar-width: thin;
     scrollbar-color: rgba(120, 210, 220, 0.3) transparent;
   }
@@ -340,8 +330,6 @@ body {
 /* The rails hold panels that already have their own surface; flatten the inner one. */
 .stage > .rail .panel {
   background: rgba(255, 255, 255, 0.03);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
   border-radius: 12px;
 }
 
@@ -383,8 +371,6 @@ body {
   background: var(--glass);
   border: 1px solid rgba(244, 183, 64, 0.5);
   border-radius: 14px;
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
@@ -459,8 +445,6 @@ body {
     background: none;
     border: 0;
     box-shadow: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -484,8 +468,6 @@ body {
     background: var(--glass);
     border: 1px solid var(--glass-line);
     border-radius: 14px;
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
   }
   .hud-cluster > .meta {
     padding: 0 var(--s-4);
@@ -737,8 +719,6 @@ body {
   background: var(--glass);
   border: 1px solid var(--glass-line);
   border-radius: 20px;
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
 }
 .splash h2 { margin: 0; font-size: 1.6rem; line-height: 1.2; font-weight: 700; }
 .splash p { margin: 0; color: var(--ink-muted); }
@@ -759,7 +739,62 @@ body {
 .app--stage .alert-spine .btn { white-space: nowrap; }
 
 /* Nothing to control before the demo or a run has started. */
-.is-idle .stage-dock { display: none; }
 
 .dock-center { overflow: hidden; }
 .dock-center:has(details[open]) { overflow: auto; }
+
+/* Recommended fix: one name, one decision. Everything else is in the drawer. */
+.fix-card {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  margin-bottom: var(--s-3);
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 14px;
+}
+.fix-name { margin: 0; font-size: var(--text-xl); line-height: 1.2; font-weight: 700; }
+.fix-owner { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); }
+.fix-buttons { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
+.fix-buttons .btn-primary { flex: 1 1 auto; }
+.fix-hint { margin: 0; font-size: 12px; }
+.fix-approved { display: flex; align-items: center; gap: 6px; margin: var(--s-2) 0 0; color: var(--status-normal-ink); font-weight: 650; }
+.fix-none { margin: 0; color: var(--ink-muted); }
+.fix-drawer { margin-top: var(--s-2); border: 1px solid var(--glass-line); border-radius: 12px; padding: var(--s-2) var(--s-3); }
+.fix-drawer > summary { cursor: pointer; font-weight: 600; color: var(--accent); min-height: 40px; display: flex; align-items: center; }
+.fix-drawer[open] > summary { margin-bottom: var(--s-2); }
+
+/* ---- dock: replay | forecast line | key facts (the mockup's three columns) ---- */
+@media (min-width: 1181px) {
+  .app--stage .stage > .stage-dock { grid-template-columns: 296px minmax(0, 1fr) 296px; }
+}
+.dock-chart, .dock-facts {
+  min-height: 0;
+  padding: var(--s-3) var(--s-4);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.dock-chart { display: grid; grid-template-rows: auto 1fr auto; gap: 2px; }
+.dock-chart header { display: grid; gap: 2px; }
+.dock-chart header strong { font-size: var(--text-md); font-weight: 650; }
+.dock-chart svg { width: 100%; height: 100%; min-height: 60px; }
+.dc-axis { stroke: var(--line-strong); stroke-width: 2; }
+.dc-tick { stroke: var(--line-strong); stroke-width: 2; }
+.dc-label { fill: var(--ink-faint); font-size: 13px; }
+.dc-window { fill: rgba(230, 57, 70, 0.55); }
+.dc-mark { stroke: var(--status-overload-ink); stroke-width: 2.5; stroke-dasharray: 4 4; }
+.dc-mark-label { fill: var(--status-overload-ink); font-size: 14px; font-weight: 700; }
+.dc-caption { margin: 0; font-size: 12px; color: var(--ink-faint); }
+.dock-facts { display: grid; align-content: start; gap: var(--s-2); overflow: auto; }
+.dock-facts dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2) var(--s-3); }
+.dock-facts dl > div { display: grid; gap: 0; }
+.dock-facts dt { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+.dock-facts dd { margin: 0; font-size: var(--text-xl); font-weight: 650; }
+.fc-more > summary { font-size: var(--text-sm); color: var(--ink-muted); }
+.alert-spine-lead { color: var(--status-pressure-ink); white-space: nowrap; }
+.alert-spine[data-tone='overload'] .alert-spine-lead { color: var(--hot); }
+.alert-spine-text { color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+.pitch-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-2); margin-bottom: var(--s-2); }
+.pitch-top .muted { font-size: 12px; }

@@ -413,6 +413,7 @@ function Platform({
   onSelect: (zone: number) => void;
 }) {
   const [cx, cz] = ZONE_CENTERS[zone];
+  const edges = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(PLATFORM_SIZE, 0.001, PLATFORM_DEPTH)), []);
   return (
     <group position={[cx, 0, cz]}>
       <mesh
@@ -435,8 +436,7 @@ function Platform({
         <boxGeometry args={[PLATFORM_SIZE + 0.6, 0.05, PLATFORM_DEPTH + 0.6]} />
         <meshBasicMaterial color={STATE_EDGE[state]} transparent opacity={STATE_GLOW[state] * 0.5} />
       </mesh>
-      <lineSegments position={[0, 0.251, 0]}>
-        <edgesGeometry args={[new THREE.BoxGeometry(PLATFORM_SIZE, 0.001, PLATFORM_DEPTH)]} />
+      <lineSegments position={[0, 0.251, 0]} geometry={edges}>
         <lineBasicMaterial color={selected ? '#3fbcc2' : STATE_EDGE[state]} />
       </lineSegments>
       <ZonePlaces zone={zone} />
@@ -739,7 +739,7 @@ export function Scene(props: SceneProps) {
         data-camera={props.focusZone === null ? 'overview' : `zone-${props.focusZone}`}
         data-camera-zoom={view.k.toFixed(2)}
       >
-        <Canvas orthographic flat dpr={[1, 2]} camera={{ near: 0.1, far: 200 }}>
+        <Canvas orthographic flat dpr={[1, 1.5]} camera={{ near: 0.1, far: 200 }}>
           <World {...props} view={view} />
         </Canvas>
         <LabelLayer
