@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { api } from './api';
 import { clock } from './Forecast';
 import type { DemoController } from './Demo';
+import { targetSuffix } from './format';
+import { chanceWords, fewWords, inAbout, plainArea, plainCause, plainWhatItDoes } from './plain';
 import { ZONE_NAMES, type ComparisonRow, type Forecast, type ForecastAlert, type Snapshot } from './types';
 
 /**
@@ -40,7 +42,11 @@ interface AlertInfo {
   high: number | null;
   chance: number | null;
   bottleneck: string;
+  headline: string;
+  because: string[];
+  matters: string;
   fix: string | null;
+  fixWhat: string | null;
   owner: string | null;
   timing: string | null;
 }
@@ -136,7 +142,10 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
       for (const dr of drivers.drivers) {
         const e = dr.evidence as Record<string, unknown>;
         if (dr.id === 'boarding') {
-          cards.push({ title: 'The ward is full', text: `${e.boarding_patients} admitted patients cannot leave the ED` });
+          cards.push({
+            title: 'The wards are full',
+            text: `${fewWords(e.boarding_patients as number)} admitted patients cannot leave the ED because there is no bed upstairs for them.`,
+          });
         } else if (dr.id === 'diagnostics') {
           const svcs = e.services as { name: string; queue: number; received_per_hour: number | null; capacity_per_hour: number | null; demand_above_capacity: boolean }[];
           const worst = [...svcs].sort((x, y) => y.queue - x.queue)[0];
@@ -145,14 +154,14 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
             cards.push({
               title: `${worst.name} is slowing down`,
               text: over
-                ? `${worst.queue} waiting. Requests arrive at ${worst.received_per_hour} an hour; it can handle ${worst.capacity_per_hour}.`
-                : `${worst.queue} patients are waiting for it`,
+                ? `${fewWords(worst.queue)} patients are waiting, and new requests are coming in faster than it can get through them.`
+                : `${fewWords(worst.queue)} patients are waiting for it.`,
             });
           }
         } else if (dr.id === 'arrivals') {
           cards.push({
             title: 'More arrivals are coming',
-            text: `${e.patients} patients on ${e.ambulances} ambulance${e.ambulances === 1 ? '' : 's'} due within ${e.window_min} min`,
+            text: `${fewWords(e.patients as number)} more patients are on their way by ambulance, due within about half an hour.`,
           });
         }
       }
@@ -174,9 +183,18 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
         high: alertRow.onset ? Math.round(alertRow.onset.high_in_min ?? 0) : null,
         chance: alertRow.chance ?? null,
         bottleneck: alertRow.category_label,
-        fix: best ? best.name : null,
+        ...(() => {
+          const c = plainCause(alertRow.service, s, alertRow.kind);
+          return { headline: c.headline, because: c.because.slice(0, 2), matters: c.whyItMatters };
+        })(),
+        fix: best ? `${best.name}${targetSuffix(best.preset, best.target)}` : null,
+        fixWhat: best
+          ? best.service === alertRow.service
+            ? plainWhatItDoes(best)
+            : `${plainWhatItDoes(best)} It works on ${plainArea(best.service)} rather than ${plainArea(alertRow.service)} directly, because in our practice runs that gave the biggest saving.`
+          : null,
         owner: best ? best.owners[0] : null,
-        timing: best ? `review ${best.review_min} min, setup ${best.setup_min} min` : null,
+        timing: best ? `about ${best.review_min + best.setup_min} minutes to approve and set up` : null,
       });
       setBeat(2);
       setPhase('alert');
@@ -336,24 +354,24 @@ export function PitchStory({ ctl, kick, onOpenEvidence }: { ctl: DemoController;
             <section className="alert-popup" role="alertdialog" aria-labelledby="alert-popup-title" data-testid="alert-popup">
               <span className="alert-pill">ALERT</span>
               <h2 id="alert-popup-title">
-                {alert.minutes !== null ? `Overload in about ${alert.minutes} min` : 'Overload is likely soon'}
+                {alert.zoneName} may get overloaded {inAbout(alert.minutes)}
               </h2>
               <p className="alert-popup-where">
-                Zone {alert.zone} · {alert.zoneName}
-                {alert.chance !== null ? ` · ${Math.round(alert.chance * 100)}% chance` : ''}
+                {alert.headline} This is {chanceWords(alert.chance)}.
               </p>
-              <div className="alert-popup-fix">
-                <span>Fix first</span>
-                <strong>{alert.fix ?? 'No action is shown to help right now'}</strong>
-                {alert.owner && <em>Approved by: {alert.owner}{alert.timing ? ` · ${alert.timing}` : ''}</em>}
-              </div>
-              <ul className="alert-popup-points">
-                {alert.low !== null && alert.high !== null && (
-                  <li>Time left before overload: {alert.minutes} min (between {alert.low} and {alert.high})</li>
-                )}
-                <li>Holding things up: {alert.bottleneck}</li>
-                <li>The whole ED is still “{surface?.status ?? 'Stable'}”. This is a local warning.</li>
+              <ul className="alert-popup-points" data-testid="alert-popup-because">
+                {alert.because.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+                <li>{alert.matters}</li>
+                <li>The rest of the ED is still coping. This warning is about one area.</li>
               </ul>
+              <div className="alert-popup-fix">
+                <span>Suggested first step</span>
+                <strong>{alert.fix ?? 'No action is shown to help right now'}</strong>
+                {alert.fixWhat && <em>{alert.fixWhat}</em>}
+                {alert.owner && <em>Needs sign-off from {alert.owner}{alert.timing ? `; ${alert.timing}` : ''}.</em>}
+              </div>
               <div className="alert-popup-buttons">
                 <button className="btn btn-primary btn-hero" onClick={openFixes} autoFocus data-testid="alert-popup-open">
                   See the fixes

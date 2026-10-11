@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api';
 import { targetSuffix } from './format';
+import { chanceWords, inAbout, plainCause } from './plain';
 import { IconClock, IconOctagon, IconTriangle, IconUnknown } from './icons';
 import type { ComparisonResult, Forecast, ForecastAlert, ForecastExplanation, ForecastOnset, Snapshot } from './types';
 
@@ -126,12 +127,6 @@ export function useExplanation(fc: Forecast | null, zone: number | null) {
   return exp;
 }
 
-function range(o: ForecastOnset | null): string {
-  return o && o.low_in_min !== undefined && o.high_in_min !== undefined
-    ? `${Math.max(0, o.low_in_min)} to ${o.high_in_min}`
-    : '';
-}
-
 /** The estimate at the moment on screen, or null once it has expired (no zero or negative countdown). */
 export function remaining(fc: Forecast, onset: ForecastOnset | null, now: number): number | null {
   if (!onset) return null;
@@ -203,28 +198,24 @@ export function ForecastStrip({
     const left = remaining(f, o.onset, snap.sim_time_min);
     if (o.kind === 'new_onset') {
       tone = (o.chance ?? 0) >= f.model.settings.warning_threshold ? 'pressure' : 'normal';
-      chance = `${pct(o.chance)} within ${f.model.settings.horizon_min} min`;
+      chance = `${chanceWords(o.chance)[0].toUpperCase()}${chanceWords(o.chance).slice(1)} in the next hour and a half`;
       if (o.onset && left !== null) {
-        expected = (
-          <>
-            about {left} simulated min · 90% range {range(o.onset)} min · from {clock(f.forecast_time_min)}
-          </>
-        );
+        expected = `The whole ED may get congested ${inAbout(left)}.`;
       } else if (o.onset) {
-        expected = `Estimate expired (from ${clock(f.forecast_time_min)}); refresh pending`;
+        expected = 'The last estimate has expired; a fresh one is on its way.';
       } else {
-        expected = `No onset in ${o.samples} sampled futures`;
+        expected = 'No congestion is expected.';
       }
     } else if (o.kind === 'confirmation') {
       tone = 'pressure';
-      chance = `Building congestion: ${pct(o.chance)} chance of confirmation`;
-      expected = `Interval underway for ${o.elapsed_min} simulated min; no new-onset countdown`;
+      chance = `Getting congested: ${chanceWords(o.chance)} to be confirmed`;
+      expected = 'Congestion has started to build and is being watched.';
     } else {
       tone = 'overload';
-      chance = `Congested now: ${pct(o.chance)} chance it clears within ${f.model.settings.horizon_min} min`;
+      chance = 'The ED is congested now';
       expected = o.onset
-        ? `Typical clearing in about ${Math.max(0, o.onset.expected_in_min)} simulated min`
-        : 'No recovery sampled within the horizon';
+        ? `It may ease ${inAbout(Math.max(0, o.onset.expected_in_min))}.`
+        : 'It is not expected to ease in the next hour and a half.';
     }
   }
   return (
@@ -334,39 +325,33 @@ function PredictedWaits({ f }: { f: Forecast }) {
   );
 }
 
-function alertText(a: ForecastAlert, f: Forecast, now: number): string {
-  if (a.kind === 'overloaded') return `Overloaded now · ${pct(a.chance)} chance it clears within ${f.model.settings.horizon_min} min`;
-  if (a.kind === 'building') return `Building · ${pct(a.chance)} chance of confirmation`;
+function alertText(a: ForecastAlert, f: Forecast, now: number, snap: Snapshot): string {
+  const cause = plainCause(a.service, snap, a.kind);
+  const lead = [cause.headline, cause.because[0]].filter(Boolean).join(' ');
+  if (a.kind === 'overloaded' || a.kind === 'building') return lead;
   const left = remaining(f, a.onset, now);
-  const when = a.onset
-    ? left !== null
-      ? ` · about ${left} simulated min (90% range ${range(a.onset)})`
-      : ' · estimate expired, refresh pending'
-    : '';
-  return `Forecast risk ${pct(a.chance)}${when}`;
+  const when = a.onset && left !== null ? ` Expected ${inAbout(left)}; ${chanceWords(a.chance)}.` : '';
+  return `${lead}${when}`;
 }
 
 function deadlineText(a: ForecastAlert, now: number): string {
   const d = a.deadline;
-  if (d.status === 'recovery') return 'Recovery: action supports recovery, not prevention';
-  if (d.status === 'unavailable' || d.latest_start_min === null) return 'Deadline unavailable (no onset range)';
-  if (d.status === 'too_late') return `May be too late to prevent (latest start was about ${clock(d.latest_start_min)})`;
+  if (d.status === 'recovery') return 'It is already overloaded, so a fix now helps it recover.';
+  if (d.status === 'unavailable' || d.latest_start_min === null) return 'No clear time limit for acting yet.';
+  if (d.status === 'too_late') return 'It may already be too late to prevent this, but acting now still limits the damage.';
   const inMin = Math.max(0, Math.round(d.latest_start_min - now));
-  return `Latest start about ${clock(d.latest_start_min)} (in ${inMin} simulated min)`;
+  return `To stop it, a fix should be approved ${inAbout(inMin)}.`;
 }
 
 function impactText(service: string, cmp: ComparisonResult | null): string {
-  if (!cmp) return 'Impact: unavailable (no action comparison yet)';
+  if (!cmp) return 'We are still working out what could help.';
   const rows = cmp.actions.filter((r) => r.service === service && r.comparison);
-  if (!rows.length) return 'Impact: no feasible action serves this service now';
+  if (!rows.length) return 'There is no spare resource we could add here right now.';
   const r = rows[0];
-  const sv = r.comparison!.total_saving_patient_min;
-  const lb = sv.lower_90 === null ? 'n/a' : sv.lower_90.toFixed(1);
-  const when =
-    r.deadline?.status === 'open' && r.deadline.latest_start_min !== null
-      ? `; latest start ${clock(r.deadline.latest_start_min)}`
-      : '';
-  return `Impact: ${r.name}${targetSuffix(r.preset, r.target)} saves ${sv.mean?.toFixed(1)} patient-min (90% lower bound ${lb}), ${r.rank?.label.replace(/_/g, ' ')}${when}`;
+  const helps = r.rank?.label === 'best_action' || r.rank?.label === 'supported_not_top';
+  return helps
+    ? `What could help: ${r.name}${targetSuffix(r.preset, r.target)}, which shortened waits in our practice runs.`
+    : `${r.name}${targetSuffix(r.preset, r.target)} is available but did not make a clear enough difference in our practice runs.`;
 }
 
 export function AlertList({
@@ -424,15 +409,9 @@ export function AlertList({
             </span>
           </span>
         </span>
-        <span>{a.category_label}{a.mixed ? ` · mixed: also ${a.also_active.join(', ')}` : ''}</span>
-        <span data-testid={`fc-alert-${a.service}-text`}>{alertText(a, f, snap.sim_time_min)}</span>
+        <span data-testid={`fc-alert-${a.service}-text`}>{alertText(a, f, snap.sim_time_min, snap)}</span>
         <span data-testid={`fc-alert-${a.service}-deadline`}>{deadlineText(a, snap.sim_time_min)}</span>
-        <span className="muted">
-          {a.deadline.basis}: {a.deadline.action} ({a.deadline.setup_min} min setup, {a.deadline.review_min} min review,{' '}
-          {a.deadline.margin_min} min margin)
-        </span>
         <span className="muted" data-testid={`fc-alert-${a.service}-impact`}>
-          Affected patients: {a.affected_patients ?? 'unknown'} · urgent group waiting: {a.urgent_group_waiting} ·{' '}
           {impactText(a.service, cmp)}
         </span>
       </button>
@@ -537,29 +516,35 @@ export function ZoneForecast({
     const left = remaining(f, svc.onset, now);
     local = svc.onset
       ? left !== null
-        ? `${pct(svc.chance)} chance · about ${left} simulated min · 90% range ${range(svc.onset)} min`
-        : `${pct(svc.chance)} chance · estimate expired, refresh pending`
-      : `No overload sampled in ${svc.samples} futures (${pct(svc.chance)})`;
+        ? `${chanceWords(svc.chance)[0].toUpperCase()}${chanceWords(svc.chance).slice(1)}, ${inAbout(left)}`
+        : 'The last estimate has expired; a fresh one is on its way.'
+      : 'No overload is expected here.';
   } else if (svc.kind === 'confirmation') {
-    local = `Building: ${pct(svc.chance)} chance of confirmation (interval underway ${svc.elapsed_min} simulated min)`;
+    local = 'Getting busy: this area is close to being overloaded.';
   } else {
-    local = `Overloaded now: ${pct(svc.chance)} chance it clears within ${f.model.settings.horizon_min} min`;
+    local = 'Overloaded now.';
   }
   let overall: ReactNode;
   if (o.kind === 'new_onset') {
     const left = remaining(f, o.onset, now);
     overall = o.onset
       ? left !== null
-        ? `${pct(o.chance)} chance · about ${left} simulated min · 90% range ${range(o.onset)} min`
-        : `${pct(o.chance)} chance · estimate expired, refresh pending`
-      : `No onset sampled in ${o.samples} futures`;
+        ? `${chanceWords(o.chance)[0].toUpperCase()}${chanceWords(o.chance).slice(1)}, ${inAbout(left)}`
+        : 'The last estimate has expired; a fresh one is on its way.'
+      : 'No congestion is expected.';
   } else if (o.kind === 'confirmation') {
-    overall = `Building congestion: ${pct(o.chance)} chance of confirmation`;
+    overall = 'Congestion is starting to build.';
   } else {
-    overall = `Congested now: ${pct(o.chance)} chance it clears within ${f.model.settings.horizon_min} min`;
+    overall = 'The ED is congested now.';
   }
   const why = explanation?.data?.zone === zone ? explanation.data : null;
   const w = why?.why_this_alert;
+  const left0 = svc.kind === 'new_onset' ? remaining(f, svc.onset, now) : null;
+  const plain = plainCause(
+    z.top_service,
+    snap,
+    z.state === 'overloaded' ? 'overloaded' : z.state === 'building' ? 'building' : z.warning ? 'forecast_risk' : undefined,
+  );
   // Only a zone that has an alert (building, overloaded, Cannot assess or a forecast warning) is explained
   // as an alert; any other zone shows the same facts as plain forecast detail.
   const alerting = z.state !== 'normal' || z.warning;
@@ -568,18 +553,17 @@ export function ZoneForecast({
       {header}
       <SourceLine snap={snap} view={view} testid="fc-zone-source" />
       <dl className="kv" style={{ marginBottom: 'var(--s-3)' }}>
-        <dt>Local overload expected (this zone)</dt>
+        <dt>This area</dt>
         <dd data-testid="fc-local" data-kind={svc.kind}>
           {local}
         </dd>
-        <dt>Overall ED congestion expected</dt>
+        <dt>The whole ED</dt>
         <dd data-testid="fc-overall" data-kind={o.kind}>
           {overall}
         </dd>
       </dl>
       <p className="muted" data-testid="fc-separation">
-        A local zone overload is not overall ED congestion. The two forecasts use the same sampled futures but
-        different rules.
+        This is about one area of the ED. The rest of the ED can still be coping fine.
       </p>
       {z.warning && (
         <p data-testid="fc-zone-warning">
@@ -587,27 +571,37 @@ export function ZoneForecast({
             <IconTriangle />
             <span>Forecast warning</span>
           </span>{' '}
-          This zone is Normal now; the chance of a local overload is at or above the warning level (
-          {pct(f.model.settings.warning_threshold)}).
+          This area is fine right now, but our simulations say it is {chanceWords(svc.chance)} to get overloaded
+          {svc.onset && left0 !== null ? ` ${inAbout(left0)}` : ' soon'}.
         </p>
       )}
       <div className="callout" data-state="normal" data-testid="fc-explain">
         <p>
           <strong data-testid="fc-explain-title">
-            {alerting ? 'Why this alert appeared' : 'Forecast detail for this zone (no alert)'}
+            {alerting ? 'Why this alert appeared' : 'How this area looks'}
           </strong>
         </p>
-        {!w && (
+        <p data-testid="fc-plain-headline">
+          <strong>{plain.headline}</strong>
+        </p>
+        {plain.because.length > 0 && (
+          <ul data-testid="fc-plain-because">
+            {plain.because.map((b) => (
+              <li key={b}>{b}</li>
+            ))}
+          </ul>
+        )}
+        <p data-testid="fc-plain-matters">{plain.whyItMatters}</p>
+        {!w && explanation?.status === 'error' && (
           <p className="muted" role="status">
-            {explanation?.status === 'error'
-              ? 'The explanation could not be computed for this forecast.'
-              : 'Computing the explanation…'}
+            The detailed figures could not be computed for this forecast.
           </p>
         )}
         {w && (
-          <>
+          <details className="fc-details" data-testid="fc-figures">
+            <summary>Show the figures behind this</summary>
             {why!.source.version !== f.source.version && (
-              <p className="muted">Explanation from {clock(why!.forecast_time_min)} (state v{why!.source.version}); refreshing.</p>
+              <p className="muted">Figures from {clock(why!.forecast_time_min)}; refreshing.</p>
             )}
             <p>
               <strong>Observed now (received):</strong>
@@ -648,12 +642,11 @@ export function ZoneForecast({
                 ))}
               </ul>
             </details>
-          </>
+          </details>
         )}
       </div>
       <p className="muted">
-        <IconClock /> Estimates describe simulation sampling under disclosed assumptions, not hospital
-        confidence.
+        <IconClock /> These are estimates from simulated practice runs, not a promise.
       </p>
     </section>
   );

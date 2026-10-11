@@ -3,6 +3,7 @@ import { api, ApiError } from './api';
 import { AnalystPanel } from './Analyst';
 import { clock } from './Forecast';
 import { targetSuffix } from './format';
+import { plainActionReason, plainWhatItDoes, plainWhyTop } from './plain';
 import { IconCheck, IconClock, IconOctagon, IconTriangle } from './icons';
 import type {
   ActionComparison,
@@ -465,6 +466,8 @@ export function ComparePanel({
         })
       : [];
   const topName = topRow ? `${topRow.name}${targetSuffix(topRow.preset, topRow.target, ' · ')}` : null;
+  // The service the forecast is worried about, so "why first" can say the top choice targets it.
+  const alertService = snap.pressure.alerts[0]?.service ?? null;
   const approved = !!fl || (lastReq?.status === 'approved');
 
   const approveRow = async (row: ComparisonRow) => {
@@ -534,6 +537,15 @@ export function ComparePanel({
         {topRow && (
           <>
             <h3 className="fix-name" data-testid="fix-name">{topName}</h3>
+            <p className="fix-what" data-testid="fix-what">{plainWhatItDoes(topRow)}</p>
+            <div className="fix-why" data-testid="fix-why">
+              <strong>Why this one is first</strong>
+              <ul>
+                {plainWhyTop(topRow, ranked, alertService).map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </div>
             <p className="fix-owner">
               Needs approval from <strong>{topRow.owners.join(', ')}</strong>
             </p>
@@ -567,7 +579,7 @@ export function ComparePanel({
         )}
         {cmp?.status === 'ok' && cmp.actions.length > 0 && (
           <div className="fix-list" data-testid="fix-list">
-            <span className="eyebrow">All suggested actions</span>
+            <span className="eyebrow">Everything we looked at, and why</span>
             <ol>
               {ranked.map((row, i) => {
                 const supported = row.rank?.label === 'best_action' || row.rank?.label === 'supported_not_top';
@@ -580,7 +592,8 @@ export function ComparePanel({
                         {row.name}
                         {targetSuffix(row.preset, row.target, ' · ')}
                       </strong>
-                      <small>{row.feasible ? `Approved by ${row.owners.join(', ')}` : 'Not available right now'}</small>
+                      <small data-testid={`fix-reason-${row.id}`}>{plainActionReason(row, isTop)}</small>
+                      {row.feasible && <small>Needs sign-off from {row.owners.join(', ')}</small>}
                     </span>
                     <span className="fix-chip" data-tone={isTop ? 'best' : supported ? 'ok' : 'off'}>
                       {isTop ? 'Top suggestion' : plainRank(row)}

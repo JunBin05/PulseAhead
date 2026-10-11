@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from 'react';
 import { clock, type ForecastView } from '../Forecast';
 import { IconOctagon, IconTriangle } from '../icons';
+import { chanceWords, inAbout, plainCause } from '../plain';
 import { ZONE_NAMES, type Forecast, type Snapshot } from '../types';
 
 /**
@@ -46,14 +47,11 @@ export function AlertSpine({
   const { top, inMin } = strongest(snap, f);
   if (!top) return null;
   const hot = top.kind === 'overloaded';
-  const lead = hot ? 'Overloaded now' : top.kind === 'building' ? 'Getting busy' : 'Forecast alert';
-  const bits: string[] = [];
-  if (!hot && top.chance !== null && top.chance !== undefined) bits.push(`${Math.round(top.chance * 100)}% chance`);
-  if (inMin !== null && top.onset) {
-    bits.push(`~${inMin} min (${Math.round(top.onset.low_in_min ?? 0)}–${Math.round(top.onset.high_in_min ?? 0)})`);
-  }
-  if (top.category_label) bits.push(`bottleneck: ${top.category_label}`);
-  bits.push(`local, overall stays ${snap.overall_status.label}`);
+  const lead = hot ? 'Overloaded now' : top.kind === 'building' ? 'Getting busy' : 'Early warning';
+  const cause = plainCause(top.service, snap, top.kind);
+  const bits: string[] = [cause.headline];
+  if (!hot && inMin !== null && top.onset) bits.push(`${chanceWords(top.chance)}, ${inAbout(inMin)}`);
+  if (cause.because[0]) bits.push(cause.because[0]);
   return (
     <div className="alert-spine" data-tone={hot ? 'overload' : 'pressure'} data-testid="alert-spine" role="status">
       <span className="alert-spine-icon">{hot ? <IconOctagon /> : <IconTriangle />}</span>

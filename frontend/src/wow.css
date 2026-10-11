@@ -820,3 +820,9 @@ body {
 .fix-chip[data-tone='best'] { background: var(--accent); color: var(--accent-ink); }
 .fix-chip[data-tone='ok'] { background: var(--status-normal-tint); color: var(--status-normal-ink); }
 .fix-list li .btn { grid-column: 2 / -1; justify-self: start; min-height: 32px; margin-top: 4px; }
+
+/* Plain-language reasons: what the fix does, why it is first, why each other option is where it is */
+.fix-what { margin: var(--s-2) 0; color: #d7e6ee; font-size: var(--text-sm); }
+.fix-why { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 3px solid var(--accent); background: rgba(255, 255, 255, 0.04); border-radius: 6px; font-size: var(--text-sm); }
+.fix-why ul { margin: 6px 0 0; padding-left: 1.1em; display: grid; gap: 4px; }
+.fix-list-main small { line-height: 1.4; }
