@@ -404,4 +404,5 @@ if _DIST.is_dir():
         candidate = (_DIST / path).resolve()
         if path and candidate.is_file() and _DIST in candidate.parents:
             return FileResponse(candidate)
-        return FileResponse(_DIST / "index.html")
+        # The shell names the hashed asset files, so it must never be served from a stale cache.
+        return FileResponse(_DIST / "index.html", headers={"Cache-Control": "no-cache"})

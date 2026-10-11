@@ -48,6 +48,9 @@ export function RunBar({
   }
   return (
     <section className="run-bar" aria-label="Simulation controls">
+      <button className="btn" onClick={onStartDemo} data-testid="start-demo">
+        <IconPlay /> Start guided demo
+      </button>
       <button
         ref={playRef}
         className="btn btn-primary"
