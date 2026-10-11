@@ -820,3 +820,20 @@ body {
 .fix-chip[data-tone='best'] { background: var(--accent); color: var(--accent-ink); }
 .fix-chip[data-tone='ok'] { background: var(--status-normal-tint); color: var(--status-normal-ink); }
 .fix-list li .btn { grid-column: 2 / -1; justify-self: start; min-height: 32px; margin-top: 4px; }
+
+/* Every option is a card like the top one; the numbers live in each card's own drawer. */
+.fix-others { display: grid; gap: var(--s-3); margin-bottom: var(--s-3); }
+.fix-card--other { border-color: var(--glass-line); background: rgba(255, 255, 255, 0.03); }
+.fix-card--other .fix-name { font-size: var(--text-lg); }
+.fix-card--other[data-supported='false'] { opacity: 0.85; }
+.fix-reason { margin: 0; font-size: var(--text-sm); }
+.fix-more { margin-top: var(--s-2); border-top: 1px solid var(--glass-line); padding-top: var(--s-2); }
+.fix-more > summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; color: var(--accent); min-height: 32px; display: flex; align-items: center; }
+.fix-more[open] > summary { margin-bottom: var(--s-2); }
+.fix-more p { font-size: var(--text-sm); }
+
+.fix-off { border: 1px dashed var(--glass-line); border-radius: 12px; padding: var(--s-2) var(--s-3); }
+.fix-off > summary { cursor: pointer; font-size: var(--text-sm); color: var(--ink-muted); min-height: 32px; display: flex; align-items: center; }
+.fix-off ul { margin: var(--s-2) 0 0; padding: 0; list-style: none; display: grid; gap: var(--s-2); }
+.fix-off li { display: grid; gap: 2px; font-size: var(--text-sm); }
+.fix-off li span { color: var(--ink-muted); }
