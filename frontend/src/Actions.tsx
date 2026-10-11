@@ -358,6 +358,25 @@ function RequestCard({
  * and show the action's progress. It opens with the replay paused and keeps the comparison it
  * computed; when time moves on it says so and offers a refresh.
  */
+function plainRank(row: ComparisonRow): string {
+  if (!row.feasible) return 'Not available now';
+  switch (row.rank?.label) {
+    case 'best_action':
+    case 'supported_not_top':
+      return 'Also helps';
+    case 'no_action_shown_to_help':
+      return 'Not shown to help';
+    case 'needs_review':
+      return 'Needs review';
+    case 'urgent_delay_check_failed':
+      return 'Delays urgent patients';
+    case 'cannot_assess':
+      return 'Cannot assess';
+    default:
+      return 'Not available now';
+  }
+}
+
 export function ComparePanel({
   snap,
   role,
@@ -434,19 +453,28 @@ export function ComparePanel({
   const listed = cmp?.status === 'ok' ? cmp.actions.filter((x) => x.comparison) : [];
   const topRow =
     listed.find((x) => x.rank?.label === 'best_action') ?? listed.find((x) => x.rank?.label === 'supported_not_top') ?? null;
+  const ranked: ComparisonRow[] =
+    cmp?.status === 'ok'
+      ? [...cmp.actions].sort((a, b) => {
+          if (topRow && a.id === topRow.id) return -1;
+          if (topRow && b.id === topRow.id) return 1;
+          const fa = a.feasible && a.comparison ? 0 : 1;
+          const fb = b.feasible && b.comparison ? 0 : 1;
+          return fa - fb || (a.order ?? 99) - (b.order ?? 99);
+        })
+      : [];
   const topName = topRow ? `${topRow.name}${topRow.preset === 'diagnostic_reserve' ? ` · ${topRow.target}` : ''}` : null;
   const approved = !!fl || (lastReq?.status === 'approved');
 
-  const approveTop = async () => {
-    if (!topRow) return;
+  const approveRow = async (row: ComparisonRow) => {
     setDeciding(true);
     setNote(null);
     try {
-      if (openReq) {
+      if (openReq && row.id === topRow?.id) {
         await api.decide(snap.replay_id, openReq.id, openReq.owners[0], 'approve', `fix-${openReq.id}-${Date.now()}`, snap.version);
       } else {
-        const rq = await api.requestAction(snap.replay_id, topRow.preset, topRow.target, role, snap.version);
-        await api.decide(snap.replay_id, rq.request.id, topRow.owners[0], 'approve', `fix-${rq.request.id}`, rq.state_version);
+        const rq = await api.requestAction(snap.replay_id, row.preset, row.target, role, snap.version);
+        await api.decide(snap.replay_id, rq.request.id, row.owners[0], 'approve', `fix-${rq.request.id}`, rq.state_version);
       }
       onChanged();
     } catch (e) {
@@ -519,7 +547,7 @@ export function ComparePanel({
                 <div className="fix-buttons">
                   <button
                     className="btn btn-primary"
-                    onClick={() => void approveTop()}
+                    onClick={() => void approveRow(topRow)}
                     disabled={deciding || stale || (!!fl && !openReq)}
                     data-testid="fix-approve"
                   >
@@ -535,6 +563,37 @@ export function ComparePanel({
               </>
             )}
           </>
+        )}
+        {cmp?.status === 'ok' && cmp.actions.length > 0 && (
+          <div className="fix-list" data-testid="fix-list">
+            <span className="eyebrow">All suggested actions</span>
+            <ol>
+              {ranked.map((row, i) => {
+                const supported = row.rank?.label === 'best_action' || row.rank?.label === 'supported_not_top';
+                const isTop = topRow?.id === row.id;
+                return (
+                  <li key={row.id} data-top={isTop} data-testid={`fix-list-${row.id}`}>
+                    <span className="fix-list-n">{i + 1}</span>
+                    <span className="fix-list-main">
+                      <strong>
+                        {row.name}
+                        {row.preset === 'diagnostic_reserve' ? ` · ${row.target}` : ''}
+                      </strong>
+                      <small>{row.feasible ? `Approved by ${row.owners.join(', ')}` : 'Not available right now'}</small>
+                    </span>
+                    <span className="fix-chip" data-tone={isTop ? 'best' : supported ? 'ok' : 'off'}>
+                      {isTop ? 'Top suggestion' : plainRank(row)}
+                    </span>
+                    {supported && !isTop && !approved && (
+                      <button className="btn" disabled={deciding || stale || !!openReq || !!fl} onClick={() => void approveRow(row)}>
+                        Choose this instead
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
         )}
         {note && (
           <p className="request-message" role="alert" data-testid="fix-note">

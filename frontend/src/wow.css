@@ -798,3 +798,25 @@ body {
 .alert-spine-text { color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
 .pitch-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-2); margin-bottom: var(--s-2); }
 .pitch-top .muted { font-size: 12px; }
+
+/* All suggested actions, top one first; numbers stay in the drawer. */
+.fix-list { display: grid; gap: var(--s-2); margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--glass-line); }
+.fix-list ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fix-list li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.fix-list li[data-top='true'] { border-color: var(--accent); }
+.fix-list-n { font-weight: 700; color: var(--ink-faint); }
+.fix-list-main { display: grid; min-width: 0; }
+.fix-list-main small { color: var(--ink-muted); }
+.fix-chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--status-unknown-tint); color: var(--status-unknown-ink); }
+.fix-chip[data-tone='best'] { background: var(--accent); color: var(--accent-ink); }
+.fix-chip[data-tone='ok'] { background: var(--status-normal-tint); color: var(--status-normal-ink); }
+.fix-list li .btn { grid-column: 2 / -1; justify-self: start; min-height: 32px; margin-top: 4px; }
